@@ -1,0 +1,15 @@
+○ nginx.service - A high performance web server and a reverse proxy server
+     Loaded: loaded (]8;;file://server1.cartandget.com/lib/systemd/system/nginx.service/lib/systemd/system/nginx.service]8;;; [0;1;38;5;185mdisabled[0m; preset: [0;1;32menabled[0m)
+     Active: inactive (dead)
+       Docs: ]8;;man:nginx(8)man:nginx(8)]8;;
+
+Apr 23 17:06:34 server1.cartandget.com systemd[1]: Stopping nginx.service - A high performance web server and a reverse proxy server...
+Apr 23 17:06:34 server1.cartandget.com systemd[1]: nginx.service: Deactivated successfully.
+Apr 23 17:06:34 server1.cartandget.com systemd[1]: Stopped nginx.service - A high performance web server and a reverse proxy server.
+Apr 23 17:06:34 server1.cartandget.com systemd[1]: nginx.service: Consumed 12.590s CPU time.
+Apr 23 17:06:34 server1.cartandget.com systemd[1]: Starting nginx.service - A high performance web server and a reverse proxy server...
+Apr 23 17:06:34 server1.cartandget.com systemd[1]: Started nginx.service - A high performance web server and a reverse proxy server.
+Apr 24 00:03:40 server1.cartandget.com systemd[1]: Stopping nginx.service - A high performance web server and a reverse proxy server...
+Apr 24 00:03:40 server1.cartandget.com systemd[1]: nginx.service: Deactivated successfully.
+Apr 24 00:03:40 server1.cartandget.com systemd[1]: Stopped nginx.service - A high performance web server and a reverse proxy server.
+Apr 24 00:03:40 server1.cartandget.com systemd[1]: nginx.service: Consumed 2.980s CPU time.

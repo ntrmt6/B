@@ -1,0 +1,49 @@
+/* stylelint-disable-next-line at-rule-no-unknown */
+@tailwind base;
+/* stylelint-disable-next-line at-rule-no-unknown */
+@tailwind components;
+/* stylelint-disable-next-line at-rule-no-unknown */
+@tailwind utilities;
+
+/* Google Fonts */
+/* @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Lato:wght@300;400;700;900&family=Poppins:wght@300;400;500;600;700&display=swap'); */
+
+/* CSS variables for dynamic tenant theming */
+:root {
+  --color-primary: #4F46E5;
+  --color-primary-dark: #4338CA;
+  --color-secondary: #7C3AED;
+  --color-accent: #F59E0B;
+  --primary: 79 70 229;
+  --primary-foreground: 255 255 255;
+  --secondary: 124 58 237;
+  --secondary-foreground: 255 255 255;
+  --accent: 245 158 11;
+  --accent-foreground: 255 255 255;
+  --destructive: 239 68 68;
+  --destructive-foreground: 255 255 255;
+  --background: 249 250 251;
+  --foreground: 15 23 42;
+  --muted: 241 245 249;
+  --muted-foreground: 100 116 139;
+  --card: 255 255 255;
+  --card-foreground: 15 23 42;
+  --popover: 255 255 255;
+  --popover-foreground: 15 23 42;
+  --border: 226 232 240;
+  --input: 226 232 240;
+  --ring: 79 70 229;
+  --radius: 0.5rem;
+  --font-family: 'Inter', system-ui, sans-serif;
+}
+
+.swiper { width: 100%; }
+.main-image-swiper { height: 100%; }
+.swiper-slide { display: flex; align-items: center; justify-content: center; }
+
+html { scroll-behavior: smooth; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #9ca3af; }

@@ -1,0 +1,1 @@
+export { FeaturedCategoriesSection } from "./FeaturedCategoriesSection";

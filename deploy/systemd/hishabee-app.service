@@ -1,0 +1,27 @@
+[Unit]
+Description=Hishabee App (Next.js)
+After=network.target backend-api.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/app/hishabee
+ExecStart=/usr/bin/node node_modules/.bin/next start -p 3003
+Restart=always
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+Environment=NODE_ENV=production
+Environment=PORT=3003
+EnvironmentFile=/var/www/app/hishabee/.env
+
+LimitNOFILE=65535
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=hishabee-app
+
+[Install]
+WantedBy=multi-user.target

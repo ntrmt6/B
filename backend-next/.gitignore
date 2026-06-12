@@ -1,0 +1,16 @@
+/node_modules
+/dist
+
+# Environment files (keep examples)
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Uploaded files (runtime data, not for version control)
+/uploads/
+
+# Backup files
+*.bak
+*.backup
+*.cors-backup

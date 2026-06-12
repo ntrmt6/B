@@ -1,0 +1,877 @@
+import { Router, Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
+import { getDatabase } from '../db/mongo';
+
+const router = Router();
+const PRODUCT_PAGE_PATTERN = /^\/(product|product-details|p)\//;
+
+interface VisitorDoc {
+  tenantId: string;
+  visitorId: string;
+  ip?: string;
+  userAgent?: string;
+  device?: string;
+  browser?: string;
+  country?: string;
+  city?: string;
+  firstVisit: Date;
+  lastVisit: Date;
+  pageViews: number;
+  pages: string[];
+}
+
+interface PageViewDoc {
+  tenantId: string;
+  visitorId: string;
+  page: string;
+  referrer?: string;
+  timestamp: Date;
+}
+
+type Period = 'day' | '24h' | '7d' | 'month' | '30d' | 'year' | '365d' | 'all';
+type VisitorEventType = 'search' | 'checkout_start';
+
+interface VisitorEventDoc {
+  tenantId: string;
+  visitorId: string;
+  eventType: VisitorEventType;
+  page?: string;
+  referrer?: string;
+  userAgent?: string;
+  device?: string;
+  browser?: string;
+  metadata?: Record<string, string | number | boolean>;
+  timestamp: Date;
+}
+
+const GOOGLE_DOMAINS = new Set(['google.com', 'google.co.in', 'google.co.uk', 'google.co.jp', 'google.co.kr', 'google.de', 'google.fr', 'google.com.bd']);
+const SUPPORTED_EVENT_TYPES: VisitorEventType[] = ['search', 'checkout_start'];
+const EMPTY_SOURCE_DETAILS = {
+  topReferrers: [] as Array<{ referrer: string; count: number }>,
+  topProducts: [] as Array<{ productLabel: string; page: string; views: number; visitors: number }>,
+  recentSearches: [] as Array<{ query: string; count: number; lastSeen: Date }>,
+  checkoutJourneys: [] as Array<{ productLabel: string; productPage: string; count: number; visitors: number; lastSeen: Date }>,
+  recentVisitors: [] as Array<{
+    visitorId: string;
+    lastPage: string;
+    firstSeen: Date;
+    lastSeen: Date;
+    pageViews: number;
+    pages: string[];
+    lastReferrer?: string;
+  }>
+};
+
+// FIX APPLIED: Combined IP + tenant key generation to prevent global cross-tenant limit blocks
+const createAnalyticsLimiter = (scope: string, maxRequests: number) =>
+  rateLimit({
+    windowMs: 60_000,
+    limit: maxRequests,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    keyGenerator: (req) => {
+      const ip = req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || req.ip || 'unknown';
+      return `${scope}:${req.params.tenantId || 'global'}:${ip}`;
+    },
+    validate: { xForwardedForHeader: false, ip: false },
+    message: { error: 'Too many analytics requests. Please try again shortly.' }
+  });
+
+const visitorEventsLimiter = createAnalyticsLimiter('visitor-events', 90);
+const sourceDetailsLimiter = createAnalyticsLimiter('source-details', 120);
+const sourceSummaryLimiter = createAnalyticsLimiter('source-summary', 120);
+
+const isSupportedEventType = (value: string): value is VisitorEventType =>
+  SUPPORTED_EVENT_TYPES.includes(value as VisitorEventType);
+
+const getStartDate = (period: Period | unknown) => {
+  const startDate = new Date();
+
+  switch (period) {
+    case 'day':
+    case '24h':
+      startDate.setHours(startDate.getHours() - 24);
+      break;
+    case 'month':
+    case '30d':
+      startDate.setDate(startDate.getDate() - 30);
+      break;
+    case 'year':
+    case '365d':
+      startDate.setFullYear(startDate.getFullYear() - 1);
+      break;
+    case 'all':
+      return new Date(0);
+    default:
+      startDate.setDate(startDate.getDate() - 7);
+  }
+
+  return startDate;
+};
+
+const sanitizeText = (value: unknown, maxLength: number) => {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed ? trimmed.slice(0, maxLength) : undefined;
+};
+
+const sanitizeMetadata = (metadata: unknown): Record<string, string | number | boolean> => {
+  if (!metadata || typeof metadata !== 'object' || Array.isArray(metadata)) {
+    return {};
+  }
+
+  return Object.entries(metadata as Record<string, unknown>).reduce<Record<string, string | number | boolean>>(
+    (accumulator, [key, value]) => {
+      const safeKey = key.replace(/[^\w.-]/g, '').slice(0, 40);
+      if (!safeKey) {
+        return accumulator;
+      }
+
+      if (typeof value === 'string') {
+        const sanitizedValue = sanitizeText(value, 200);
+        if (sanitizedValue) {
+          accumulator[safeKey] = sanitizedValue;
+        }
+      } else if (typeof value === 'number' && Number.isFinite(value)) {
+        accumulator[safeKey] = value;
+      } else if (typeof value === 'boolean') {
+        accumulator[safeKey] = value;
+      }
+
+      return accumulator;
+    },
+    {}
+  );
+};
+
+const categorizeReferrer = (referrer: string | null | undefined): string => {
+  if (!referrer || referrer === 'null' || referrer === 'undefined') return 'Direct';
+
+  let hostname = '';
+  try {
+    const urlStr = referrer.startsWith('http') ? referrer : `https://${referrer}`;
+    hostname = new URL(urlStr).hostname.toLowerCase();
+  } catch {
+    hostname = referrer.toLowerCase();
+  }
+
+  const isDomain = (domain: string) =>
+    hostname === domain || hostname === `www.${domain}` || hostname.endsWith(`.${domain}`);
+
+  if ([...GOOGLE_DOMAINS].some(isDomain)) return 'Google Search';
+  if (isDomain('facebook.com') || isDomain('fb.com') || isDomain('fb.me') || isDomain('m.facebook.com')) return 'Facebook';
+  if (isDomain('instagram.com')) return 'Instagram';
+  if (isDomain('youtube.com') || isDomain('youtu.be')) return 'YouTube';
+  if (isDomain('twitter.com') || isDomain('x.com') || isDomain('t.co')) return 'Twitter/X';
+  if (isDomain('tiktok.com')) return 'TikTok';
+  if (isDomain('linkedin.com')) return 'LinkedIn';
+  if (isDomain('pinterest.com')) return 'Pinterest';
+  if (isDomain('reddit.com')) return 'Reddit';
+  if (isDomain('whatsapp.com') || isDomain('wa.me')) return 'WhatsApp';
+  if (isDomain('telegram.org') || isDomain('t.me')) return 'Telegram';
+  if (isDomain('bing.com')) return 'Bing';
+  if (isDomain('yahoo.com')) return 'Yahoo';
+  if (isDomain('baidu.com')) return 'Baidu';
+
+  return 'Other';
+};
+
+const normalizeSourceName = (source: string) => {
+  const decodedSource = decodeURIComponent(source).trim();
+  if (!decodedSource) return 'Other';
+
+  const normalized = decodedSource.toLowerCase();
+
+  if (normalized.includes('google')) return 'Google Search';
+  if (normalized.includes('facebook')) return 'Facebook';
+  if (normalized.includes('direct') || normalized.includes('link')) return 'Direct';
+  if (normalized.includes('whatsapp')) return 'WhatsApp';
+  if (normalized.includes('instagram')) return 'Instagram';
+  if (normalized.includes('pinterest')) return 'Pinterest';
+  if (normalized.includes('bing')) return 'Bing';
+  if (normalized.includes('other')) return 'Other';
+
+  return decodedSource;
+};
+
+const isProductPage = (page: string | undefined) => Boolean(page && PRODUCT_PAGE_PATTERN.test(page));
+
+const getProductLabel = (page: string | undefined, fallbackName?: string) => {
+  if (fallbackName) return fallbackName;
+  if (!page) return 'Unknown product';
+
+  const rawSegment = page.split('/').filter(Boolean).pop() || page;
+  const readableLabel = decodeURIComponent(rawSegment).replace(/[-_]+/g, ' ').trim();
+  if (!readableLabel) return 'Unknown product';
+
+  return readableLabel.replace(/\b\w/g, match => match.toUpperCase());
+};
+
+// Track a page view
+router.post('/:tenantId/track', async (req: Request, res: Response) => {
+  try {
+    const { tenantId } = req.params;
+    const page = sanitizeText(req.body?.page, 250) || '/';
+    const visitorId = sanitizeText(req.body?.visitorId, 120);
+
+    if (!visitorId) {
+      return res.status(400).json({ error: 'visitorId is required' });
+    }
+
+    const db = await getDatabase();
+    const visitorsCollection = db.collection<VisitorDoc>('visitors');
+    const pageViewsCollection = db.collection<PageViewDoc>('page_views');
+
+    const now = new Date();
+
+    await visitorsCollection.updateOne(
+      { tenantId, visitorId },
+      {
+        $set: {
+          lastVisit: now,
+          userAgent: sanitizeText(req.body?.userAgent, 500),
+          device: sanitizeText(req.body?.device, 40),
+          browser: sanitizeText(req.body?.browser, 40),
+        },
+        $setOnInsert: {
+          tenantId,
+          visitorId,
+          firstVisit: now,
+        },
+        $inc: { pageViews: 1 },
+        $addToSet: { pages: page }
+      },
+      { upsert: true }
+    );
+
+    await pageViewsCollection.insertOne({
+      tenantId,
+      visitorId,
+      page,
+      referrer: sanitizeText(req.body?.referrer, 500),
+      timestamp: now
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error tracking visitor:', error);
+    res.status(500).json({ error: 'Failed to track visitor' });
+  }
+});
+
+// Track persistent visitor events such as search queries and checkout journeys
+router.post('/:tenantId/events', visitorEventsLimiter, async (req: Request, res: Response) => {
+  try {
+    const { tenantId } = req.params;
+    const visitorId = sanitizeText(req.body?.visitorId, 120);
+    const rawEventType = sanitizeText(req.body?.eventType, 40);
+
+    if (!visitorId) {
+      return res.status(400).json({ error: 'visitorId is required' });
+    }
+
+    if (!rawEventType || !isSupportedEventType(rawEventType)) {
+      return res.status(400).json({ error: 'Unsupported eventType' });
+    }
+
+    const eventType: VisitorEventType = rawEventType;
+
+    const db = await getDatabase();
+    const visitorEventsCollection = db.collection<VisitorEventDoc>('visitor_events');
+
+    await visitorEventsCollection.insertOne({
+      tenantId,
+      visitorId,
+      eventType,
+      page: sanitizeText(req.body?.page, 250),
+      referrer: sanitizeText(req.body?.referrer, 500),
+      userAgent: sanitizeText(req.body?.userAgent, 500),
+      device: sanitizeText(req.body?.device, 40),
+      browser: sanitizeText(req.body?.browser, 40),
+      metadata: sanitizeMetadata(req.body?.metadata),
+      timestamp: new Date()
+    });
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error tracking visitor event:', error);
+    res.status(500).json({ error: 'Failed to track visitor event' });
+  }
+});
+
+// Get visitor stats
+router.get('/:tenantId/stats', async (req: Request, res: Response) => {
+  try {
+    const { tenantId } = req.params;
+    const { period = '7d', startDate: customStart, endDate: customEnd, month, year } = req.query;
+
+    const db = await getDatabase();
+    const visitorsCollection = db.collection<VisitorDoc>('visitors');
+    const pageViewsCollection = db.collection<PageViewDoc>('page_views');
+
+    let startDate = new Date();
+    let endDate = new Date();
+
+    if (customStart && customEnd) {
+      startDate = new Date(customStart as string);
+      endDate = new Date(customEnd as string);
+      endDate.setHours(23, 59, 59, 999);
+    } else if (month && year) {
+      const monthNum = parseInt(month as string) - 1;
+      const yearNum = parseInt(year as string);
+      startDate = new Date(yearNum, monthNum, 1);
+      endDate = new Date(yearNum, monthNum + 1, 0, 23, 59, 59, 999);
+    } else {
+      startDate = getStartDate(period);
+    }
+
+    const totalVisitors = await visitorsCollection.countDocuments({ tenantId });
+
+    const periodVisitors = await visitorsCollection.countDocuments({
+      tenantId,
+      lastVisit: { $gte: startDate }
+    });
+
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const todayVisitors = await visitorsCollection.countDocuments({
+      tenantId,
+      lastVisit: { $gte: todayStart }
+    });
+
+    const totalPageViews = await pageViewsCollection.countDocuments({
+      tenantId,
+      timestamp: { $gte: startDate }
+    });
+
+    // FIX APPLIED: Force timezone alignment parameter to 'Asia/Dhaka' (+06:00) so charts wrap correctly at local midnight
+    const dailyStats = await pageViewsCollection.aggregate([
+      {
+        $match: {
+          tenantId,
+          timestamp: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            $dateToString: { format: '%Y-%m-%d', date: '$timestamp', timezone: 'Asia/Dhaka' }
+          },
+          views: { $sum: 1 },
+          uniqueVisitors: { $addToSet: '$visitorId' }
+        }
+      },
+      {
+        $project: {
+          date: '$_id',
+          views: 1,
+          visitors: { $size: '$uniqueVisitors' }
+        }
+      },
+      { $sort: { date: 1 } }
+    ]).toArray();
+
+    const topPages = await pageViewsCollection.aggregate([
+      {
+        $match: {
+          tenantId,
+          timestamp: { $gte: startDate }
+        }
+      },
+      {
+        $group: {
+          _id: '$page',
+          views: { $sum: 1 }
+        }
+      },
+      { $sort: { views: -1 } },
+      { $limit: 10 },
+      {
+        $project: {
+          page: '$_id',
+          views: 1,
+          _id: 0
+        }
+      }
+    ]).toArray();
+
+    const devices = await visitorsCollection.aggregate([
+      {
+        $match: {
+          tenantId,
+          lastVisit: { $gte: startDate }
+        }
+      },
+      {
+        $group: {
+          _id: '$device',
+          count: { $sum: 1 }
+        }
+      }
+    ]).toArray() as { _id: string | null; count: number }[];
+
+    // FIX APPLIED: Switched source collection aggregation target from visitors down to page_views log collection 
+    // to preserve accurate historical graph layouts across multiple multi-tenant session days.
+    const dailyDeviceStats = await pageViewsCollection.aggregate([
+      {
+        $match: {
+          tenantId,
+          timestamp: { $gte: startDate }
+        }
+      },
+      {
+        $lookup: {
+          from: 'visitors',
+          let: { vId: '$visitorId', tId: '$tenantId' },
+          pipeline: [
+            { $match: { $expr: { $and: [{ $eq: ['$visitorId', '$$vId'] }, { $eq: ['$tenantId', '$$tId'] }] } } }
+          ],
+          as: 'vInfo'
+        }
+      },
+      {
+        $project: {
+          timestamp: 1,
+          device: { $arrayElemAt: ['$vInfo.device', 0] }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            date: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp', timezone: 'Asia/Dhaka' } },
+            device: { $ifNull: ['$device', 'Desktop'] }
+          },
+          count: { $addToSet: '$visitorId' }
+        }
+      },
+      {
+        $group: {
+          _id: '$_id.date',
+          devices: {
+            $push: {
+              device: '$_id.device',
+              count: { $size: '$count' }
+            }
+          }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]).toArray();
+
+    const chartData = dailyDeviceStats.map((day: any) => {
+      const mobileCount = day.devices.find((d: any) => d.device?.toLowerCase() === 'mobile')?.count || 0;
+      const tabletCount = day.devices.find((d: any) => d.device?.toLowerCase() === 'tablet')?.count || 0;
+      const desktopCount = day.devices.find((d: any) => d.device?.toLowerCase() === 'desktop' || !d.device)?.count || 0;
+
+      return {
+        date: day._id,
+        mobile: mobileCount,
+        tablet: tabletCount,
+        desktop: desktopCount
+      };
+    });
+
+    res.json({
+      totalVisitors,
+      periodVisitors,
+      todayVisitors,
+      totalPageViews,
+      dailyStats,
+      topPages,
+      devices: devices.map(d => ({ device: d._id || 'Unknown', count: d.count })),
+      chartData
+    });
+  } catch (error) {
+    console.error('Error getting visitor stats:', error);
+    res.status(500).json({ error: 'Failed to get visitor stats' });
+  }
+});
+
+// Get online visitors count (visitors active in last 5 minutes)
+router.get('/:tenantId/online', async (req: Request, res: Response) => {
+  try {
+    const { tenantId } = req.params;
+
+    const db = await getDatabase();
+    const visitorsCollection = db.collection<VisitorDoc>('visitors');
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+
+    const onlineCount = await visitorsCollection.countDocuments({
+      tenantId,
+      lastVisit: { $gte: fiveMinutesAgo }
+    });
+
+    res.json({ online: onlineCount });
+  } catch (error) {
+    console.error('Error getting online visitors:', error);
+    res.status(500).json({ error: 'Failed to get online count' });
+  }
+});
+
+// Get persisted details for a traffic source
+router.get('/:tenantId/sources/:sourceName/details', sourceDetailsLimiter, async (req: Request, res: Response) => {
+  try {
+    const { tenantId, sourceName } = req.params;
+    const { period = '7d' } = req.query;
+    const normalizedSource = normalizeSourceName(sourceName);
+    const startDate = getStartDate(period);
+
+    const db = await getDatabase();
+    const pageViewsCollection = db.collection<PageViewDoc>('page_views');
+    const visitorEventsCollection = db.collection<VisitorEventDoc>('visitor_events');
+
+    // FIX APPLIED: Added explicit `.limit(25000)` constraint rule to keep process thread memory safe 
+    // against out-of-bounds scale heap allocation crashes.
+    const pageViews = await pageViewsCollection
+      .find(
+        {
+          tenantId,
+          timestamp: { $gte: startDate }
+        },
+        {
+          projection: {
+            visitorId: 1,
+            page: 1,
+            referrer: 1,
+            timestamp: 1
+          }
+        }
+      )
+      .sort({ timestamp: -1 })
+      .limit(25000)
+      .toArray();
+
+    const sourcePageViews = pageViews.filter(pageView => categorizeReferrer(pageView.referrer) === normalizedSource);
+    const visitorIds = [...new Set(sourcePageViews.map(pageView => pageView.visitorId).filter(Boolean))];
+
+    if (!sourcePageViews.length || visitorIds.length === 0) {
+      return res.json({
+        source: normalizedSource,
+        visitors: 0,
+        views: 0,
+        ...EMPTY_SOURCE_DETAILS
+      });
+    }
+
+    const visitorEvents = await visitorEventsCollection
+      .find(
+        {
+          tenantId,
+          visitorId: { $in: visitorIds },
+          timestamp: { $gte: startDate }
+        },
+        {
+          projection: {
+            visitorId: 1,
+            eventType: 1,
+            metadata: 1,
+            timestamp: 1
+          }
+        }
+      )
+      .sort({ timestamp: -1 })
+      .limit(25000)
+      .toArray();
+
+    const topReferrerCounts = new Map<string, number>();
+    const topProductsMap = new Map<string, { productLabel: string; page: string; views: number; visitorIds: Set<string> }>();
+    const recentVisitorsMap = new Map<
+      string,
+      {
+        visitorId: string;
+        lastPage: string;
+        firstSeen: Date;
+        lastSeen: Date;
+        pageViews: number;
+        pages: Set<string>;
+        lastReferrer?: string;
+      }
+    >();
+
+    for (const pageView of sourcePageViews) {
+      const referrer = pageView.referrer?.trim();
+      if (referrer) {
+        topReferrerCounts.set(referrer, (topReferrerCounts.get(referrer) || 0) + 1);
+      }
+
+      if (isProductPage(pageView.page)) {
+        const productKey = pageView.page;
+        const existingProduct = topProductsMap.get(productKey) || {
+          productLabel: getProductLabel(pageView.page),
+          page: pageView.page,
+          views: 0,
+          visitorIds: new Set<string>()
+        };
+        existingProduct.views += 1;
+        existingProduct.visitorIds.add(pageView.visitorId);
+        topProductsMap.set(productKey, existingProduct);
+      }
+
+      const existingVisitor = recentVisitorsMap.get(pageView.visitorId) || {
+        visitorId: pageView.visitorId,
+        lastPage: pageView.page || '/',
+        firstSeen: pageView.timestamp,
+        lastSeen: pageView.timestamp,
+        pageViews: 0,
+        pages: new Set<string>(),
+        lastReferrer: pageView.referrer
+      };
+
+      existingVisitor.pageViews += 1;
+      existingVisitor.pages.add(pageView.page || '/');
+      if (pageView.timestamp > existingVisitor.lastSeen) {
+        existingVisitor.lastSeen = pageView.timestamp;
+        existingVisitor.lastPage = pageView.page || '/';
+        existingVisitor.lastReferrer = pageView.referrer;
+      }
+      if (pageView.timestamp < existingVisitor.firstSeen) {
+        existingVisitor.firstSeen = pageView.timestamp;
+      }
+
+      recentVisitorsMap.set(pageView.visitorId, existingVisitor);
+    }
+
+    const searchQueryMap = new Map<string, { query: string; count: number; lastSeen: Date }>();
+    const checkoutJourneyMap = new Map<
+      string,
+      { productLabel: string; productPage: string; count: number; visitorIds: Set<string>; lastSeen: Date }
+    >();
+
+    for (const event of visitorEvents) {
+      if (event.eventType === 'search') {
+        const rawQuery = event.metadata?.query;
+        const query = typeof rawQuery === 'string' ? sanitizeText(rawQuery, 200) : undefined;
+        if (!query) continue;
+
+        const normalizedQuery = query.toLowerCase();
+        const existingQuery = searchQueryMap.get(normalizedQuery) || { query, count: 0, lastSeen: event.timestamp };
+        existingQuery.count += 1;
+        if (event.timestamp > existingQuery.lastSeen) {
+          existingQuery.lastSeen = event.timestamp;
+        }
+        searchQueryMap.set(normalizedQuery, existingQuery);
+      }
+
+      if (event.eventType === 'checkout_start') {
+        const productPage = sanitizeText(event.metadata?.productPage, 250) || 'unknown';
+        const productLabel = getProductLabel(productPage, sanitizeText(event.metadata?.productName, 120));
+        const existingJourney = checkoutJourneyMap.get(productPage) || {
+          productLabel,
+          productPage,
+          count: 0,
+          visitorIds: new Set<string>(),
+          lastSeen: event.timestamp
+        };
+        existingJourney.count += 1;
+        existingJourney.visitorIds.add(event.visitorId);
+        if (event.timestamp > existingJourney.lastSeen) {
+          existingJourney.lastSeen = event.timestamp;
+        }
+        checkoutJourneyMap.set(productPage, existingJourney);
+      }
+    }
+
+    res.json({
+      source: normalizedSource,
+      visitors: visitorIds.length,
+      views: sourcePageViews.length,
+      topReferrers: [...topReferrerCounts.entries()]
+        .map(([referrer, count]) => ({ referrer, count }))
+        .sort((a, b) => b.count - a.count)
+        .slice(0, 5),
+      topProducts: [...topProductsMap.values()]
+        .map(product => ({
+          productLabel: product.productLabel,
+          page: product.page,
+          views: product.views,
+          visitors: product.visitorIds.size
+        }))
+        .sort((a, b) => b.views - a.views)
+        .slice(0, 8),
+      recentSearches: [...searchQueryMap.values()]
+        .sort((a, b) => b.count - a.count || b.lastSeen.getTime() - a.lastSeen.getTime())
+        .slice(0, 10),
+      checkoutJourneys: [...checkoutJourneyMap.values()]
+        .map(journey => ({
+          productLabel: journey.productLabel,
+          productPage: journey.productPage,
+          count: journey.count,
+          visitors: journey.visitorIds.size,
+          lastSeen: journey.lastSeen
+        }))
+        .sort((a, b) => b.count - a.count || b.lastSeen.getTime() - a.lastSeen.getTime())
+        .slice(0, 8),
+      recentVisitors: [...recentVisitorsMap.values()]
+        .map(visitor => ({
+          visitorId: visitor.visitorId,
+          lastPage: visitor.lastPage,
+          firstSeen: visitor.firstSeen,
+          lastSeen: visitor.lastSeen,
+          pageViews: visitor.pageViews,
+          pages: [...visitor.pages].slice(0, 6),
+          lastReferrer: visitor.lastReferrer
+        }))
+        .sort((a, b) => b.lastSeen.getTime() - a.lastSeen.getTime())
+        .slice(0, 10)
+    });
+  } catch (error) {
+    console.error('Error getting source details:', error);
+    res.status(500).json({ error: 'Failed to get source details' });
+  }
+});
+
+// Get traffic sources (referrer analysis)
+router.get('/:tenantId/sources', sourceSummaryLimiter, async (req: Request, res: Response) => {
+  try {
+    const { tenantId } = req.params;
+    const { period = '7d' } = req.query;
+    const startDate = getStartDate(period);
+
+    const db = await getDatabase();
+    const pageViewsCollection = db.collection<PageViewDoc>('page_views');
+
+    const referrerData = await pageViewsCollection.aggregate([
+      {
+        $match: {
+          tenantId,
+          timestamp: { $gte: startDate }
+        }
+      },
+      {
+        $group: {
+          _id: '$referrer',
+          count: { $sum: 1 },
+          uniqueVisitors: { $addToSet: '$visitorId' }
+        }
+      },
+      {
+        $project: {
+          referrer: '$_id',
+          count: 1,
+          uniqueVisitors: 1,
+          _id: 0
+        }
+      },
+      { $sort: { count: -1 } }
+    ]).toArray();
+
+    const sourceMap: Record<string, { count: number; visitorIds: Set<string>; referrers: string[] }> = {};
+
+    for (const item of referrerData) {
+      const source = categorizeReferrer(item.referrer);
+      if (!sourceMap[source]) {
+        sourceMap[source] = { count: 0, visitorIds: new Set(), referrers: [] };
+      }
+      sourceMap[source].count += item.count;
+      if (item.uniqueVisitors) {
+        for (const visitorId of item.uniqueVisitors) {
+          sourceMap[source].visitorIds.add(visitorId);
+        }
+      }
+      if (item.referrer && !sourceMap[source].referrers.includes(item.referrer)) {
+        sourceMap[source].referrers.push(item.referrer);
+      }
+    }
+
+    const totalViews = Object.values(sourceMap).reduce((sum, source) => sum + source.count, 0) || 1;
+    const sources = Object.entries(sourceMap)
+      .map(([name, data]) => ({
+        name,
+        count: data.count,
+        visitors: data.visitorIds.size,
+        percentage: Math.round((data.count / totalViews) * 100),
+        referrers: data.referrers.slice(0, 5)
+      }))
+      .sort((a, b) => b.count - a.count);
+
+    // FIX APPLIED: Mapped accurate timezone offset conversion ('Asia/Dhaka') to group parameters
+    const dailySources = await pageViewsCollection.aggregate([
+      {
+        $match: {
+          tenantId,
+          timestamp: { $gte: startDate }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            date: { $dateToString: { format: '%Y-%m-%d', date: '$timestamp', timezone: 'Asia/Dhaka' } },
+            referrer: '$referrer'
+          },
+          count: { $sum: 1 }
+        }
+      },
+      {
+        $group: {
+          _id: '$_id.date',
+          referrers: {
+            $push: {
+              referrer: '$_id.referrer',
+              count: '$count'
+            }
+          },
+          total: { $sum: '$count' }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]).toArray();
+
+    const dailySourceData = dailySources.map((day: any) => {
+      const daySources: Record<string, number> = {};
+      for (const referrer of day.referrers) {
+        const source = categorizeReferrer(referrer.referrer);
+        daySources[source] = (daySources[source] || 0) + referrer.count;
+      }
+      return {
+        date: day._id,
+        total: day.total,
+        ...daySources
+      };
+    });
+
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+    const onlineVisitors = await pageViewsCollection.aggregate([
+      {
+        $match: {
+          tenantId,
+          timestamp: { $gte: fiveMinutesAgo }
+        }
+      },
+      { $sort: { timestamp: -1 } },
+      {
+        $group: {
+          _id: '$visitorId',
+          lastPage: { $first: '$page' },
+          referrer: { $first: '$referrer' },
+          lastSeen: { $first: '$timestamp' }
+        }
+      }
+    ]).toArray();
+
+    const onlineBySource: Record<string, number> = {};
+    for (const visitor of onlineVisitors) {
+      const source = categorizeReferrer(visitor.referrer);
+      onlineBySource[source] = (onlineBySource[source] || 0) + 1;
+    }
+
+    res.json({
+      sources,
+      dailySourceData,
+      onlineCount: onlineVisitors.length,
+      onlineBySource,
+      onlineVisitors: onlineVisitors.map((visitor: any) => ({
+        visitorId: visitor._id,
+        page: visitor.lastPage,
+        source: categorizeReferrer(visitor.referrer),
+        lastSeen: visitor.lastSeen
+      })),
+      totalViews,
+      period
+    });
+  } catch (error) {
+    console.error('Error getting traffic sources:', error);
+    res.status(500).json({ error: 'Failed to get traffic sources' });
+  }
+});
+
+export const visitorsRouter = router;

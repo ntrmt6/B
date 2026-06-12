@@ -1,0 +1,30 @@
+[Unit]
+Description=Backend API (Express.js + Socket.IO)
+After=network.target mongod.service redis.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/app/backend-next
+ExecStart=/usr/bin/node dist/index.js
+Restart=always
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+# Environment
+Environment=NODE_ENV=production
+Environment=PORT=5001
+EnvironmentFile=/var/www/app/backend-next/.env
+
+# Process limits
+LimitNOFILE=65535
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=backend-api
+
+[Install]
+WantedBy=multi-user.target

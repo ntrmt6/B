@@ -1,0 +1,27 @@
+[Unit]
+Description=Storefront (Next.js)
+After=network.target backend-api.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/app/storefront-next
+ExecStart=/usr/bin/node node_modules/.bin/next start -p 3001
+Restart=always
+RestartSec=5
+StartLimitBurst=5
+StartLimitIntervalSec=60
+
+Environment=NODE_ENV=production
+Environment=PORT=3001
+EnvironmentFile=/var/www/app/storefront-next/.env
+
+LimitNOFILE=65535
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=storefront-next
+
+[Install]
+WantedBy=multi-user.target

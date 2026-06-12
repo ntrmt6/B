@@ -1,0 +1,14 @@
+backend/node_modules/
+backend/dist/
+admin-next/node_modules/
+admin-next/.next/
+storefront-next/node_modules/
+storefront-next/.next/
+storefront-next/.next-dev/
+node_modules
+
+# Environment files (keep examples)
+.env
+.env.*
+!.env.example
+!.env.*.example

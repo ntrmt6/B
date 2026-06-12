@@ -1,0 +1,23 @@
+@import "tailwindcss";
+
+@theme {
+    --font-inter: "Inter", sans-serif;
+    --font-poppins: "Poppins", sans-serif;
+    --font-lato: "Lato", sans-serif;
+    --font-urbanist: "Urbanist", sans-serif;
+    --font-roboto: "Roboto", sans-serif;
+}
+
+.swiper {
+    width: 100%;
+}
+
+.main-image-swiper {
+    height: 100%;
+}
+
+.swiper-slide {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
