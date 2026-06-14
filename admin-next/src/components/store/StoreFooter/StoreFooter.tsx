@@ -178,71 +178,95 @@ const FloatingChatButton: React.FC<{ websiteConfig?: WebsiteConfig; onOpenChat?:
 // Style 1: Default footer matching provided snippet
 const FooterStyle1: React.FC<StoreFooterProps> = ({ websiteConfig, logo, tenantId, onOpenChat }) => {
   const resolvedFooterLogo = resolveTenantFooterLogo(websiteConfig, logo, tenantId);
+  const currentYear = new Date().getFullYear();
+  const quickLinks = getFooterQuickLinks(websiteConfig);
+  const whatsappLink = buildWhatsAppLink(websiteConfig?.whatsappNumber);
+
   return (
     <footer className="w-full font-lato">
-      <div className="mx-auto max-w-[1720px] bg-black rounded-t-[112px] px-20 pt-14 pb-6 max-md:px-6 max-md:pt-10 max-md:rounded-t-[48px]">
+      <div className="mx-auto max-w-[1720px] bg-black rounded-t-[112px] px-20 pt-14 pb-8 max-md:px-6 max-md:pt-10 max-md:rounded-t-[48px]">
 
         {/* ── DESKTOP layout (md and above) ── */}
         <div className="hidden md:flex flex-row items-start justify-between gap-8">
 
-          <div className="flex flex-col gap-4 max-w-[220px]">
+          <div className="flex flex-col gap-4 max-w-[260px]">
             {resolvedFooterLogo ? (
               <img
                 src={typeof normalizeImageUrl === 'function' ? normalizeImageUrl(resolvedFooterLogo) : String(resolvedFooterLogo)}
                 alt={websiteConfig?.websiteName || 'Logo'}
-                className="w-[169px]"
+                className="w-[169px] brightness-0 invert"
               />
             ) : (
-              <h3 className="text-2xl font-bold text-white">{websiteConfig?.websiteName || 'Logo'}</h3>
+              <h3 className="text-2xl font-bold text-white">{websiteConfig?.websiteName || 'Store'}</h3>
             )}
-            <p className="text-[13px] font-inter text-white leading-[1.7] mt-1">
-              {websiteConfig?.brandingText || 'we create possibilities for the connected world.'}
+            <p className="text-[13px] font-inter text-gray-400 leading-[1.7] mt-1">
+              {websiteConfig?.shortDescription || websiteConfig?.brandingText || 'We create possibilities for the connected world.'}
             </p>
+            {/* Social Icons */}
+            <div className="flex gap-3 mt-2">
+              {websiteConfig?.socialLinks?.slice(0, 5).map((social, idx) => (
+                <a
+                  key={idx}
+                  href={String(social?.url || '#')}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-9 h-9 rounded-full bg-white/10 hover:bg-[#7DB541] flex items-center justify-center text-gray-400 hover:text-white transition-all duration-300"
+                  aria-label={String(social?.platform || 'social')}
+                >
+                  {resolveSocialIcon(social?.platform)}
+                </a>
+              ))}
+            </div>
           </div>
 
-          <div className="flex flex-row gap-20">
+          <div className="flex flex-row gap-16 lg:gap-20">
 
-            {/* VISIT */}
-            <div className="flex flex-col gap-3">
-              <h4 className="text-[16px] font-semibold text-[#7DB541] uppercase tracking-wider">
-                VISIT
+            {/* CONTACT */}
+            <div className="flex flex-col gap-4">
+              <h4 className="text-[14px] font-semibold text-[#7DB541] uppercase tracking-wider">
+                Contact
               </h4>
-              <p className="text-[12px] text-white leading-[1.8] font-medium">
-                {websiteConfig?.addresses || 'D-14/3, Bankcolony,'}
-                <br />
-              </p>
-            </div>
-
-            {/* QUICK LINK */}
-            <div className="flex flex-col gap-[20px]">
-              <h4 className="text-[16px] font-semibold text-[#7DB541] uppercase tracking-wider">
-                QUICK LINK
-              </h4>
-              <ul className="flex flex-col gap-2">
-                {[
-                  { label: 'Products', url: '/all-products' },
-                  { label: 'Categories', url: '/categories' },
-                  { label: 'Campaigns', url: '/campaigns' }
-                ].map((item) => (
-                  <li key={item.label}>
-                    <a href={item.url} className="text-[12px] text-white leading-[1.8] font-medium hover:text-[#7DB541] transition-colors">
-                      {item.label}
+              <ul className="flex flex-col gap-3">
+                {websiteConfig?.phones?.[0] && (
+                  <li className="flex items-center gap-2">
+                    <Phone size={14} className="text-[#7DB541]" />
+                    <span className="text-[12px] text-gray-300">{String(websiteConfig.phones[0])}</span>
+                  </li>
+                )}
+                {websiteConfig?.emails?.[0] && (
+                  <li className="flex items-center gap-2">
+                    <Mail size={14} className="text-[#7DB541]" />
+                    <span className="text-[12px] text-gray-300">{String(websiteConfig.emails[0])}</span>
+                  </li>
+                )}
+                {websiteConfig?.addresses?.[0] && (
+                  <li className="flex items-start gap-2">
+                    <MapPin size={14} className="text-[#7DB541] mt-0.5 flex-shrink-0" />
+                    <span className="text-[12px] text-gray-300 leading-relaxed">{String(websiteConfig.addresses[0])}</span>
+                  </li>
+                )}
+                {whatsappLink && (
+                  <li>
+                    <a href={whatsappLink} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-green-400 hover:text-green-300 transition-colors">
+                      <MessageCircle size={14} />
+                      <span className="text-[12px]">WhatsApp Us</span>
                     </a>
                   </li>
-                ))}
+                )}
               </ul>
             </div>
 
-            {/* USEFUL LINK */}
-            <div className="flex flex-col gap-[20px]">
-              <h4 className="text-[16px] font-semibold text-[#7DB541] uppercase tracking-wider">
-                SOCIAL LINK
+            {/* QUICK LINK */}
+            <div className="flex flex-col gap-4">
+              <h4 className="text-[14px] font-semibold text-[#7DB541] uppercase tracking-wider">
+                Quick Links
               </h4>
               <ul className="flex flex-col gap-2">
-                {websiteConfig?.socialLinks?.slice(0, 5).map((social, idx) => (
-                  <li key={idx}>
-                    <a href={String(social?.url || '#')} target="_blank" rel="noopener noreferrer" className="text-[12px] text-white leading-[1.8] font-medium">
-                      {String(social?.platform || '').charAt(0).toUpperCase() + String(social?.platform || '').slice(1)}
+                {quickLinks.map((item, idx) => (
+                  <li key={item.id || idx}>
+                    <a href={String(item.url)} className="text-[12px] text-gray-300 hover:text-[#7DB541] transition-colors flex items-center gap-1 group">
+                      <ArrowRight size={10} className="opacity-0 -ml-3 group-hover:opacity-100 group-hover:ml-0 transition-all duration-200 text-[#7DB541]" />
+                      {String(item.label)}
                     </a>
                   </li>
                 ))}
@@ -250,59 +274,136 @@ const FooterStyle1: React.FC<StoreFooterProps> = ({ websiteConfig, logo, tenantI
             </div>
 
             {/* LEGAL */}
-            <div className="flex flex-col gap-[20px]">
-              <h4 className="text-[16px] font-semibold text-[#7DB541] uppercase tracking-wider">
-                LEGAL
+            <div className="flex flex-col gap-4">
+              <h4 className="text-[14px] font-semibold text-[#7DB541] uppercase tracking-wider">
+                Legal
               </h4>
               <ul className="flex flex-col gap-2">
                 {[
-                  { label: "Terms & Condition", url: "/termsnconditions" },
-                  { label: "Return Policy", url: "/returnpolicy" }
+                  { label: "Terms & Conditions", url: "/termsnconditions" },
+                  { label: "Return Policy", url: "/returnpolicy" },
+                  { label: "Privacy Policy", url: "/privacy" }
                 ].map((item) => (
                   <li key={item.label}>
-                    <a href={item.url} className="text-[12px] text-white leading-[1.8] font-medium">
+                    <a href={item.url} className="text-[12px] text-gray-300 hover:text-[#7DB541] transition-colors flex items-center gap-1 group">
+                      <ArrowRight size={10} className="opacity-0 -ml-3 group-hover:opacity-100 group-hover:ml-0 transition-all duration-200 text-[#7DB541]" />
                       {item.label}
                     </a>
                   </li>
-                  
                 ))}
               </ul>
+            </div>
+
+            {/* NEWSLETTER */}
+            <div className="flex flex-col gap-4 max-w-[200px]">
+              <h4 className="text-[14px] font-semibold text-[#7DB541] uppercase tracking-wider">
+                Newsletter
+              </h4>
+              <p className="text-[11px] text-gray-400 leading-relaxed">
+                Subscribe for exclusive deals and updates.
+              </p>
+              <div className="flex flex-col gap-2">
+                <input
+                  type="email"
+                  placeholder="Your email"
+                  className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-[12px] text-white placeholder:text-gray-500 focus:outline-none focus:border-[#7DB541]/50 transition-colors"
+                />
+                <button className="bg-[#7DB541] hover:bg-[#6ca336] text-white text-[12px] font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center gap-1">
+                  <Send size={12} />
+                  Subscribe
+                </button>
+              </div>
             </div>
 
           </div>
         </div>
 
         {/* ── MOBILE layout ── */}
-        <div className="flex md:hidden flex-col items-center gap-4">
+        <div className="flex md:hidden flex-col items-center gap-6">
           {resolvedFooterLogo ? (
             <img
               src={typeof normalizeImageUrl === 'function' ? normalizeImageUrl(resolvedFooterLogo) : String(resolvedFooterLogo)}
               alt={websiteConfig?.websiteName || 'Logo'}
-              className="w-[140px]"
+              className="w-[140px] brightness-0 invert"
             />
           ) : (
-            <h3 className="text-xl font-bold text-white">{websiteConfig?.websiteName || 'Logo'}</h3>
+            <h3 className="text-xl font-bold text-white">{websiteConfig?.websiteName || 'Store'}</h3>
           )}
 
-          <p className="text-sm font-medium text-[#635C5C] text-center">
-            Oversear Products © 2026. All rights reserved.
+          <p className="text-[13px] text-gray-400 text-center max-w-[280px]">
+            {websiteConfig?.shortDescription || websiteConfig?.brandingText || 'We create possibilities for the connected world.'}
           </p>
 
-          {/* Website URL */}
-          <a
-            href="https://www.opbd.shop"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-[13px] text-[#3FC3D7] font-medium"
-          >
-            www.opbd.shop
-          </a>
+          {/* Social Icons Mobile */}
+          <div className="flex gap-3">
+            {websiteConfig?.socialLinks?.slice(0, 5).map((social, idx) => (
+              <a
+                key={idx}
+                href={String(social?.url || '#')}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-10 h-10 rounded-full bg-white/10 hover:bg-[#7DB541] flex items-center justify-center text-gray-400 hover:text-white transition-all duration-300"
+                aria-label={String(social?.platform || 'social')}
+              >
+                {resolveSocialIcon(social?.platform)}
+              </a>
+            ))}
+          </div>
+
+          {/* Contact Info Mobile */}
+          <div className="flex flex-col items-center gap-2 text-[12px] text-gray-400">
+            {websiteConfig?.phones?.[0] && (
+              <a href={`tel:${websiteConfig.phones[0]}`} className="flex items-center gap-2 hover:text-[#7DB541] transition-colors">
+                <Phone size={14} className="text-[#7DB541]" />
+                {String(websiteConfig.phones[0])}
+              </a>
+            )}
+            {websiteConfig?.emails?.[0] && (
+              <a href={`mailto:${websiteConfig.emails[0]}`} className="flex items-center gap-2 hover:text-[#7DB541] transition-colors">
+                <Mail size={14} className="text-[#7DB541]" />
+                {String(websiteConfig.emails[0])}
+              </a>
+            )}
+          </div>
+
+          {/* Quick Links Mobile */}
+          <div className="flex flex-wrap justify-center gap-x-4 gap-y-2">
+            {quickLinks.slice(0, 4).map((link, idx) => (
+              <a
+                key={link.id || idx}
+                href={String(link.url)}
+                className="text-[12px] text-gray-400 hover:text-[#7DB541] transition-colors"
+              >
+                {String(link.label)}
+              </a>
+            ))}
+          </div>
+
+          {/* Newsletter Mobile */}
+          <div className="w-full max-w-[280px]">
+            <div className="flex">
+              <input
+                type="email"
+                placeholder="Your email"
+                className="flex-1 bg-white/5 border border-white/10 border-r-0 rounded-l-lg px-3 py-2.5 text-[12px] text-white placeholder:text-gray-500 focus:outline-none focus:border-[#7DB541]/50 transition-colors"
+              />
+              <button className="bg-[#7DB541] hover:bg-[#6ca336] text-white px-4 rounded-r-lg transition-colors">
+                <Send size={14} />
+              </button>
+            </div>
+          </div>
         </div>
 
-        {/* Desktop Copyright */}
-        <p className="hidden md:block text-[12px] font-medium text-white mt-6">
-          ©2026 System Next IT, All right reserved.
-        </p>
+        {/* Divider */}
+        <div className="h-px w-full bg-gradient-to-r from-transparent via-white/10 to-transparent mt-10 mb-6"></div>
+
+        {/* Copyright Section */}
+        <CopyrightSection
+          websiteConfig={websiteConfig}
+          currentYear={currentYear}
+          variant="dark"
+          className="text-center md:text-left"
+        />
       </div>
       <FloatingChatButton websiteConfig={websiteConfig} onOpenChat={onOpenChat} />
     </footer>
