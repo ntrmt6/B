@@ -420,62 +420,56 @@ tenantsRouter.delete('/:id', authenticateToken, requireRole('super_admin'),
   }
 );
 
-// POST /api/tenants/:id/setup-domain - Setup custom domain with Nginx and SSL
+// POST /api/tenants/:id/setup-domain - Setup custom domain
 tenantsRouter.post('/:id/setup-domain', authenticateToken, requireAdmin,
   async (req, res, next) => {
     try {
       const { customDomain } = z.object({
         customDomain: z.string().min(3).regex(/^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*$/, 'Invalid domain format')
       }).parse(req.body);
-      
+
       const tenantId = req.params.id;
-      
+
       // Get tenant to verify it exists
       const tenant = await getTenantById(tenantId);
       if (!tenant) {
         return res.status(404).json({ error: 'Tenant not found' });
       }
-      
-      // Execute the domain setup script
-      const { execFile } = require('child_process');
-      const scriptPath = '/var/www/admin-main/backend/scripts/setup-custom-domain.sh';
-      
-      execFile(scriptPath, [customDomain, tenantId, 'setup'], { timeout: 120000 }, async (error: any, stdout: string, stderr: string) => {
-        if (error) {
-          console.error('Domain setup error:', error);
-          console.error('stderr:', stderr);
-          return res.status(500).json({ 
-            error: 'Domain setup failed', 
-            details: stderr || error.message 
-          });
-        }
-        
-        try {
-          const result = JSON.parse(stdout.trim().split('\n').pop() || '{}');
-          
-          if (result.success) {
-            // Update tenant with custom domain
-            await updateTenant(tenantId, { customDomain });
-            res.json({ 
-              success: true, 
-              data: { 
-                customDomain, 
-                tenantId, 
-                ssl: true,
-                message: 'Custom domain configured successfully with SSL'
-              } 
-            });
-          } else {
-            res.status(400).json({ 
-              success: false, 
-              error: result.error || 'Domain setup failed',
-              stage: result.stage,
-              details: result.details
-            });
+
+      // Check if domain is already used by another tenant
+      const existingTenant = await getTenantByCustomDomain(customDomain.toLowerCase());
+      if (existingTenant && existingTenant._id?.toString() !== tenantId && existingTenant.subdomain !== tenantId) {
+        return res.status(400).json({
+          error: 'This domain is already registered to another shop'
+        });
+      }
+
+      // Save the custom domain to the tenant
+      await updateTenant(tenantId, { customDomain: customDomain.toLowerCase() });
+
+      console.log(`[Domain Setup] Custom domain "${customDomain}" saved for tenant: ${tenantId}`);
+
+      res.json({
+        success: true,
+        data: {
+          customDomain: customDomain.toLowerCase(),
+          tenantId,
+          message: 'Custom domain saved successfully. Please configure your DNS settings as instructed.',
+          dnsInstructions: {
+            aRecord: {
+              type: 'A',
+              name: '@',
+              value: '159.198.47.126',
+              ttl: 'Auto'
+            },
+            cnameRecord: {
+              type: 'CNAME',
+              name: 'www',
+              value: customDomain.toLowerCase(),
+              ttl: 'Auto'
+            },
+            notes: 'Set Proxy Status to Proxied and SSL mode to Flexible in Cloudflare. Allow up to 24 hours for DNS propagation.'
           }
-        } catch (parseError) {
-          console.error('Failed to parse script output:', stdout);
-          res.status(500).json({ error: 'Failed to parse setup result' });
         }
       });
     } catch (error) {
@@ -494,34 +488,66 @@ tenantsRouter.get('/:id/verify-domain',
       const { domain } = z.object({
         domain: z.string().min(3)
       }).parse(req.query);
-      
-      const { execFile } = require('child_process');
-      const scriptPath = '/var/www/admin-main/backend/scripts/setup-custom-domain.sh';
-      
-      execFile(scriptPath, [domain, '', 'verify'], { timeout: 30000 }, (error: any, stdout: string, stderr: string) => {
-        if (error) {
-          return res.json({ 
-            success: false, 
-            dnsVerified: false,
-            error: stderr || error.message 
-          });
-        }
-        
+
+      const dns = require('dns').promises;
+      const targetIP = '159.198.47.126';
+
+      let aRecordValid = false;
+      let cnameValid = false;
+      let aRecordValue = null;
+      let cnameValue = null;
+
+      // Check A record for the domain
+      try {
+        const addresses = await dns.resolve4(domain);
+        aRecordValue = addresses[0] || null;
+        aRecordValid = addresses.includes(targetIP);
+      } catch (e) {
+        // A record not found or DNS error
+      }
+
+      // Check CNAME for www subdomain
+      try {
+        const cnames = await dns.resolveCname(`www.${domain}`);
+        cnameValue = cnames[0] || null;
+        cnameValid = cnames.some((cname: string) =>
+          cname.toLowerCase() === domain.toLowerCase() ||
+          cname.toLowerCase() === `${domain}.`.toLowerCase()
+        );
+      } catch (e) {
+        // CNAME not found - might be using A record for www instead
         try {
-          const result = JSON.parse(stdout.trim().split('\n').pop() || '{}');
-          res.json({
-            success: result.success,
-            dnsVerified: result.success,
-            domain: result.domain,
-            dnsStatus: result.dnsStatus
-          });
-        } catch (parseError) {
-          res.json({ 
-            success: false, 
-            dnsVerified: false,
-            error: 'Failed to verify DNS' 
-          });
+          const wwwAddresses = await dns.resolve4(`www.${domain}`);
+          if (wwwAddresses.includes(targetIP)) {
+            cnameValid = true;
+            cnameValue = 'A record pointing to server';
+          }
+        } catch (e2) {
+          // www subdomain not configured
         }
+      }
+
+      const dnsVerified = aRecordValid;
+
+      res.json({
+        success: dnsVerified,
+        dnsVerified,
+        domain,
+        dnsStatus: {
+          aRecord: {
+            valid: aRecordValid,
+            value: aRecordValue,
+            expected: targetIP
+          },
+          cname: {
+            valid: cnameValid,
+            value: cnameValue,
+            expected: domain
+          }
+        },
+        message: dnsVerified
+          ? 'DNS is properly configured!'
+          : 'DNS is not yet configured. Please add the A record pointing to ' + targetIP
       });
     } catch (error) {
       if (error instanceof z.ZodError) {
@@ -537,35 +563,27 @@ tenantsRouter.delete('/:id/custom-domain', authenticateToken, requireAdmin,
   async (req, res, next) => {
     try {
       const tenantId = req.params.id;
-      
+
       const tenant = await getTenantById(tenantId);
       if (!tenant) {
         return res.status(404).json({ error: 'Tenant not found' });
       }
-      
+
       if (!tenant.customDomain) {
         return res.status(400).json({ error: 'No custom domain configured' });
       }
-      
+
       const customDomain = tenant.customDomain;
-      
-      // Execute the domain removal script
-      const { execFile } = require('child_process');
-      const scriptPath = '/var/www/admin-main/backend/scripts/setup-custom-domain.sh';
-      
-      execFile(scriptPath, [customDomain, tenantId, 'remove'], { timeout: 30000 }, async (error: any, stdout: string, stderr: string) => {
-        // Even if script fails, we should clear the domain from DB
-        await updateTenant(tenantId, { customDomain: null });
-        
-        if (error) {
-          console.warn('Domain removal script warning:', stderr);
-        }
-        
-        res.json({ 
-          success: true, 
-          message: 'Custom domain removed',
-          domain: customDomain
-        });
+
+      // Remove the custom domain from the tenant
+      await updateTenant(tenantId, { customDomain: null });
+
+      console.log(`[Domain Removal] Custom domain "${customDomain}" removed for tenant: ${tenantId}`);
+
+      res.json({
+        success: true,
+        message: 'Custom domain removed successfully',
+        domain: customDomain
       });
     } catch (error) {
       next(error);

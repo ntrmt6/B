@@ -15,8 +15,8 @@ cd "$APP_DIR"
 log() { echo "[$(date '+%H:%M:%S')] $1"; }
 
 # Pull latest
-log "Pulling latest code..."
-git pull origin main
+#log 
+#git pull origin main
 
 build_backend() {
     log "Building backend..."
