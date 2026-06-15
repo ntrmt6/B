@@ -1,10 +1,16 @@
 // VendorService - Multi-Vendor Marketplace API operations
 import type { Vendor, VendorSubOrder, CommissionResult } from '../types';
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5001';
+function getApiBaseUrl(): string {
+  if (typeof window !== 'undefined') {
+    // In browser, use relative URLs to avoid CORS issues
+    return '';
+  }
+  return process.env.NEXT_PUBLIC_getApiBaseUrl() || 'http://localhost:5001';
+}
 
 function getHeaders(tenantId: string): Record<string, string> {
-  const token = localStorage.getItem('admin_auth_token');
+  const token = typeof window !== 'undefined' ? localStorage.getItem('admin_auth_token') : null;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'X-Tenant-Id': tenantId,
@@ -18,9 +24,9 @@ function getHeaders(tenantId: string): Record<string, string> {
 export const VendorService = {
   /** List all vendors for a tenant */
   async getVendors(tenantId: string, status?: string): Promise<Vendor[]> {
-    const url = new URL(`${API_BASE_URL}/api/vendors/${tenantId}`);
-    if (status) url.searchParams.set('status', status);
-    const res = await fetch(url.toString(), { headers: getHeaders(tenantId) });
+    let url = `${getApiBaseUrl()}/api/vendors/${tenantId}`;
+    if (status) url += `?status=${encodeURIComponent(status)}`;
+    const res = await fetch(url, { headers: getHeaders(tenantId) });
     if (!res.ok) throw new Error('Failed to fetch vendors');
     const json = await res.json();
     return json.data || [];
@@ -28,7 +34,7 @@ export const VendorService = {
 
   /** Get a single vendor */
   async getVendor(tenantId: string, vendorId: string): Promise<Vendor> {
-    const res = await fetch(`${API_BASE_URL}/api/vendors/${tenantId}/${vendorId}`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/vendors/${tenantId}/${vendorId}`, {
       headers: getHeaders(tenantId),
     });
     if (!res.ok) throw new Error('Failed to fetch vendor');
@@ -38,7 +44,7 @@ export const VendorService = {
 
   /** Create a new vendor */
   async createVendor(tenantId: string, data: Partial<Vendor>): Promise<Vendor> {
-    const res = await fetch(`${API_BASE_URL}/api/vendors/${tenantId}`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/vendors/${tenantId}`, {
       method: 'POST',
       headers: getHeaders(tenantId),
       body: JSON.stringify(data),
@@ -53,7 +59,7 @@ export const VendorService = {
 
   /** Update a vendor */
   async updateVendor(tenantId: string, vendorId: string, data: Partial<Vendor>): Promise<Vendor> {
-    const res = await fetch(`${API_BASE_URL}/api/vendors/${tenantId}/${vendorId}`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/vendors/${tenantId}/${vendorId}`, {
       method: 'PUT',
       headers: getHeaders(tenantId),
       body: JSON.stringify(data),
@@ -68,7 +74,7 @@ export const VendorService = {
 
   /** Delete a vendor */
   async deleteVendor(tenantId: string, vendorId: string): Promise<void> {
-    const res = await fetch(`${API_BASE_URL}/api/vendors/${tenantId}/${vendorId}`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/vendors/${tenantId}/${vendorId}`, {
       method: 'DELETE',
       headers: getHeaders(tenantId),
     });
@@ -77,7 +83,7 @@ export const VendorService = {
 
   /** Get sub-orders for a specific vendor */
   async getVendorSubOrders(tenantId: string, vendorId: string): Promise<VendorSubOrder[]> {
-    const res = await fetch(`${API_BASE_URL}/api/vendors/${tenantId}/${vendorId}/sub-orders`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/vendors/${tenantId}/${vendorId}/sub-orders`, {
       headers: getHeaders(tenantId),
     });
     if (!res.ok) throw new Error('Failed to fetch sub-orders');
@@ -90,7 +96,7 @@ export const VendorService = {
     tenantId: string,
     items: Array<{ vendorId?: string; price: number; quantity: number }>
   ): Promise<CommissionResult[]> {
-    const res = await fetch(`${API_BASE_URL}/api/vendors/${tenantId}/calculate-commission`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/vendors/${tenantId}/calculate-commission`, {
       method: 'POST',
       headers: getHeaders(tenantId),
       body: JSON.stringify({ items }),
@@ -114,7 +120,7 @@ export const VendorService = {
       status?: string;
     }
   ): Promise<VendorSubOrder[]> {
-    const res = await fetch(`${API_BASE_URL}/api/vendors/${tenantId}/split-order`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/vendors/${tenantId}/split-order`, {
       method: 'POST',
       headers: getHeaders(tenantId),
       body: JSON.stringify(masterOrder),
@@ -130,7 +136,7 @@ export const VendorService = {
     vendorId: string,
     customDomain: string
   ): Promise<{ success: boolean; customDomain: string; dnsInstructions: any }> {
-    const res = await fetch(`${API_BASE_URL}/api/vendors/${tenantId}/${vendorId}/setup-domain`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/vendors/${tenantId}/${vendorId}/setup-domain`, {
       method: 'POST',
       headers: getHeaders(tenantId),
       body: JSON.stringify({ customDomain }),
@@ -154,9 +160,9 @@ export const VendorService = {
       cname: { valid: boolean; value: string | null; expected: string };
     };
   }> {
-    const url = new URL(`${API_BASE_URL}/api/vendors/${tenantId}/${vendorId}/verify-domain`);
-    if (domain) url.searchParams.set('domain', domain);
-    const res = await fetch(url.toString(), {
+    let url = `${getApiBaseUrl()}/api/vendors/${tenantId}/${vendorId}/verify-domain`;
+    if (domain) url += `?domain=${encodeURIComponent(domain)}`;
+    const res = await fetch(url, {
       headers: getHeaders(tenantId),
     });
     if (!res.ok) {
@@ -168,7 +174,7 @@ export const VendorService = {
 
   /** Remove custom domain from vendor */
   async removeDomain(tenantId: string, vendorId: string): Promise<void> {
-    const res = await fetch(`${API_BASE_URL}/api/vendors/${tenantId}/${vendorId}/custom-domain`, {
+    const res = await fetch(`${getApiBaseUrl()}/api/vendors/${tenantId}/${vendorId}/custom-domain`, {
       method: 'DELETE',
       headers: getHeaders(tenantId),
     });

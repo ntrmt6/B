@@ -73,6 +73,37 @@ const splitOrderSchema = z.object({
 
 // ─── Routes ────────────────────────────────────────────────────────────────
 
+import { Vendor } from '../models/Vendor';
+import dns from 'dns';
+import { promisify } from 'util';
+
+const dnsResolve4 = promisify(dns.resolve4);
+const dnsResolveCname = promisify(dns.resolveCname);
+
+const SERVER_IP = '159.198.47.126';
+
+// GET /api/vendors/by-domain/:domain — Get vendor by custom domain (PUBLIC - must be before :tenantId routes)
+vendorRouter.get(
+  '/by-domain/:domain',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { domain } = req.params;
+      const vendor = await Vendor.findOne({
+        customDomain: domain.toLowerCase(),
+        status: 'active'
+      });
+
+      if (!vendor) {
+        return res.status(404).json({ error: 'Vendor not found' });
+      }
+
+      res.json({ data: vendor });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // GET /api/vendors/:tenantId — List all vendors for a tenant
 vendorRouter.get(
   '/:tenantId',
@@ -284,15 +315,6 @@ vendorRouter.post(
 
 // ─── Vendor Domain Routes ───────────────────────────────────────────────────
 
-import { Vendor } from '../models/Vendor';
-import dns from 'dns';
-import { promisify } from 'util';
-
-const dnsResolve4 = promisify(dns.resolve4);
-const dnsResolveCname = promisify(dns.resolveCname);
-
-const SERVER_IP = '159.198.47.126';
-
 // POST /api/vendors/:tenantId/:vendorId/setup-domain — Setup custom domain for vendor
 vendorRouter.post(
   '/:tenantId/:vendorId/setup-domain',
@@ -477,28 +499,6 @@ vendorRouter.delete(
       } catch { /* non-blocking */ }
 
       res.json({ success: true });
-    } catch (error) {
-      next(error);
-    }
-  }
-);
-
-// GET /api/vendors/by-domain/:domain — Get vendor by custom domain (PUBLIC)
-vendorRouter.get(
-  '/by-domain/:domain',
-  async (req: Request, res: Response, next: NextFunction) => {
-    try {
-      const { domain } = req.params;
-      const vendor = await Vendor.findOne({
-        customDomain: domain.toLowerCase(),
-        status: 'active'
-      });
-
-      if (!vendor) {
-        return res.status(404).json({ error: 'Vendor not found' });
-      }
-
-      res.json({ data: vendor });
     } catch (error) {
       next(error);
     }
