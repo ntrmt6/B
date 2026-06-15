@@ -123,4 +123,58 @@ export const VendorService = {
     const json = await res.json();
     return json.data || [];
   },
+
+  /** Setup custom domain for vendor */
+  async setupDomain(
+    tenantId: string,
+    vendorId: string,
+    customDomain: string
+  ): Promise<{ success: boolean; customDomain: string; dnsInstructions: any }> {
+    const res = await fetch(`${API_BASE_URL}/api/vendors/${tenantId}/${vendorId}/setup-domain`, {
+      method: 'POST',
+      headers: getHeaders(tenantId),
+      body: JSON.stringify({ customDomain }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to setup domain');
+    }
+    return res.json();
+  },
+
+  /** Verify DNS records for vendor domain */
+  async verifyDomain(
+    tenantId: string,
+    vendorId: string,
+    domain?: string
+  ): Promise<{
+    dnsVerified: boolean;
+    dnsStatus: {
+      aRecord: { valid: boolean; value: string | null; expected: string };
+      cname: { valid: boolean; value: string | null; expected: string };
+    };
+  }> {
+    const url = new URL(`${API_BASE_URL}/api/vendors/${tenantId}/${vendorId}/verify-domain`);
+    if (domain) url.searchParams.set('domain', domain);
+    const res = await fetch(url.toString(), {
+      headers: getHeaders(tenantId),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to verify domain');
+    }
+    return res.json();
+  },
+
+  /** Remove custom domain from vendor */
+  async removeDomain(tenantId: string, vendorId: string): Promise<void> {
+    const res = await fetch(`${API_BASE_URL}/api/vendors/${tenantId}/${vendorId}/custom-domain`, {
+      method: 'DELETE',
+      headers: getHeaders(tenantId),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Failed to remove domain');
+    }
+  },
 };

@@ -892,6 +892,8 @@ export interface Vendor {
   status: 'pending' | 'active' | 'suspended' | 'rejected';
   userId?: string;
   bankInfo?: VendorBankInfo;
+  customDomain?: string;
+  domainVerified?: boolean;
   totalSales: number;
   totalCommission: number;
   balance: number;

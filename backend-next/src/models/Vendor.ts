@@ -25,6 +25,8 @@ export interface IVendor extends Document {
     bankName?: string;
     routingNumber?: string;
   };
+  customDomain?: string;
+  domainVerified?: boolean;
   totalSales: number;
   totalCommission: number;
   balance: number; // Pending payout balance
@@ -60,6 +62,8 @@ const VendorSchema = new Schema<IVendor>({
     bankName: { type: String, trim: true },
     routingNumber: { type: String, trim: true },
   },
+  customDomain: { type: String, trim: true, lowercase: true, sparse: true },
+  domainVerified: { type: Boolean, default: false },
   totalSales: { type: Number, default: 0 },
   totalCommission: { type: Number, default: 0 },
   balance: { type: Number, default: 0 },
@@ -72,5 +76,6 @@ VendorSchema.index({ tenantId: 1, slug: 1 }, { unique: true });
 VendorSchema.index({ tenantId: 1, email: 1 }, { unique: true });
 VendorSchema.index({ tenantId: 1, status: 1 });
 VendorSchema.index({ userId: 1 });
+VendorSchema.index({ customDomain: 1 }, { unique: true, sparse: true });
 
 export const Vendor = mongoose.model<IVendor>('Vendor', VendorSchema);

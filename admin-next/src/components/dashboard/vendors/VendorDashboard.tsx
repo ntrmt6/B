@@ -1,10 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Store, Plus, Search, Edit2, Trash2, Eye, ChevronDown, DollarSign, Users, Package, TrendingUp } from 'lucide-react';
+import { Store, Plus, Search, Edit2, Trash2, Eye, ChevronDown, DollarSign, Users, Package, TrendingUp, Settings } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { Vendor, Product } from '../../../types';
 import { VendorService } from '../../../services/VendorService';
 import VendorFormModal from './VendorFormModal';
 import VendorProductTable from './VendorProductTable';
+import VendorSettings from './VendorSettings';
 
 interface VendorDashboardProps {
   tenantId: string;
@@ -12,7 +13,7 @@ interface VendorDashboardProps {
   onBack?: () => void;
 }
 
-type ViewMode = 'list' | 'products';
+type ViewMode = 'list' | 'products' | 'settings';
 
 const VendorDashboard: React.FC<VendorDashboardProps> = ({ tenantId, products, onBack }) => {
   const [vendors, setVendors] = useState<Vendor[]>([]);
@@ -89,6 +90,16 @@ const VendorDashboard: React.FC<VendorDashboardProps> = ({ tenantId, products, o
     setViewMode('products');
   }, []);
 
+  const handleViewSettings = useCallback((vendor: Vendor) => {
+    setSelectedVendor(vendor);
+    setViewMode('settings');
+  }, []);
+
+  const handleVendorUpdate = useCallback((updatedVendor: Vendor) => {
+    setVendors(prev => prev.map(v => v._id === updatedVendor._id ? updatedVendor : v));
+    setSelectedVendor(updatedVendor);
+  }, []);
+
   // If viewing products for a specific vendor
   if (viewMode === 'products' && selectedVendor) {
     return (
@@ -97,6 +108,18 @@ const VendorDashboard: React.FC<VendorDashboardProps> = ({ tenantId, products, o
         products={products.filter(p => p.vendorId === selectedVendor._id)}
         allProducts={products}
         onBack={() => { setViewMode('list'); setSelectedVendor(null); }}
+      />
+    );
+  }
+
+  // If viewing settings for a specific vendor
+  if (viewMode === 'settings' && selectedVendor) {
+    return (
+      <VendorSettings
+        vendor={selectedVendor}
+        tenantId={tenantId}
+        onBack={() => { setViewMode('list'); setSelectedVendor(null); }}
+        onVendorUpdate={handleVendorUpdate}
       />
     );
   }
@@ -224,6 +247,9 @@ const VendorDashboard: React.FC<VendorDashboardProps> = ({ tenantId, products, o
                   <div className="flex items-center justify-end gap-1">
                     <button onClick={() => handleViewProducts(vendor)} title="View Products" className="p-1 text-slate-400 hover:text-[#FF8C00] transition-colors">
                       <Package className="w-4 h-4" />
+                    </button>
+                    <button onClick={() => handleViewSettings(vendor)} title="Settings" className="p-1 text-slate-400 hover:text-purple-600 transition-colors">
+                      <Settings className="w-4 h-4" />
                     </button>
                     <button onClick={() => { setEditingVendor(vendor); setShowModal(true); }} title="Edit" className="p-1 text-slate-400 hover:text-blue-600 transition-colors">
                       <Edit2 className="w-4 h-4" />

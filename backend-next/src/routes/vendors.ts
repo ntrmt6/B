@@ -44,6 +44,10 @@ const createVendorSchema = z.object({
 
 const updateVendorSchema = createVendorSchema.partial();
 
+const setupDomainSchema = z.object({
+  customDomain: z.string().min(3, 'Domain must be at least 3 characters').trim().toLowerCase(),
+});
+
 const splitOrderSchema = z.object({
   masterOrderId: z.string().min(1),
   customer: z.string().min(1),
@@ -272,6 +276,229 @@ vendorRouter.post(
       }
       const commissions = await calculateOrderCommissions(tenantId, items);
       res.json({ data: commissions });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// ─── Vendor Domain Routes ───────────────────────────────────────────────────
+
+import { Vendor } from '../models/Vendor';
+import dns from 'dns';
+import { promisify } from 'util';
+
+const dnsResolve4 = promisify(dns.resolve4);
+const dnsResolveCname = promisify(dns.resolveCname);
+
+const SERVER_IP = '159.198.47.126';
+
+// POST /api/vendors/:tenantId/:vendorId/setup-domain — Setup custom domain for vendor
+vendorRouter.post(
+  '/:tenantId/:vendorId/setup-domain',
+  authenticateToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { tenantId, vendorId } = req.params;
+      const parsed = setupDomainSchema.parse(req.body);
+      const customDomain = parsed.customDomain.replace(/^(https?:\/\/)?(www\.)?/, '').replace(/\/.*$/, '');
+
+      // Validate domain format
+      const domainRegex = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,61}[a-zA-Z0-9]?\.[a-zA-Z]{2,}$/;
+      if (!domainRegex.test(customDomain)) {
+        return res.status(400).json({ error: 'Invalid domain format' });
+      }
+
+      // Check if domain is already in use by another vendor
+      const existingVendor = await Vendor.findOne({
+        customDomain,
+        _id: { $ne: vendorId }
+      });
+      if (existingVendor) {
+        return res.status(400).json({ error: 'This domain is already in use by another vendor' });
+      }
+
+      // Update vendor with custom domain
+      const vendor = await Vendor.findOneAndUpdate(
+        { _id: vendorId, tenantId },
+        { customDomain, domainVerified: false },
+        { new: true }
+      );
+
+      if (!vendor) {
+        return res.status(404).json({ error: 'Vendor not found' });
+      }
+
+      // Audit log
+      try {
+        await createAuditLog({
+          tenantId,
+          userId: req.userId || '',
+          userName: (req as any).user?.name || '',
+          userRole: (req as any).userRole || '',
+          action: 'Setup custom domain for vendor: ' + vendor.name,
+          actionType: 'update',
+          resourceType: 'other',
+          resourceId: vendorId,
+          resourceName: vendor.name,
+          details: `Set custom domain to ${customDomain}`,
+        });
+      } catch { /* non-blocking */ }
+
+      res.json({
+        success: true,
+        customDomain,
+        dnsInstructions: {
+          aRecord: { type: 'A', name: '@', value: SERVER_IP, ttl: 'Auto' },
+          cnameRecord: { type: 'CNAME', name: 'www', value: customDomain, ttl: 'Auto' },
+          notes: 'Set Proxy Status to Proxied and SSL mode to Flexible in Cloudflare',
+        },
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: 'Validation failed', details: error.errors });
+      }
+      next(error);
+    }
+  }
+);
+
+// GET /api/vendors/:tenantId/:vendorId/verify-domain — Verify DNS records for vendor domain
+vendorRouter.get(
+  '/:tenantId/:vendorId/verify-domain',
+  authenticateToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { tenantId, vendorId } = req.params;
+      const domain = typeof req.query.domain === 'string' ? req.query.domain : undefined;
+
+      const vendor = await Vendor.findOne({ _id: vendorId, tenantId });
+      if (!vendor) {
+        return res.status(404).json({ error: 'Vendor not found' });
+      }
+
+      const domainToVerify = domain || vendor.customDomain;
+      if (!domainToVerify) {
+        return res.status(400).json({ error: 'No domain to verify' });
+      }
+
+      let aRecordValid = false;
+      let aRecordValue: string | null = null;
+      let cnameValid = false;
+      let cnameValue: string | null = null;
+
+      // Check A record
+      try {
+        const aRecords = await dnsResolve4(domainToVerify);
+        if (aRecords && aRecords.length > 0) {
+          aRecordValue = aRecords[0];
+          aRecordValid = aRecords.includes(SERVER_IP);
+        }
+      } catch {
+        // DNS lookup failed, record not found
+      }
+
+      // Check CNAME for www subdomain
+      try {
+        const cnameRecords = await dnsResolveCname(`www.${domainToVerify}`);
+        if (cnameRecords && cnameRecords.length > 0) {
+          cnameValue = cnameRecords[0];
+          cnameValid = cnameRecords.some(r =>
+            r.toLowerCase().replace(/\.$/, '') === domainToVerify.toLowerCase()
+          );
+        }
+      } catch {
+        // CNAME lookup failed
+      }
+
+      const dnsVerified = aRecordValid;
+
+      // Update vendor verification status if checking their saved domain
+      if (!domain && vendor.customDomain === domainToVerify && dnsVerified !== vendor.domainVerified) {
+        await Vendor.updateOne(
+          { _id: vendorId, tenantId },
+          { domainVerified: dnsVerified }
+        );
+      }
+
+      res.json({
+        dnsVerified,
+        dnsStatus: {
+          aRecord: {
+            valid: aRecordValid,
+            value: aRecordValue,
+            expected: SERVER_IP,
+          },
+          cname: {
+            valid: cnameValid,
+            value: cnameValue,
+            expected: domainToVerify,
+          },
+        },
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// DELETE /api/vendors/:tenantId/:vendorId/custom-domain — Remove custom domain from vendor
+vendorRouter.delete(
+  '/:tenantId/:vendorId/custom-domain',
+  authenticateToken,
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { tenantId, vendorId } = req.params;
+
+      const vendor = await Vendor.findOneAndUpdate(
+        { _id: vendorId, tenantId },
+        { $unset: { customDomain: 1, domainVerified: 1 } },
+        { new: true }
+      );
+
+      if (!vendor) {
+        return res.status(404).json({ error: 'Vendor not found' });
+      }
+
+      // Audit log
+      try {
+        await createAuditLog({
+          tenantId,
+          userId: req.userId || '',
+          userName: (req as any).user?.name || '',
+          userRole: (req as any).userRole || '',
+          action: 'Removed custom domain for vendor: ' + vendor.name,
+          actionType: 'update',
+          resourceType: 'other',
+          resourceId: vendorId,
+          resourceName: vendor.name,
+          details: 'Removed custom domain',
+        });
+      } catch { /* non-blocking */ }
+
+      res.json({ success: true });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// GET /api/vendors/by-domain/:domain — Get vendor by custom domain (PUBLIC)
+vendorRouter.get(
+  '/by-domain/:domain',
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { domain } = req.params;
+      const vendor = await Vendor.findOne({
+        customDomain: domain.toLowerCase(),
+        status: 'active'
+      });
+
+      if (!vendor) {
+        return res.status(404).json({ error: 'Vendor not found' });
+      }
+
+      res.json({ data: vendor });
     } catch (error) {
       next(error);
     }
