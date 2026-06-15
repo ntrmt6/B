@@ -6,11 +6,31 @@ function getApiBaseUrl(): string {
     // In browser, use relative URLs to avoid CORS issues
     return '';
   }
-  return process.env.NEXT_PUBLIC_getApiBaseUrl() || 'http://localhost:5001';
+  return process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:5001';
+}
+
+function getToken(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    // Check for all possible token storage keys (matches DataService pattern)
+    return (
+      localStorage.getItem('admin_auth_token') ||
+      sessionStorage.getItem('admin_auth_token') ||
+      localStorage.getItem('customer_auth_token') ||
+      sessionStorage.getItem('customer_auth_token') ||
+      localStorage.getItem('store_auth_token') ||
+      sessionStorage.getItem('store_auth_token') ||
+      localStorage.getItem('user_auth_token') ||
+      sessionStorage.getItem('user_auth_token') ||
+      null
+    );
+  } catch {
+    return null;
+  }
 }
 
 function getHeaders(tenantId: string): Record<string, string> {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('admin_auth_token') : null;
+  const token = getToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     'X-Tenant-Id': tenantId,
