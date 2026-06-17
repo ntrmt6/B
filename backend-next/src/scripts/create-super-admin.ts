@@ -10,9 +10,9 @@ const MONGODB_URI = process.env.MONGODB_URI || '';
 const MONGODB_DB_NAME = process.env.MONGODB_DB_NAME || 'cws';
 
 async function createSuperAdmin() {
-  const email = 'amit@super.com';
-  const password = '1596&@??';
-  const name = 'Amit Super Admin';
+  const email = 'superadmin@admin.com';
+  const password = 'SuperAdmin@123';
+  const name = 'Super Admin';
 
   console.log('\n🚀 Creating Super Admin account...\n');
   console.log(`📦 Database: ${MONGODB_DB_NAME}`);
