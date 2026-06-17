@@ -525,7 +525,21 @@ export interface WebsiteConfig {
   productDetailTheme?: string;
   // Google Search Console verification
   googleSiteVerification?: string;
-  //
+  // Shop SEO Settings
+  seoTitle?: string;
+  seoDescription?: string;
+  seoKeywords?: string;
+  ogImage?: string;
+  // Schema.org JSON-LD settings
+  schemaType?: 'Store' | 'Organization' | 'LocalBusiness';
+  schemaName?: string;
+  schemaDescription?: string;
+  schemaLogo?: string;
+  schemaAddress?: string;
+  schemaPhone?: string;
+  schemaEmail?: string;
+  schemaPriceRange?: string;
+  schemaOpeningHours?: string;
 }
 
 // ─── Video Stories ───

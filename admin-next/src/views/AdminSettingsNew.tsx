@@ -195,6 +195,19 @@ const GoogleConsoleIcon = () => (
   </svg>
 );
 
+const SeoIcon = () => (
+  <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M10 40L14.8257 35.1742M14.8257 35.1742C16.4343 36.7828 18.6565 37.7778 21.1112 37.7778C26.0204 37.7778 30 33.798 30 28.8888C30 23.9796 26.0204 20 21.1112 20C16.2019 20 12.2222 23.9796 12.2222 28.8888C12.2222 31.3434 13.2171 33.5658 14.8257 35.1742Z" stroke="url(#seo_gradient)" strokeWidth="2.5" strokeLinecap="round"/>
+    <path d="M8 8H40M8 16H32M8 24H20" stroke="url(#seo_gradient)" strokeWidth="2.5" strokeLinecap="round"/>
+    <defs>
+      <linearGradient id="seo_gradient" x1="24" y1="8" x2="24" y2="40" gradientUnits="userSpaceOnUse">
+        <stop stopColor="#FF6A00"/>
+        <stop offset="1" stopColor="#FF9F1C"/>
+      </linearGradient>
+    </defs>
+  </svg>
+);
+
 interface AdminSettingsNewProps {
   onNavigate: (page: string) => void;
   courierConfig?: any;
@@ -763,6 +776,12 @@ const AdminSettingsNew: React.FC<AdminSettingsNewProps> = ({ onNavigate, current
       description: 'Verify your store domain with Google Search Console so your shop appears in Google search results.',
       icon: <GoogleConsoleIcon />,
       navigateTo: 'settings_google_console',
+    },
+    {
+      title: 'SEO Settings',
+      description: 'Configure meta title, description, keywords, and schema markup to improve your shop visibility in search engines.',
+      icon: <SeoIcon />,
+      navigateTo: 'settings_seo',
     },
   ];
 

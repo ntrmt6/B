@@ -65,6 +65,7 @@ const AdminActivityLog = lazy(() => import(/* webpackChunkName: "admin-activity-
 const AdminShopDomain = lazy(() => import(/* webpackChunkName: "admin-shop-domain" */ './AdminShopDomain'));
 const AdminRewardPointSettings = lazy(() => import(/* webpackChunkName: "admin-reward-settings" */ './AdminRewardPointSettings'));
 const AdminGoogleSearchConsole = lazy(() => import(/* webpackChunkName: "admin-google-console" */ './AdminGoogleSearchConsole'));
+const AdminSeoSettings = lazy(() => import(/* webpackChunkName: "admin-seo-settings" */ './AdminSeoSettings'));
 const OnlineNowPage = lazy(() => import(/* webpackChunkName: "online-now" */ './OnlineNowPage'));
 const AdminExpenses = lazy(() => import(/* webpackChunkName: "admin-expenses" */ './AdminExpenses'));
 const AdminIncome = lazy(() => import(/* webpackChunkName: "admin-income" */ './AdminIncome'));
@@ -131,7 +132,7 @@ const SECTION_LABELS: Record<string, string> = {
   settings_payment: 'Payment Settings', settings_courier: 'Courier Settings',
   settings_marketing: 'Marketing Integrations', settings_facebook_pixel: 'Facebook Pixel',
   settings_gtm: 'Google Tag Manager', settings_domain: 'Custom Domain',
-  settings_google_console: 'Google Search Console', settings_rewards: 'Reward Points',
+  settings_google_console: 'Google Search Console', settings_seo: 'SEO Settings', settings_rewards: 'Reward Points',
   admin_control: 'Access Control', activity_log: 'Activity Log',
   support: 'Support', tutorial: 'Tutorials', vendors: 'Vendors',
 };
@@ -481,6 +482,7 @@ const canAccessPage = (page: string, user?: User | null, permissions?: Permissio
         'settings_marketing': 'settings',
         'settings_domain': 'settings',
         'settings_google_console': 'settings',
+        'settings_seo': 'settings',
         'activity_log': 'settings',
         'billing': 'settings',
         'admin': 'admin_control',
@@ -988,6 +990,7 @@ const AdminApp: React.FC<AdminAppProps> = ({
                                                             adminSection === 'settings_marketing' ? <AdminMarketingIntegrations onBack={() => setAdminSection('settings')} onNavigate={setAdminSection} /> :
                                                               adminSection === 'settings_domain' ? <AdminShopDomain onBack={() => setAdminSection('settings')} tenantId={activeTenantId} /> :
                                                                adminSection === 'settings_google_console' ? <AdminGoogleSearchConsole onBack={() => setAdminSection('settings')} tenantId={activeTenantId} /> :
+                                                               adminSection === 'settings_seo' ? <AdminSeoSettings onBack={() => setAdminSection('settings')} tenantId={activeTenantId} /> :
                                                               adminSection === 'settings_rewards' ? <AdminRewardPointSettings tenantId={activeTenantId} onBack={() => setAdminSection('settings')} /> :
                                                               adminSection === 'admin_control' ? <AdminControlNew users={users as any} roles={roles as any} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} onDeleteUser={handleDeleteUser} onAddRole={handleAddRole} onUpdateRole={handleUpdateRole} onDeleteRole={handleDeleteRole} onUpdateUserRole={handleUpdateUserRole} currentUser={user as any} tenantId={activeTenantId} userPermissions={userPermissions} /> :
                                                               adminSection.startsWith('catalog_') ? <FigmaCatalogManager view={adminSection} onNavigate={setAdminSection} categories={categories} subCategories={subCategories} childCategories={childCategories} brands={brands} tags={tags} products={products} onAddCategory={catHandlers.add} onUpdateCategory={catHandlers.update} onDeleteCategory={catHandlers.delete} onAddSubCategory={subCatHandlers.add} onUpdateSubCategory={subCatHandlers.update} onDeleteSubCategory={subCatHandlers.delete} onAddChildCategory={childCatHandlers.add} onUpdateChildCategory={childCatHandlers.update} onDeleteChildCategory={childCatHandlers.delete} onAddBrand={brandHandlers.add} onUpdateBrand={brandHandlers.update} onDeleteBrand={brandHandlers.delete} onAddTag={tagHandlers.add} onUpdateTag={tagHandlers.update} onDeleteTag={tagHandlers.delete} onReorderCategories={catHandlers.reorder} onReorderSubCategories={subCatHandlers.reorder} onReorderChildCategories={childCatHandlers.reorder} onReorderBrands={brandHandlers.reorder} onReorderTags={tagHandlers.reorder} /> :
