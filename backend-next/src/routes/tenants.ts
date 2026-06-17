@@ -1,10 +1,10 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { 
-  createTenant, 
-  deleteTenant, 
-  listTenants, 
-  getTenantById, 
+import {
+  createTenant,
+  deleteTenant,
+  listTenants,
+  getTenantById,
   getTenantBySubdomain,
   getTenantByCustomDomain,
   updateTenantStatus,
@@ -15,6 +15,7 @@ import {
   getDashboardStats
 } from '../services/tenantsService';
 import { getTenantData, setTenantData } from '../services/tenantDataService';
+import { addToCache, removeFromCache, refreshCustomDomainsCache, getCachedDomains } from '../services/customDomainService';
 import { env } from '../config/env';
 import type { CreateTenantPayload, ShopStatus } from '../types/tenant';
 import { authenticateToken, requireAdmin, requireRole } from '../middleware/auth';
@@ -239,6 +240,40 @@ tenantsRouter.get('/dashboard-stats', authenticateToken, requireRole('super_admi
   }
 );
 
+// POST /api/tenants/refresh-cors-cache - Refresh custom domains CORS cache (super_admin)
+tenantsRouter.post('/refresh-cors-cache', authenticateToken, requireRole('super_admin'),
+  async (_req, res, next) => {
+    try {
+      await refreshCustomDomainsCache();
+      const domains = getCachedDomains();
+      res.json({
+        success: true,
+        message: 'CORS cache refreshed successfully',
+        cachedDomains: domains,
+        count: domains.length
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+// GET /api/tenants/cors-cache - Get cached custom domains (super_admin)
+tenantsRouter.get('/cors-cache', authenticateToken, requireRole('super_admin'),
+  async (_req, res, next) => {
+    try {
+      const domains = getCachedDomains();
+      res.json({
+        success: true,
+        cachedDomains: domains,
+        count: domains.length
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
 // GET /api/tenants/export - Export tenants as CSV (super_admin)
 tenantsRouter.get('/export', authenticateToken, requireRole('super_admin'),
   async (_req, res, next) => {
@@ -447,6 +482,9 @@ tenantsRouter.post('/:id/setup-domain', authenticateToken, requireAdmin,
       // Save the custom domain to the tenant
       await updateTenant(tenantId, { customDomain: customDomain.toLowerCase() });
 
+      // Add to CORS cache so requests from this domain are allowed
+      addToCache(customDomain.toLowerCase());
+
       console.log(`[Domain Setup] Custom domain "${customDomain}" saved for tenant: ${tenantId}`);
 
       res.json({
@@ -577,6 +615,9 @@ tenantsRouter.delete('/:id/custom-domain', authenticateToken, requireAdmin,
 
       // Remove the custom domain from the tenant
       await updateTenant(tenantId, { customDomain: null });
+
+      // Remove from CORS cache
+      removeFromCache(customDomain);
 
       console.log(`[Domain Removal] Custom domain "${customDomain}" removed for tenant: ${tenantId}`);
 

@@ -58,6 +58,7 @@ import { loyaltyRouter } from './routes/loyalty';
 import { posRouter } from './routes/pos';
 import { storiesRouter } from './routes/stories';
 import imagekitAuthRouter from './routes/imagekitAuth';
+import { ensureCacheReady, isAllowedCustomDomainOrigin, refreshCustomDomainsCache } from './services/customDomainService';
 
 const app = express();
 const httpServer = createServer(app);
@@ -83,25 +84,26 @@ const io = new SocketIOServer(httpServer, {
     origin: (origin: string | string[] | undefined, callback: (arg0: Error | null, arg1: boolean | undefined) => void) => {
       // Allow requests with no origin (same-origin requests)
       if (!origin) return callback(null, true);
-      
+
       // Get allowed origins from environment
       const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
       const systemnextPattern = /^https?:\/\/([a-z0-9-]+\.)?systemnextit\.com$/i;
       const systemnextWebsitePattern = /^https?:\/\/([a-z0-9-]+\.)?systemnextit\.website$/i;
       const cartngetPattern = /^https?:\/\/([a-z0-9-]+\.)?cartnget\.shop$/i;
       const shopbdPattern = /^https?:\/\/([a-z0-9-]+\.)?shopbdit\.com$/i;
-    const allinbanglaPattern = /^https?:\/\/([a-z0-9-]+\.)?allinbangla\.com$/i;
+      const allinbanglaPattern = /^https?:\/\/([a-z0-9-]+\.)?allinbangla\.com$/i;
       // Support localhost with subdomains: store.localhost:3000, admin.localhost:5173, etc.
       const localhostPattern = /^https?:\/\/([a-z0-9-]+\.)?localhost(:\d+)?$/i;
       const origins = Array.isArray(origin) ? origin : [origin];
-      const isAllowed = origins.some(o => 
-        systemnextPattern.test(o) || systemnextWebsitePattern.test(o) || 
+      const isAllowed = origins.some(o =>
+        systemnextPattern.test(o) || systemnextWebsitePattern.test(o) ||
         cartngetPattern.test(o) ||
         shopbdPattern.test(o) ||
         allinbanglaPattern.test(o) ||
         localhostPattern.test(o) ||
         allowedOrigins.includes(o) ||
-        allowedOrigins.some(allowed => allowed.includes('*') && new RegExp(allowed.replace(/\*/g, '.*')).test(o))
+        allowedOrigins.some(allowed => allowed.includes('*') && new RegExp(allowed.replace(/\*/g, '.*')).test(o)) ||
+        isAllowedCustomDomainOrigin(o) // Check custom domains from database
       );
       if (isAllowed) {
         return callback(null, true);
@@ -155,12 +157,12 @@ io.on('connection', (socket) => {
   });
 });
 
-// CORS - Allow all origins for now (wildcard) to support all subdomains
+// CORS - Allow all origins for now (wildcard) to support all subdomains + custom domains
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
     // Allow requests with no origin (same-origin, mobile apps, curl, etc.)
     if (!origin) return callback(null, true);
-    
+
     // Allow all allinbangla.com, cartnget.shop, and shopbdit.com subdomains
     const systemnextPattern = /^https?:\/\/([a-z0-9-]+\.)?systemnextit\.com$/i;
     const systemnextWebsitePattern = /^https?:\/\/([a-z0-9-]+\.)?systemnextit\.website$/i;
@@ -169,18 +171,19 @@ const corsOptions: cors.CorsOptions = {
     const allinbanglaPattern = /^https?:\/\/([a-z0-9-]+\.)?allinbangla\.com$/i;
     // Support localhost with subdomains: store.localhost:3000, admin.localhost:5173, etc.
     const localhostPattern = /^https?:\/\/([a-z0-9-]+\.)?localhost(:\d+)?$/i;
-    
+
     // Check against allowed origin patterns
     const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
     if (
       systemnextPattern.test(origin) || systemnextWebsitePattern.test(origin) ||
       cartngetPattern.test(origin) || shopbdPattern.test(origin) ||
       allinbanglaPattern.test(origin) || localhostPattern.test(origin) ||
-      allowedOrigins.includes(origin)
+      allowedOrigins.includes(origin) ||
+      isAllowedCustomDomainOrigin(origin) // Check custom domains from database
     ) {
       return callback(null, true);
     }
-    
+
     console.warn('[CORS] Blocked origin:', origin);
     return callback(new Error('Not allowed by CORS'), false);
   },
@@ -335,9 +338,13 @@ const bootstrap = async () => {
       socketTimeoutMS: 45000,
     });
     console.log('[backend] Mongoose connected to MongoDB');
-    
+
     // Seed default super admin user
     await seedDefaultAdmin();
+
+    // Initialize custom domains cache for CORS
+    await refreshCustomDomainsCache();
+    console.log('[backend] Custom domains cache initialized');
   } catch (err) {
     console.error('[backend] Mongoose connection error:', err);
     process.exit(1);
