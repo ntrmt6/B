@@ -50,6 +50,7 @@ const ApkBuildsTab = React.lazy(() => import('../components/superadmin/ApkBuilds
 const AppRequestsTab = React.lazy(() => import('../components/superadmin/AppRequestsTab'));
 const AdsManagementTab = React.lazy(() => import('../components/superadmin/AdsManagementTab'));
 const TenantFeatureControlTab = React.lazy(() => import('../components/superadmin/TenantFeatureControlTab'));
+const BlogManagementTab = React.lazy(() => import('../components/superadmin/BlogManagementTab'));
 
 
 
@@ -1464,6 +1465,13 @@ const SuperAdminDashboard: React.FC = () => {
         return (
           <React.Suspense fallback={<TabLoadingFallback />}>
             <TenantFeatureControlTab tenants={tenants} />
+          </React.Suspense>
+        );
+
+      case 'blog':
+        return (
+          <React.Suspense fallback={<TabLoadingFallback />}>
+            <BlogManagementTab />
           </React.Suspense>
         );
 

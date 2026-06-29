@@ -59,6 +59,7 @@ import { posRouter } from './routes/pos';
 import { storiesRouter } from './routes/stories';
 import imagekitAuthRouter from './routes/imagekitAuth';
 import { storesDirectoryRouter } from './routes/storesDirectory';
+import { blogRouter } from './routes/blog';
 import { ensureCacheReady, isAllowedCustomDomainOrigin, refreshCustomDomainsCache } from './services/customDomainService';
 
 const app = express();
@@ -282,6 +283,7 @@ app.use('/api/vendors', vendorRouter);
 app.use('/api/marketplace', marketplaceRouter);
 app.use('/api/stores', storesDirectoryRouter);
 app.use('/api/v1', imagekitAuthRouter);
+app.use('/api/super-admin/blog', blogRouter);
 app.use('/api', dueListRoutes);
 
 app.use('/', uploadRouter);

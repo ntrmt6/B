@@ -308,19 +308,19 @@ export interface AtRiskMerchant {
   status: 'needs_attention' | 'contacted' | 'recovered' | 'churned';
 }
 
-export type TabType = 
-  | 'overview' 
-  | 'tenants' 
-  | 'users' 
-  | 'orders' 
-  | 'subscriptions' 
-  | 'analytics' 
+export type TabType =
+  | 'overview'
+  | 'tenants'
+  | 'users'
+  | 'orders'
+  | 'subscriptions'
+  | 'analytics'
   | 'audit-logs'
   | 'system-health'
   | 'bulk-operations'
-  | 'server' 
-  | 'database' 
-  | 'security' 
+  | 'server'
+  | 'database'
+  | 'security'
   | 'settings'
   | 'notifications'
   | 'theme-config'
@@ -334,7 +334,43 @@ export type TabType =
   | 'app-requests'
   | 'ads-management'
   | 'new-section'
-  | 'tenant-features';
+  | 'tenant-features'
+  | 'blog';
+
+// ========== Blog Post Types ==========
+
+export interface BlogPost {
+  _id: string;
+  title: string;
+  slug: string;
+  content: string;
+  excerpt: string;
+  status: 'draft' | 'published';
+  seoTitle: string;
+  metaDescription: string;
+  featuredImage?: string;
+  author: {
+    userId: string;
+    name: string;
+    email: string;
+  };
+  tags?: string[];
+  publishedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BlogPostFormData {
+  title: string;
+  slug: string;
+  content: string;
+  excerpt: string;
+  status: 'draft' | 'published';
+  seoTitle: string;
+  metaDescription: string;
+  featuredImage?: string;
+  tags?: string[];
+}
 
 // ========== Tenant Feature Control Types ==========
 

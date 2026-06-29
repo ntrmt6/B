@@ -1,8 +1,8 @@
 import React from 'react';
-import { 
+import {
   LayoutDashboard, Users, Building2, ShoppingCart, CreditCard,
   BarChart3, Server, Database, Shield, Settings, ChevronDown, Crown,
-  Bell, Palette, MessageCircle, Globe, Megaphone, LifeBuoy, Target, Activity, ListChecks, Video, Smartphone, AppWindow, Image, ToggleLeft
+  Bell, Palette, MessageCircle, Globe, Megaphone, LifeBuoy, Target, Activity, ListChecks, Video, Smartphone, AppWindow, Image, ToggleLeft, FileText
 } from 'lucide-react';
 import NavItem from './NavItem';
 import { TabType } from './types';
@@ -108,19 +108,26 @@ const Sidebar: React.FC<SidebarProps> = ({
           onClick={() => setActiveTab('chat-config')} 
           collapsed={!sidebarOpen} 
         />
-        <NavItem 
-          icon={Globe} 
-          label="Website Config" 
-          active={activeTab === 'website-config'} 
-          onClick={() => setActiveTab('website-config')} 
-          collapsed={!sidebarOpen} 
+        <NavItem
+          icon={Globe}
+          label="Website Config"
+          active={activeTab === 'website-config'}
+          onClick={() => setActiveTab('website-config')}
+          collapsed={!sidebarOpen}
         />
-        <NavItem 
-          icon={Bell} 
-          label="Notifications" 
-          active={activeTab === 'notifications'} 
-          onClick={() => setActiveTab('notifications')} 
-          collapsed={!sidebarOpen} 
+        <NavItem
+          icon={FileText}
+          label="Blog Management"
+          active={activeTab === 'blog'}
+          onClick={() => setActiveTab('blog')}
+          collapsed={!sidebarOpen}
+        />
+        <NavItem
+          icon={Bell}
+          label="Notifications"
+          active={activeTab === 'notifications'}
+          onClick={() => setActiveTab('notifications')}
+          collapsed={!sidebarOpen}
         />
      {/* Existing Ads Management item */}
         <NavItem
