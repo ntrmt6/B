@@ -38,7 +38,8 @@ const createTenantSchema = z.object({
   adminEmail: z.string().email(),
   adminPassword: z.string().min(6),
   phone: z.string().optional(),
-  plan: z.enum(['starter', 'growth', 'enterprise']).optional()
+  plan: z.enum(['starter', 'growth', 'enterprise']).optional(),
+  multiVendorEnabled: z.boolean().optional().default(false)
 });
 
 // Public registration schema (same as create but for self-registration)
@@ -67,6 +68,7 @@ const updateTenantSchema = z.object({
   contactName: z.string().optional(),
   customDomain: z.string().optional().nullable(),
   plan: z.enum(['starter', 'growth', 'enterprise']).optional(),
+  multiVendorEnabled: z.boolean().optional(),
   branding: z.record(z.any()).optional(),
   settings: z.record(z.any()).optional()
 });

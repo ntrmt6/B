@@ -1,12 +1,13 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  Building2, Plus, Trash2, ExternalLink, RefreshCw, CheckCircle2, 
-  AlertCircle, AlertTriangle, Mail, User, Globe, Shield, Sparkles, Loader2, 
-  Eye, EyeOff, Copy, Check, X, Store, UserCheck, UserX, Ban, 
-  PlayCircle, LogIn, Settings
+import {
+  Building2, Plus, Trash2, ExternalLink, RefreshCw, CheckCircle2,
+  AlertCircle, AlertTriangle, Mail, User, Globe, Shield, Sparkles, Loader2,
+  Eye, EyeOff, Copy, Check, X, Store, UserCheck, UserX, Ban,
+  PlayCircle, LogIn, Settings, Ghost
 } from 'lucide-react';
 import { CreateTenantPayload, Tenant } from '../types';
 import { getPrimaryDomain } from '../utils/appHelpers';
+import { impersonateTenant } from '../services/authService';
 
 // Reserved subdomains that cannot be used for tenants
 const RESERVED_TENANT_SLUGS = [
@@ -80,6 +81,7 @@ const AdminTenantManagement: React.FC<AdminTenantManagementProps> = ({
     adminPassword: '',
     adminPasswordConfirm: '',
     plan: 'starter' as CreateTenantPayload['plan'],
+    multiVendorEnabled: false,
   });
   
   const [errors, setErrors] = useState<FormErrors>({});
@@ -193,6 +195,7 @@ const AdminTenantManagement: React.FC<AdminTenantManagementProps> = ({
       adminPassword: '',
       adminPasswordConfirm: '',
       plan: 'starter',
+      multiVendorEnabled: false,
     });
     setErrors({});
     setTouched({});
@@ -229,6 +232,7 @@ const AdminTenantManagement: React.FC<AdminTenantManagementProps> = ({
         adminEmail: form.adminEmail.trim(),
         adminPassword: form.adminPassword.trim(),
         plan: form.plan,
+        multiVendorEnabled: form.multiVendorEnabled,
       };
 
       await onCreateTenant(payload, { activate: true });
@@ -334,19 +338,25 @@ const AdminTenantManagement: React.FC<AdminTenantManagementProps> = ({
   };
 
   const handleLoginAsMerchant = async (tenant: Tenant) => {
-    if (!onLoginAsMerchant) return;
-    
     setActioningTenantId(tenant.id);
     try {
-      await onLoginAsMerchant(tenant.id);
-      setNotification({ 
-        type: 'success', 
-        message: `Logging in as ${tenant.name}...` 
-      });
+      // Call the impersonation API
+      const result = await impersonateTenant(tenant.id);
+
+      if (result.success && result.redirectUrl) {
+        setNotification({
+          type: 'success',
+          message: `Opening ${tenant.name} dashboard in Ghost Mode...`
+        });
+
+        // Redirect to the tenant dashboard with the magic token
+        window.location.href = result.redirectUrl;
+      } else {
+        throw new Error('Failed to generate impersonation token');
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to login as merchant';
       setNotification({ type: 'error', message });
-    } finally {
       setActioningTenantId(null);
     }
   };
@@ -681,6 +691,44 @@ const AdminTenantManagement: React.FC<AdminTenantManagementProps> = ({
               </select>
             </div>
 
+            {/* Multi-Vendor Mode Toggle */}
+            <div className="md:col-span-2">
+              <div className="flex items-center justify-between p-4 bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-purple-100 rounded-lg">
+                    <Building2 className="w-5 h-5 text-purple-600" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-900">
+                      Multi-Vendor Marketplace Mode
+                    </label>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      Enable multiple vendors to sell on this store
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setForm(prev => ({ ...prev, multiVendorEnabled: !prev.multiVendorEnabled }))}
+                  className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-500 focus:ring-offset-2 ${
+                    form.multiVendorEnabled ? 'bg-purple-600' : 'bg-gray-200'
+                  }`}
+                >
+                  <span
+                    className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                      form.multiVendorEnabled ? 'translate-x-5' : 'translate-x-0'
+                    }`}
+                  />
+                </button>
+              </div>
+              {form.multiVendorEnabled && (
+                <p className="mt-2 text-xs text-purple-600 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" />
+                  Marketplace mode enabled - vendors can register and sell products
+                </p>
+              )}
+            </div>
+
             {/* Admin Password */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -851,19 +899,22 @@ const AdminTenantManagement: React.FC<AdminTenantManagementProps> = ({
                     {/* Action buttons - scrollable on mobile */}
                     <div className="overflow-x-auto -mx-3 px-3 sm:mx-0 sm:px-0 -mb-1 pb-1 sm:mb-0 sm:pb-0">
                       <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 min-w-max">
-                        {/* Login as Merchant */}
-                        {onLoginAsMerchant && tenant.status === 'active' && (
+                        {/* Ghost Mode - Login as Tenant */}
+                        {tenant.status === 'active' && (
                           <button
                             onClick={() => handleLoginAsMerchant(tenant)}
                             disabled={actioningTenantId === tenant.id}
-                            className="p-2 text-gray-400 hover:text-purple-600 hover:bg-purple-50 rounded-lg transition disabled:opacity-50"
-                            title="Login as merchant"
+                            className="p-2 text-gray-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition disabled:opacity-50 group relative"
+                            title="Login as tenant (Ghost Mode)"
                           >
                             {actioningTenantId === tenant.id ? (
                               <Loader2 className="w-4 h-4 animate-spin" />
                             ) : (
-                              <LogIn className="w-4 h-4" />
+                              <Ghost className="w-4 h-4" />
                             )}
+                            <span className="absolute -top-8 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-xs px-2 py-1 rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">
+                              Ghost Mode
+                            </span>
                           </button>
                         )}
 

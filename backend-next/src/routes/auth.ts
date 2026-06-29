@@ -826,6 +826,352 @@ authRouter.post('/refresh', authenticateToken, async (req: Request, res: Respons
   }
 });
 
+/**
+ * POST /api/auth/logout
+ * Logout and clear session cookie across all subdomains
+ * Sets cookie with domain='.allinbangla.com' to clear across all subdomains
+ */
+authRouter.post('/logout', async (req: Request, res: Response) => {
+  const primaryDomain = env.primaryDomain || 'allinbangla.com';
+  const cookieDomain = `.${primaryDomain}`; // Leading dot for all subdomains
+
+  // Clear the auth token cookie across all subdomains
+  res.cookie('auth_token', '', {
+    domain: cookieDomain,
+    path: '/',
+    expires: new Date(0),
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax'
+  });
+
+  // Also clear any session cookies
+  res.cookie('session', '', {
+    domain: cookieDomain,
+    path: '/',
+    expires: new Date(0),
+    httpOnly: true,
+    secure: true,
+    sameSite: 'lax'
+  });
+
+  // Log logout (optional, best-effort)
+  try {
+    const authHeader = req.headers.authorization;
+    const token = authHeader && authHeader.split(' ')[1];
+    if (token) {
+      const decoded = jwt.verify(token, env.jwtSecret) as JWTPayload;
+      const user = await User.findById(decoded.userId).select('name email role tenantId');
+      if (user) {
+        await createAuditLog({
+          tenantId: user.tenantId,
+          userId: decoded.userId,
+          userName: user.name,
+          userRole: user.role,
+          action: 'User Logout',
+          actionType: 'logout',
+          resourceType: 'user',
+          resourceId: decoded.userId,
+          resourceName: user.name,
+          details: `${user.name} (${user.email}) logged out`,
+          metadata: {},
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          status: 'success'
+        });
+      }
+    }
+  } catch (auditError) {
+    // Ignore audit errors during logout
+  }
+
+  res.json({
+    success: true,
+    message: 'Logged out successfully',
+    clearedDomain: cookieDomain
+  });
+});
+
+// ==================== SUPER ADMIN IMPERSONATION ROUTES ====================
+
+/**
+ * Impersonation JWT Payload - extends base payload with impersonation flag
+ */
+interface ImpersonationPayload extends JWTPayload {
+  isImpersonating: boolean;
+  originalUserId: string;
+  originalUserRole: string;
+}
+
+/**
+ * POST /api/auth/impersonate
+ * Super Admin can generate a magic token to login as any tenant
+ * Returns a redirect URL with a short-lived JWT token
+ */
+authRouter.post('/impersonate',
+  authenticateToken,
+  requireRole('super_admin'),
+  async (req: Request, res: Response, next: NextFunction) => {
+    try {
+      const { tenantId } = req.body;
+
+      if (!tenantId) {
+        return res.status(400).json({
+          error: 'Tenant ID is required',
+          code: 'TENANT_REQUIRED'
+        });
+      }
+
+      // Verify the tenant exists
+      const tenant = await getTenantById(tenantId);
+      if (!tenant) {
+        return res.status(404).json({
+          error: 'Tenant not found',
+          code: 'TENANT_NOT_FOUND'
+        });
+      }
+
+      // Find the tenant admin user
+      const tenantAdmin = await User.findOne({
+        tenantId: tenant._id?.toString() || tenantId,
+        role: { $in: ['tenant_admin', 'admin'] }
+      }).select('-password');
+
+      if (!tenantAdmin) {
+        return res.status(404).json({
+          error: 'No admin user found for this tenant',
+          code: 'TENANT_ADMIN_NOT_FOUND'
+        });
+      }
+
+      const superAdmin = req.user!;
+
+      // Generate short-lived impersonation token (15 minutes)
+      const impersonationPayload: ImpersonationPayload = {
+        userId: tenantAdmin._id.toString(),
+        email: tenantAdmin.email,
+        role: tenantAdmin.role,
+        roleId: tenantAdmin.roleId?.toString(),
+        tenantId: tenant._id?.toString() || tenantId,
+        isImpersonating: true,
+        originalUserId: superAdmin._id.toString(),
+        originalUserRole: superAdmin.role
+      };
+
+      const impersonationToken = jwt.sign(impersonationPayload, env.jwtSecret, {
+        expiresIn: '15m' // Short-lived for security
+      });
+
+      // Build redirect URL
+      const primaryDomain = env.primaryDomain || 'allinbangla.com';
+      const redirectUrl = `https://${tenant.subdomain}.${primaryDomain}/auth/callback?token=${impersonationToken}`;
+
+      // Log the impersonation action
+      try {
+        await createAuditLog({
+          tenantId: tenant._id?.toString() || tenantId,
+          userId: superAdmin._id.toString(),
+          userName: superAdmin.name,
+          userRole: superAdmin.role,
+          action: 'Super Admin Impersonation',
+          actionType: 'other',
+          resourceType: 'user',
+          resourceId: tenantAdmin._id.toString(),
+          resourceName: tenantAdmin.name,
+          details: `Super Admin ${superAdmin.name} (${superAdmin.email}) impersonated tenant admin ${tenantAdmin.name} (${tenantAdmin.email}) for tenant ${tenant.name}`,
+          metadata: {
+            targetTenantId: tenantId,
+            targetTenantName: tenant.name,
+            targetUserId: tenantAdmin._id.toString(),
+            targetUserEmail: tenantAdmin.email
+          },
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'],
+          status: 'success'
+        });
+      } catch (auditError) {
+        console.warn('[auth] Audit log failed for impersonation:', auditError);
+      }
+
+      res.json({
+        success: true,
+        redirectUrl,
+        tenant: {
+          id: tenant._id,
+          name: tenant.name,
+          subdomain: tenant.subdomain
+        },
+        targetUser: {
+          id: tenantAdmin._id,
+          name: tenantAdmin.name,
+          email: tenantAdmin.email,
+          role: tenantAdmin.role
+        },
+        expiresIn: '15 minutes'
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+);
+
+/**
+ * POST /api/auth/validate-impersonation
+ * Validates an impersonation token and sets up the session
+ * Called by the tenant dashboard /auth/callback page
+ */
+authRouter.post('/validate-impersonation', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const { token } = req.body;
+
+    if (!token) {
+      return res.status(400).json({
+        error: 'Token is required',
+        code: 'TOKEN_REQUIRED'
+      });
+    }
+
+    // Verify and decode the token
+    let decoded: ImpersonationPayload;
+    try {
+      decoded = jwt.verify(token, env.jwtSecret) as ImpersonationPayload;
+    } catch (err) {
+      if (err instanceof jwt.TokenExpiredError) {
+        return res.status(401).json({
+          error: 'Impersonation token has expired',
+          code: 'TOKEN_EXPIRED'
+        });
+      }
+      return res.status(401).json({
+        error: 'Invalid impersonation token',
+        code: 'TOKEN_INVALID'
+      });
+    }
+
+    // Verify this is an impersonation token
+    if (!decoded.isImpersonating) {
+      return res.status(400).json({
+        error: 'Not a valid impersonation token',
+        code: 'INVALID_IMPERSONATION_TOKEN'
+      });
+    }
+
+    // Get the target user
+    const user = await User.findById(decoded.userId).select('-password');
+    if (!user) {
+      return res.status(404).json({
+        error: 'Target user not found',
+        code: 'USER_NOT_FOUND'
+      });
+    }
+
+    // Generate a new session token for the impersonated user
+    // This token keeps the isImpersonating flag for UI purposes
+    const sessionPayload: ImpersonationPayload = {
+      userId: user._id.toString(),
+      email: user.email,
+      role: user.role,
+      roleId: user.roleId?.toString(),
+      tenantId: user.tenantId,
+      isImpersonating: true,
+      originalUserId: decoded.originalUserId,
+      originalUserRole: decoded.originalUserRole
+    };
+
+    const sessionToken = jwt.sign(sessionPayload, env.jwtSecret, {
+      expiresIn: '2h' // Session lasts 2 hours for impersonation
+    });
+
+    // Get permissions
+    const permissions = await getUserPermissions(user._id.toString(), user.roleId?.toString());
+
+    // Get tenant details
+    const tenantDetails = await getTenantDetails(user.tenantId);
+
+    res.json({
+      success: true,
+      token: sessionToken,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        username: user.username,
+        image: user.image,
+        role: user.role,
+        roleId: user.roleId,
+        tenantId: user.tenantId,
+        tenantDetails,
+        isActive: user.isActive,
+        isImpersonating: true
+      },
+      permissions,
+      isImpersonating: true,
+      originalUserId: decoded.originalUserId
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+/**
+ * POST /api/auth/end-impersonation
+ * End impersonation session and return to super admin
+ */
+authRouter.post('/end-impersonation', authenticateToken, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    // Get the original super admin user
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'No token provided', code: 'TOKEN_REQUIRED' });
+    }
+
+    const decoded = jwt.verify(token, env.jwtSecret) as ImpersonationPayload;
+
+    if (!decoded.isImpersonating || !decoded.originalUserId) {
+      return res.status(400).json({
+        error: 'Not currently impersonating',
+        code: 'NOT_IMPERSONATING'
+      });
+    }
+
+    // Get the original super admin
+    const superAdmin = await User.findById(decoded.originalUserId).select('-password');
+    if (!superAdmin || superAdmin.role !== 'super_admin') {
+      return res.status(403).json({
+        error: 'Original user not found or not a super admin',
+        code: 'INVALID_ORIGINAL_USER'
+      });
+    }
+
+    // Generate new token for the super admin
+    const newToken = generateToken(superAdmin);
+    const permissions = await getUserPermissions(superAdmin._id.toString(), superAdmin.roleId?.toString());
+
+    // Build redirect URL to super admin panel
+    const primaryDomain = env.primaryDomain || 'allinbangla.com';
+    const redirectUrl = `https://superadmin.${primaryDomain}`;
+
+    res.json({
+      success: true,
+      token: newToken,
+      user: {
+        id: superAdmin._id,
+        name: superAdmin.name,
+        email: superAdmin.email,
+        role: superAdmin.role,
+        roleId: superAdmin.roleId,
+        isActive: superAdmin.isActive
+      },
+      permissions,
+      redirectUrl,
+      message: 'Impersonation session ended'
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 // ==================== ADMIN USER MANAGEMENT ROUTES ====================
 
 /**

@@ -38,6 +38,7 @@ import type {
   ProductVariantSelection, LandingPage, FacebookPixelConfig, CourierConfig,
   Category, SubCategory, ChildCategory, Brand, Tag, User, ChatMessage, PaymentMethod
 } from '@/types';
+import { GhostModeBanner } from '@/components/GhostModeBanner';
 
 const Toaster = dynamic(
   () => import('react-hot-toast').then(m => ({ default: m.Toaster })),
@@ -413,6 +414,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               <Suspense fallback={null}>
                 <Toaster position="top-right" toastOptions={{ duration: 2500 }} />
               </Suspense>
+              <GhostModeBanner />
               {children}
             </ThemeProvider>
           </DarkModeProvider>

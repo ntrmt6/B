@@ -51,6 +51,7 @@ export interface AuthUser {
   lastLogin?: string;
   createdAt?: string;
   updatedAt?: string;
+  isImpersonating?: boolean; // True if super admin is viewing as tenant
 }
 
 export type Permissions = Record<string, ActionType[]>;
@@ -62,6 +63,7 @@ export interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   error: string | null;
+  isImpersonating: boolean; // True if super admin is viewing as tenant
 }
 
 export interface LoginCredentials {
@@ -80,7 +82,7 @@ export interface RegisterCredentials {
 export interface AuthContextType extends AuthState {
   login: (credentials: LoginCredentials) => Promise<void>;
   register: (credentials: RegisterCredentials) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   refreshToken: () => Promise<void>;
   updateUser: (user: Partial<AuthUser>) => void;
   hasPermission: (resource: ResourceType, action: ActionType) => boolean;
@@ -91,6 +93,8 @@ export interface AuthContextType extends AuthState {
   canEdit: (resource: ResourceType) => boolean;
   canDelete: (resource: ResourceType) => boolean;
   clearError: () => void;
+  endImpersonation: () => Promise<void>; // End impersonation and return to super admin
+  setImpersonationSession: (token: string, user: AuthUser, permissions: Permissions) => void; // Set session from impersonation callback
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -127,7 +131,8 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     permissions: {},
     isAuthenticated: false,
     isLoading: true,
-    error: null
+    error: null,
+    isImpersonating: false
   });
 
   // Load stored auth data on mount
@@ -159,13 +164,15 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
             if (response.ok) {
               const data = await response.json();
+              const isImpersonating = data.user?.isImpersonating || user?.isImpersonating || false;
               setState({
-                user: data.user,
+                user: { ...data.user, isImpersonating },
                 token: storedToken,
                 permissions: data.permissions,
                 isAuthenticated: true,
                 isLoading: false,
-                error: null
+                error: null,
+                isImpersonating
               });
 
               // Update stored data with fresh data
@@ -179,25 +186,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
             } else {
               // Other errors (500, network issues) - keep cached session
               console.warn('[Auth] Token validation failed with status:', response.status, '- using cached session');
+              const isImpersonating = user?.isImpersonating || false;
               setState({
                 user,
                 token: storedToken,
                 permissions,
                 isAuthenticated: true,
                 isLoading: false,
-                error: null
+                error: null,
+                isImpersonating
               });
             }
           } catch (error) {
             // Network error, use stored data - don't logout user
             console.warn('[Auth] Network error during token validation, using cached session');
+            const isImpersonating = user?.isImpersonating || false;
             setState({
               user,
               token: storedToken,
               permissions,
               isAuthenticated: true,
               isLoading: false,
-              error: null
+              error: null,
+              isImpersonating
             });
           }
         } else {
@@ -337,7 +348,24 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    // Call logout API to clear cookies across all subdomains
+    try {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json'
+      };
+      if (state.token) {
+        headers['Authorization'] = `Bearer ${state.token}`;
+      }
+      await fetch(`${API_BASE_URL}/api/auth/logout`, {
+        method: 'POST',
+        headers,
+        credentials: 'include'
+      });
+    } catch (error) {
+      console.warn('[Auth] Logout API call failed:', error);
+    }
+
     clearStorage();
     setState({
       user: null,
@@ -345,9 +373,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       permissions: {},
       isAuthenticated: false,
       isLoading: false,
-      error: null
+      error: null,
+      isImpersonating: false
     });
-  }, []);
+  }, [state.token]);
 
   const refreshToken = useCallback(async () => {
     if (!state.token) return;
@@ -429,6 +458,55 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     setState(prev => ({ ...prev, error: null }));
   }, []);
 
+  // End impersonation and return to super admin panel
+  const endImpersonation = useCallback(async () => {
+    if (!state.token || !state.isImpersonating) return;
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/auth/end-impersonation`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${state.token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        clearStorage();
+        // Redirect to super admin panel
+        if (data.redirectUrl) {
+          window.location.href = data.redirectUrl;
+        }
+      } else {
+        console.error('[Auth] End impersonation failed:', data.error);
+        // Fallback: just logout
+        await logout();
+      }
+    } catch (error) {
+      console.error('[Auth] End impersonation error:', error);
+      await logout();
+    }
+  }, [state.token, state.isImpersonating, logout]);
+
+  // Set session from impersonation callback (used by /auth/callback page)
+  const setImpersonationSession = useCallback((token: string, user: AuthUser, permissions: Permissions) => {
+    localStorage.setItem(TOKEN_KEY, token);
+    localStorage.setItem(USER_KEY, JSON.stringify({ ...user, isImpersonating: true }));
+    localStorage.setItem(PERMISSIONS_KEY, JSON.stringify(permissions));
+
+    setState({
+      user: { ...user, isImpersonating: true },
+      token,
+      permissions,
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+      isImpersonating: true
+    });
+  }, []);
+
   const value: AuthContextType = {
     ...state,
     login,
@@ -443,7 +521,9 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     canWrite,
     canEdit,
     canDelete,
-    clearError
+    clearError,
+    endImpersonation,
+    setImpersonationSession
   };
 
   return (

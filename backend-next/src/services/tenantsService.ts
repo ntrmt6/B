@@ -99,6 +99,7 @@ export const createTenant = async (payload: CreateTenantPayload): Promise<Tenant
     plan: (payload.plan || 'starter') as Tenant['plan'],
     status: 'trialing',
     onboardingCompleted: false,
+    multiVendorEnabled: payload.multiVendorEnabled ?? false,
     createdAt: now,
     updatedAt: now,
     branding: {},
@@ -256,7 +257,7 @@ export const deleteTenant = async (id: string) => {
 
 export const updateTenant = async (id: string, updates: Partial<Tenant>) => {
   const db = await getDatabase();
-  const allowedUpdates = ['name', 'contactEmail', 'contactName', 'customDomain', 'plan', 'branding', 'settings'];
+  const allowedUpdates = ['name', 'contactEmail', 'contactName', 'customDomain', 'plan', 'multiVendorEnabled', 'branding', 'settings'];
   const filteredUpdates: Record<string, any> = {};
   
   for (const key of allowedUpdates) {

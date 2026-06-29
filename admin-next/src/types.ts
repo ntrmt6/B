@@ -56,6 +56,7 @@ export interface Tenant {
   createdAt: string;
   updatedAt: string;
   onboardingCompleted: boolean;
+  multiVendorEnabled?: boolean;
   // Subscription fields
   subscriptionStartedAt?: string;
   subscriptionEndsAt?: string;
@@ -95,6 +96,7 @@ export interface CreateTenantPayload {
   plan?: TenantPlan;
   adminEmail: string;
   adminPassword: string;
+  multiVendorEnabled?: boolean;
 }
 
 export interface ProductVariantSelection {

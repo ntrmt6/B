@@ -20,6 +20,8 @@ export interface Tenant extends BaseModel {
   plan: 'starter' | 'growth' | 'enterprise' | string;
   status: 'trialing' | 'active' | 'suspended' | 'archived' | string;
   onboardingCompleted: boolean;
+  // Multi-Vendor Mode - enables marketplace functionality
+  multiVendorEnabled: boolean;
   branding?: {
     logo?: string;
     primaryColor?: string;
@@ -64,4 +66,5 @@ export interface CreateTenantPayload {
   adminEmail: string;
   adminPassword: string; // Used only for creating admin user, not stored
   plan?: Tenant['plan'];
+  multiVendorEnabled?: boolean; // Enable multi-vendor marketplace mode
 }

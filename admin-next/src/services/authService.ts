@@ -219,6 +219,66 @@ export const logout = () => {
 };
 
 /**
+ * Super Admin Impersonation - Login as any tenant
+ * Generates a magic token and redirect URL for seamless tenant login
+ */
+export const impersonateTenant = async (tenantId: string): Promise<{
+  success: boolean;
+  redirectUrl: string;
+  tenant: { id: string; name: string; subdomain: string };
+  targetUser: { id: string; name: string; email: string; role: string };
+  expiresIn: string;
+}> => {
+  const response = await fetch(`${API_URL}/auth/impersonate`, {
+    method: 'POST',
+    headers: getAuthHeader(),
+    body: JSON.stringify({ tenantId }),
+  });
+
+  return await handleResponse(response);
+};
+
+/**
+ * Validate impersonation token and establish session
+ * Called by /auth/callback page
+ */
+export const validateImpersonationToken = async (token: string): Promise<{
+  success: boolean;
+  token: string;
+  user: User;
+  permissions: any[];
+  isImpersonating: boolean;
+  originalUserId: string;
+}> => {
+  const response = await fetch(`${API_URL}/auth/validate-impersonation`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  });
+
+  return await handleResponse(response);
+};
+
+/**
+ * End impersonation session and return to super admin
+ */
+export const endImpersonation = async (): Promise<{
+  success: boolean;
+  token: string;
+  user: User;
+  permissions: any[];
+  redirectUrl: string;
+  message: string;
+}> => {
+  const response = await fetch(`${API_URL}/auth/end-impersonation`, {
+    method: 'POST',
+    headers: getAuthHeader(),
+  });
+
+  return await handleResponse(response);
+};
+
+/**
  * Get current user from token
  */
 export const getCurrentUser = async (): Promise<{ user: User; permissions: Permission[] }> => {
@@ -492,6 +552,10 @@ export default {
   getCurrentUser,
   refreshToken,
   getMyPermissions,
+  // Impersonation
+  impersonateTenant,
+  validateImpersonationToken,
+  endImpersonation,
   // Users
   getAdminUsers,
   createUser,
