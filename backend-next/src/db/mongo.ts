@@ -116,7 +116,17 @@ const ensureIndexes = async (db: Db) => {
       { background: true }
     );
 
-    console.log('[mongo] Indexes ensured for tenant_data, expenses, incomes, visitors, page_views, visitor_events, orders, product_embeddings, purchases');
+    // Indexes for tenants collection - stores directory and sitemap queries
+    await db.collection('tenants').createIndex(
+      { status: 1, 'shopStatus.isBlocked': 1 },
+      { background: true }
+    );
+    await db.collection('tenants').createIndex(
+      { status: 1, createdAt: -1 },
+      { background: true }
+    );
+
+    console.log('[mongo] Indexes ensured for tenant_data, expenses, incomes, visitors, page_views, visitor_events, orders, product_embeddings, purchases, tenants');
   } catch (error: any) {
     // Code 48 = index already exists (not an error)
     if (error?.code === 48) {

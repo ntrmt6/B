@@ -58,6 +58,7 @@ import { loyaltyRouter } from './routes/loyalty';
 import { posRouter } from './routes/pos';
 import { storiesRouter } from './routes/stories';
 import imagekitAuthRouter from './routes/imagekitAuth';
+import { storesDirectoryRouter } from './routes/storesDirectory';
 import { ensureCacheReady, isAllowedCustomDomainOrigin, refreshCustomDomainsCache } from './services/customDomainService';
 
 const app = express();
@@ -279,6 +280,7 @@ app.use('/api/pos', posRouter);
 app.use('/api/stories', storiesRouter);
 app.use('/api/vendors', vendorRouter);
 app.use('/api/marketplace', marketplaceRouter);
+app.use('/api/stores', storesDirectoryRouter);
 app.use('/api/v1', imagekitAuthRouter);
 app.use('/api', dueListRoutes);
 
