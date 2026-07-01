@@ -20,6 +20,7 @@ const EXEMPT_ROUTES = [
   '/api/subscription/check',
   '/api/notifications/dashboard-banners', // Super admin banner management
   '/api/notifications/broadcast', // Super admin broadcast notifications
+  '/api/super-admin', // All super admin routes (blog, etc.) - not tenant-scoped
   '/api/visitors', // Visitor tracking is a public storefront operation
   '/api/reviews', // Allow public review reads
   '/api/contact', // Allow public contact form submissions
