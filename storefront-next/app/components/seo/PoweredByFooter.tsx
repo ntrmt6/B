@@ -22,6 +22,14 @@ export default function PoweredByFooter() {
           >
             Powered by AllInBangla
           </a>
+          <span className="hidden sm:inline">|</span>
+          <a
+            href="https://free-ecommerce.allinbangla.com/"
+            title="Create Free E-Commerce Website in Bangladesh"
+            className="font-semibold text-emerald-600 hover:text-emerald-700 hover:underline transition-colors"
+          >
+            Free E-Commerce Builder
+          </a>
         </div>
       </div>
     </footer>
