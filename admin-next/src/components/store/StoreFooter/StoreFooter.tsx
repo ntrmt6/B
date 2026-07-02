@@ -141,11 +141,23 @@ const CopyrightSection: React.FC<CopyrightSectionProps> = ({
       
       {children}
       
+      {/* Free E-commerce link */}
+      <a
+        href="https://free-ecommerce.allinbangla.com/"
+        target="_blank"
+        rel="noopener noreferrer"
+        title="Create Free E-Commerce Website in Bangladesh"
+        className={`text-xs ${colors.powered} transition-colors flex items-center gap-1`}
+      >
+        Free E-Commerce Builder
+        <ExternalLink size={10} />
+      </a>
+
       {/* Powered by - conditionally shown */}
       {websiteConfig?.showPoweredBy && (
-        <a 
-          href="https://systemnextit.com" 
-          target="_blank" 
+        <a
+          href="https://systemnextit.com"
+          target="_blank"
           rel="noopener noreferrer"
           className={`text-xs ${colors.powered} transition-colors flex items-center gap-1`}
         >
