@@ -1,10 +1,11 @@
 ﻿import React, { useState, useEffect, useMemo } from 'react';
-import { RefreshCw, Plus, Search, Package, Printer, MoreHorizontal, Calendar } from 'lucide-react';
+import { RefreshCw, Plus, Search, Package, Printer, MoreHorizontal, Calendar, ChevronLeft, UserPlus } from 'lucide-react';
 import { dueListService } from '../../../../services/DueListService';
 import { DueEntity, DueTransaction, EntityType, CreateDueTransactionPayload } from '../../../../types';
 import { DueSummaryData } from '../types';
 import AddNewDueModal from '../../../AddNewDueModal';
 import DueHistoryModal from '../../../DueHistoryModal';
+import AddEntityModal from '../../../AddEntityModal';
 
 interface DueBookTabProps {
   tenantId?: string;
@@ -34,6 +35,7 @@ const DueBookTab: React.FC<DueBookTabProps> = ({
   const [dueLoading, setDueLoading] = useState(false);
   const [showDueHistoryModal, setShowDueHistoryModal] = useState(false);
   const [showAddDueModal, setShowAddDueModal] = useState(false);
+  const [showAddEntityModal, setShowAddEntityModal] = useState(false);
 
   useEffect(() => {
     if (!tenantId) return;
@@ -84,6 +86,19 @@ const DueBookTab: React.FC<DueBookTabProps> = ({
     const totalWillGive = filteredDueTransactions.filter(tx => tx.direction === 'EXPENSE').reduce((s, tx) => s + tx.amount, 0);
     return { totalWillGet, totalWillGive };
   }, [filteredDueTransactions]);
+
+  const handleEntitySaved = async (entity: DueEntity) => {
+    setShowAddEntityModal(false);
+    const updated = await dueListService.getEntities(dueTabType, dueSearch || undefined);
+    setDueEntities(updated);
+    const [customers, suppliers, employees] = await Promise.all([
+      dueListService.getEntities('Customer'),
+      dueListService.getEntities('Supplier'),
+      dueListService.getEntities('Employee'),
+    ]);
+    setAllDueEntities([...customers, ...suppliers, ...employees]);
+    if (entity._id) setSelectedEntityId(entity._id);
+  };
 
   const handleDueTabChange = (type: EntityType) => {
     setDueTabType(type);
@@ -165,44 +180,54 @@ const DueBookTab: React.FC<DueBookTabProps> = ({
   return (
     <div className="bg-white rounded-lg overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between px-5 pt-5 pb-2">
-        <h2 className="text-[18px] font-bold text-slate-900 tracking-tight font-['Roboto']">Due List</h2>
-        <button
-          onClick={handlePrintDueList}
-          className="flex items-center gap-2 bg-gradient-to-r from-[#38bdf8] to-[#1e90ff] text-white px-4 h-[48px] rounded-lg text-[15px] font-bold tracking-[-0.3px]"
-        >
-          <Printer size={20} />
-          Print Due List
-        </button>
+      <div className="flex items-center justify-between px-4 sm:px-5 pt-4 sm:pt-5 pb-2">
+        <h2 className="text-[16px] sm:text-[18px] font-bold text-slate-900 tracking-tight font-['Roboto']">Due List</h2>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowAddDueModal(true)}
+            className="flex items-center gap-1 sm:gap-2 bg-gradient-to-r from-[#38bdf8] to-[#1e90ff] text-white px-3 sm:px-4 h-[40px] sm:h-[48px] rounded-lg text-[13px] sm:text-[15px] font-bold tracking-[-0.3px]"
+          >
+            <Plus size={16} />
+            Add Due
+          </button>
+          <button
+            onClick={handlePrintDueList}
+            className="flex items-center gap-2 bg-gradient-to-r from-[#38bdf8] to-[#1e90ff] text-white px-3 sm:px-4 h-[40px] sm:h-[48px] rounded-lg text-[13px] sm:text-[15px] font-bold tracking-[-0.3px]"
+          >
+            <Printer size={18} />
+            <span className="hidden xs:inline">Print Due List</span>
+            <span className="xs:hidden">Print</span>
+          </button>
+        </div>
       </div>
 
       {/* Summary Cards */}
-      <div className="flex gap-4 px-5 py-4">
-        <div className="flex-1 bg-[#f9f9f9] rounded-lg h-[80px] px-[18px] py-5 flex flex-col justify-center">
-          <p className="text-xl sm:text-2xl lg:text-[32px] font-bold text-[#008c09] tracking-tight tabular-nums font-['Roboto']">
+      <div className="flex gap-3 sm:gap-4 px-4 sm:px-5 py-3 sm:py-4">
+        <div className="flex-1 bg-[#f9f9f9] rounded-lg px-3 sm:px-[18px] py-3 sm:py-5 flex flex-col justify-center min-h-[64px] sm:h-[80px]">
+          <p className="text-lg sm:text-xl lg:text-[32px] font-bold text-[#008c09] tracking-tight tabular-nums font-['Roboto'] truncate">
             ৳{dueSummary.totalWillGet.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="text-[12px] text-slate-500 font-['Roboto']">You will Get (Total)</p>
+          <p className="text-[11px] sm:text-[12px] text-slate-500 font-['Roboto']">You will Get (Total)</p>
         </div>
-        <div className="flex-1 bg-[#f9f9f9] rounded-lg h-[80px] px-[18px] py-5 flex flex-col justify-center">
-          <p className="text-xl sm:text-2xl lg:text-[32px] font-bold text-[#da0000] tracking-tight tabular-nums font-['Roboto']">
+        <div className="flex-1 bg-[#f9f9f9] rounded-lg px-3 sm:px-[18px] py-3 sm:py-5 flex flex-col justify-center min-h-[64px] sm:h-[80px]">
+          <p className="text-lg sm:text-xl lg:text-[32px] font-bold text-[#da0000] tracking-tight tabular-nums font-['Roboto'] truncate">
             ৳{dueSummary.totalWillGive.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
-          <p className="text-[12px] text-slate-500 font-['Roboto']">You will Give (Total)</p>
+          <p className="text-[11px] sm:text-[12px] text-slate-500 font-['Roboto']">You will Give (Total)</p>
         </div>
       </div>
 
       {/* Date Range Info */}
-      <div className="px-5 pb-3">
-        <div className="bg-blue-50 border border-blue-200 rounded-lg px-4 py-2 flex items-center justify-between">
+      <div className="px-4 sm:px-5 pb-3">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg px-3 sm:px-4 py-2 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
           <div className="flex items-center gap-2">
-            <Calendar size={16} className="text-blue-600" />
-            <span className="text-sm text-blue-700 font-['Roboto']">
-              Showing transactions: <span className="font-semibold">{getDateRangeDisplayText()}</span>
+            <Calendar size={14} className="text-blue-600 shrink-0" />
+            <span className="text-xs sm:text-sm text-blue-700 font-['Roboto']">
+              <span className="font-semibold">{getDateRangeDisplayText()}</span>
             </span>
           </div>
           {selectedEntity && filteredDueTransactions.length > 0 && (
-            <div className="flex items-center gap-4 text-sm">
+            <div className="flex items-center gap-3 text-xs sm:text-sm">
               <span className="text-[#008c09] font-['Roboto'] tabular-nums">Get: ৳{filteredDueSummary.totalWillGet.toLocaleString('en-IN')}</span>
               <span className="text-[#da0000] font-['Roboto'] tabular-nums">Give: ৳{filteredDueSummary.totalWillGive.toLocaleString('en-IN')}</span>
             </div>
@@ -210,49 +235,59 @@ const DueBookTab: React.FC<DueBookTabProps> = ({
         </div>
       </div>
 
-      {/* Two-panel layout */}
-      <div className="flex" style={{ height: 'calc(100vh - 380px)', minHeight: '400px' }}>
-        {/* Left Panel */}
-        <div className="w-[400px] flex flex-col">
+      {/* Two-panel layout — stacked on mobile, side-by-side on md+ */}
+      <div className="flex flex-col md:flex-row md:overflow-hidden" style={{ minHeight: '400px' }} >
+        {/* Left Panel — hidden on mobile when entity is selected */}
+        <div className={`${selectedEntityId ? 'hidden md:flex' : 'flex'} flex-col w-full md:w-[360px] lg:w-[400px] md:border-r border-[#e5e5e5]`}>
           {/* Entity Type Tabs */}
-          <div className="flex gap-0 px-5 bg-white">
-            {(['Customer', 'Supplier', 'Employee'] as EntityType[]).map(type => (
-              <button
-                key={type}
-                onClick={() => handleDueTabChange(type)}
-                className={`px-[22px] py-3 text-[16px] font-medium border-b-2 transition-colors ${
-                  dueTabType === type
-                    ? 'text-transparent bg-clip-text bg-gradient-to-r from-[#38bdf8] to-[#1e90ff] border-[#38bdf8]'
-                    : 'text-slate-700 border-transparent hover:text-slate-900'
-                }`}
-              >
-                {type}
-              </button>
-            ))}
+          <div className="flex items-center justify-between px-4 sm:px-5 bg-white border-b border-[#e5e5e5]">
+            <div className="flex gap-0">
+              {(['Customer', 'Supplier', 'Employee'] as EntityType[]).map(type => (
+                <button
+                  key={type}
+                  onClick={() => handleDueTabChange(type)}
+                  className={`px-3 sm:px-[18px] py-3 text-[13px] sm:text-[15px] font-medium border-b-2 -mb-[1px] transition-colors ${
+                    dueTabType === type
+                      ? 'text-transparent bg-clip-text bg-gradient-to-r from-[#38bdf8] to-[#1e90ff] border-[#38bdf8]'
+                      : 'text-slate-700 border-transparent hover:text-slate-900'
+                  }`}
+                >
+                  {type}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => setShowAddEntityModal(true)}
+              title={`Add ${dueTabType}`}
+              className="flex items-center gap-1 text-[#38bdf8] hover:text-[#1e90ff] transition-colors py-2 text-[13px] font-semibold"
+            >
+              <UserPlus size={16} />
+              <span className="hidden sm:inline">Add {dueTabType}</span>
+            </button>
           </div>
 
           {/* Search */}
-          <div className="px-5 py-3">
-            <div className="bg-[#f9f9f9] h-[34px] rounded-lg flex items-center px-2">
-              <Search size={20} className="text-slate-400 mr-2" />
+          <div className="px-4 sm:px-5 py-3">
+            <div className="bg-[#f9f9f9] h-[38px] rounded-lg flex items-center px-2">
+              <Search size={18} className="text-slate-400 mr-2" />
               <input
                 type="text"
                 placeholder="Search"
                 value={dueSearch}
                 onChange={(e) => setDueSearch(e.target.value)}
-                className="bg-transparent border-none outline-none flex-1 text-[12px] text-slate-700 placeholder:text-slate-400"
+                className="bg-transparent border-none outline-none flex-1 text-[13px] text-slate-700 placeholder:text-slate-400"
               />
             </div>
           </div>
 
           {/* Entity List */}
-          <div className="flex-1 overflow-auto px-5">
+          <div className="overflow-auto px-4 sm:px-5 md:max-h-[calc(100vh-460px)]">
             {dueLoading ? (
-              <div className="flex items-center justify-center h-full">
+              <div className="flex items-center justify-center py-16">
                 <RefreshCw size={24} className="animate-spin text-[#38bdf8]" />
               </div>
             ) : dueEntities.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-[#888]">
+              <div className="flex flex-col items-center justify-center py-16 text-[#888]">
                 <Package size={40} className="mb-2 opacity-50" />
                 <span className="text-[13px]">No {dueTabType.toLowerCase()}s found</span>
               </div>
@@ -266,13 +301,13 @@ const DueBookTab: React.FC<DueBookTabProps> = ({
                       selectedEntityId === entity._id ? 'bg-[#f0f9ff]' : 'hover:bg-[#fafafa]'
                     }`}
                   >
-                    <div className={`w-[2px] h-[46px] rounded-full ${entity.totalOwedToMe > entity.totalIOweThemNumber ? 'bg-[#008c09]' : 'bg-[#da0000]'}`} />
-                    <div className="flex-1 flex justify-between items-center">
-                      <div className="flex flex-col">
-                        <span className="text-[16px] font-semibold text-slate-900 font-['Roboto']">{entity.name}</span>
+                    <div className={`w-[2px] h-[46px] rounded-full shrink-0 ${entity.totalOwedToMe > entity.totalIOweThemNumber ? 'bg-[#008c09]' : 'bg-[#da0000]'}`} />
+                    <div className="flex-1 flex justify-between items-center min-w-0">
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-[15px] font-semibold text-slate-900 font-['Roboto'] truncate">{entity.name}</span>
                         <span className="text-[12px] text-slate-500 font-['Roboto']">{entity.phone || 'No phone'}</span>
                       </div>
-                      <div className="flex flex-col items-end gap-[2px] text-[12px]">
+                      <div className="flex flex-col items-end gap-[2px] text-[12px] shrink-0 ml-2">
                         <p>
                           <span className="text-slate-500 font-['Roboto']">Give: </span>
                           <span className="font-semibold text-[#da0000] tabular-nums font-['Roboto']">৳{(entity.totalIOweThemNumber || 0).toLocaleString('en-IN')}</span>
@@ -290,69 +325,106 @@ const DueBookTab: React.FC<DueBookTabProps> = ({
           </div>
         </div>
 
-        {/* Right Panel */}
-        <div className="flex-1 flex flex-col">
-          <div className="flex items-center justify-end gap-4 px-5 py-3">
+        {/* Right Panel — hidden on mobile when no entity selected */}
+        <div className={`${!selectedEntityId ? 'hidden md:flex' : 'flex'} flex-1 flex-col`}>
+          <div className="flex items-center gap-2 sm:gap-4 px-4 sm:px-5 py-3">
+            {/* Back button — mobile only */}
+            <button
+              onClick={() => setSelectedEntityId(null)}
+              className="md:hidden flex items-center gap-1 text-slate-700 font-['Roboto'] text-[14px] mr-auto"
+            >
+              <ChevronLeft size={18} />
+              Back
+            </button>
             <button
               onClick={() => setShowDueHistoryModal(true)}
-              className="flex items-center gap-2 bg-[#f9f9f9] text-slate-900 px-4 h-[48px] rounded-lg text-[15px] font-bold tracking-[-0.3px]"
+              className="flex items-center gap-1 sm:gap-2 bg-[#f9f9f9] text-slate-900 px-3 sm:px-4 h-[40px] sm:h-[48px] rounded-lg text-[13px] sm:text-[15px] font-bold tracking-[-0.3px]"
             >
-              <RefreshCw size={20} />
-              Due History
+              <RefreshCw size={16} />
+              <span className="hidden xs:inline">Due History</span>
+              <span className="xs:hidden">History</span>
             </button>
             <button
               onClick={() => setShowAddDueModal(true)}
-              className="flex items-center gap-2 bg-gradient-to-r from-[#38bdf8] to-[#1e90ff] text-white px-4 h-[48px] rounded-lg text-[15px] font-bold tracking-[-0.3px]"
+              className="flex items-center gap-1 sm:gap-2 bg-gradient-to-r from-[#38bdf8] to-[#1e90ff] text-white px-3 sm:px-4 h-[40px] sm:h-[48px] rounded-lg text-[13px] sm:text-[15px] font-bold tracking-[-0.3px]"
             >
-              <Plus size={20} />
+              <Plus size={16} />
               Add Due
             </button>
           </div>
 
-          <div className="flex-1 mx-5 mb-5 bg-[#f9f9f9] rounded-lg overflow-auto">
+          <div className="flex-1 mx-4 sm:mx-5 mb-4 sm:mb-5 bg-[#f9f9f9] rounded-lg overflow-auto md:max-h-[calc(100vh-460px)]">
             {selectedEntity ? (
               filteredDueTransactions.length === 0 ? (
-                <div className="flex flex-col items-center justify-center h-full text-[#888]">
+                <div className="flex flex-col items-center justify-center h-full py-16 text-[#888]">
                   <Package size={40} className="mb-2 opacity-50" />
                   <span className="text-[13px]">No transactions in this date range</span>
                 </div>
               ) : (
-                <div className="p-4">
+                <div className="p-3 sm:p-4">
                   {filteredDueTransactions.map((tx, idx) => (
                     <div
                       key={tx._id}
-                      className={`flex items-center justify-between py-3 ${idx !== filteredDueTransactions.length - 1 ? 'border-b border-[#e5e5e5]' : ''}`}
+                      className={`py-3 ${idx !== filteredDueTransactions.length - 1 ? 'border-b border-[#e5e5e5]' : ''}`}
                     >
-                      <div className="flex flex-col gap-[2px] w-[145px]">
-                        <span className="text-[14px] font-medium text-slate-900 font-['Roboto']">
-                          {tx.transactionType || tx.items || 'Product purchase'}
-                        </span>
-                        <span className="text-[12px] text-slate-500 font-['Roboto']">
-                          {new Date(tx.transactionDate).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}
-                        </span>
+                      {/* Mobile layout */}
+                      <div className="flex items-start justify-between gap-2 md:hidden">
+                        <div className="flex flex-col gap-[2px] min-w-0">
+                          <span className="text-[14px] font-medium text-slate-900 font-['Roboto'] truncate">
+                            {tx.transactionType || tx.items || 'Product purchase'}
+                          </span>
+                          <span className="text-[11px] text-slate-500 font-['Roboto']">
+                            {new Date(tx.transactionDate).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}
+                          </span>
+                          {tx.notes && (
+                            <span className="text-[11px] text-slate-400 font-['Roboto'] line-clamp-2 mt-1">{tx.notes}</span>
+                          )}
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          <span className={`text-[15px] font-semibold tabular-nums font-['Roboto'] ${tx.direction === 'INCOME' ? 'text-[#008c09]' : 'text-[#da0000]'}`}>
+                            {tx.direction === 'INCOME' ? '+' : '-'}৳{tx.amount.toLocaleString('en-IN')}
+                          </span>
+                          <span className={`px-[9px] py-[2px] rounded-[30px] text-[11px] font-medium text-center ${
+                            tx.status === 'Paid' ? 'bg-[#d4f4d4] text-[#008c09]' : 'bg-[#fff2bc] text-[#2c2400]'
+                          }`}>
+                            {tx.status === 'Paid' ? 'Paid' : 'Pending'}
+                          </span>
+                        </div>
                       </div>
+
+                      {/* Desktop layout */}
+                      <div className="hidden md:flex items-center justify-between">
+                        <div className="flex flex-col gap-[2px] w-[145px]">
+                          <span className="text-[14px] font-medium text-slate-900 font-['Roboto']">
+                            {tx.transactionType || tx.items || 'Product purchase'}
+                          </span>
+                          <span className="text-[12px] text-slate-500 font-['Roboto']">
+                            {new Date(tx.transactionDate).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}
+                          </span>
+                        </div>
                         <p className="text-[10px] text-slate-400 leading-[12px] w-[277px] line-clamp-3 font-['Roboto']">
-                        {tx.notes || 'No notes'}
-                      </p>
-                      <div className="flex items-center gap-4 justify-end w-[224px]">
+                          {tx.notes || 'No notes'}
+                        </p>
+                        <div className="flex items-center gap-4 justify-end w-[224px]">
                           <span className={`text-[16px] font-semibold w-[106px] tabular-nums font-['Roboto'] ${tx.direction === 'INCOME' ? 'text-[#008c09]' : 'text-[#da0000]'}`}>
-                          {tx.direction === 'INCOME' ? '+ ' : '- '}৳{tx.amount.toLocaleString('en-IN')}
-                        </span>
-                        <span className={`px-[9px] py-[2px] rounded-[30px] text-[12px] font-medium w-[62px] text-center ${
-                          tx.status === 'Paid' ? 'bg-[#d4f4d4] text-[#008c09]' : 'bg-[#fff2bc] text-[#2c2400]'
-                        }`}>
-                          {tx.status === 'Paid' ? 'Paid' : 'Pending'}
-                        </span>
-                        <button className="p-1 hover:bg-[#e5e5e5] rounded">
-                          <MoreHorizontal size={20} className="text-[#888]" />
-                        </button>
+                            {tx.direction === 'INCOME' ? '+ ' : '- '}৳{tx.amount.toLocaleString('en-IN')}
+                          </span>
+                          <span className={`px-[9px] py-[2px] rounded-[30px] text-[12px] font-medium w-[62px] text-center ${
+                            tx.status === 'Paid' ? 'bg-[#d4f4d4] text-[#008c09]' : 'bg-[#fff2bc] text-[#2c2400]'
+                          }`}>
+                            {tx.status === 'Paid' ? 'Paid' : 'Pending'}
+                          </span>
+                          <button className="p-1 hover:bg-[#e5e5e5] rounded">
+                            <MoreHorizontal size={20} className="text-[#888]" />
+                          </button>
+                        </div>
                       </div>
                     </div>
                   ))}
                 </div>
               )
             ) : (
-              <div className="flex flex-col items-center justify-center h-full text-[#888]">
+              <div className="flex flex-col items-center justify-center h-full py-16 text-[#888]">
                 <Package size={48} className="mb-3 opacity-50" />
                 <span className="text-[14px]">Select a {dueTabType.toLowerCase()} to view transactions</span>
               </div>
@@ -372,6 +444,14 @@ const DueBookTab: React.FC<DueBookTabProps> = ({
       <DueHistoryModal
         isOpen={showDueHistoryModal}
         onClose={() => setShowDueHistoryModal(false)}
+      />
+
+      {/* Add Entity Modal */}
+      <AddEntityModal
+        isOpen={showAddEntityModal}
+        onClose={() => setShowAddEntityModal(false)}
+        onSave={handleEntitySaved}
+        defaultType={dueTabType}
       />
     </div>
   );

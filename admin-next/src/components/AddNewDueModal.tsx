@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { X, Plus } from 'lucide-react';
-import { CreateDueTransactionPayload, TransactionDirection, DueEntity } from '../types';
+import { CreateDueTransactionPayload, TransactionDirection, EntityType, DueEntity } from '../types';
 import { dueListService } from '../services/DueListService';
 
 interface AddNewDueModalProps {
@@ -9,8 +9,14 @@ interface AddNewDueModalProps {
   onSave: (data: CreateDueTransactionPayload) => void;
 }
 
+const ENTITY_TYPES_FOR_DIRECTION: Record<TransactionDirection, EntityType[]> = {
+  INCOME: ['Customer', 'Employee'],
+  EXPENSE: ['Supplier', 'Employee'],
+};
+
 const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave }) => {
   const [direction, setDirection] = useState<TransactionDirection | null>(null);
+  const [entityType, setEntityType] = useState<EntityType>('Customer');
   const [entities, setEntities] = useState<DueEntity[]>([]);
   const [selectedEntity, setSelectedEntity] = useState<DueEntity | null>(null);
   const [searchEntity, setSearchEntity] = useState('');
@@ -26,11 +32,20 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
   const [errors, setErrors] = useState<Record<string, string>>({});
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Fetch entities
+  // Set default entity type when direction changes
+  useEffect(() => {
+    if (direction) {
+      const defaultType = direction === 'INCOME' ? 'Customer' : 'Supplier';
+      setEntityType(defaultType);
+      setSelectedEntity(null);
+      setEntities([]);
+    }
+  }, [direction]);
+
+  // Fetch entities when entityType changes
   useEffect(() => {
     const fetchEntities = async () => {
       try {
-        const entityType = direction === 'INCOME' ? 'Customer' : 'Supplier';
         const data = await dueListService.getEntities(entityType);
         setEntities(data);
       } catch (error) {
@@ -40,7 +55,7 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
     if (direction) {
       fetchEntities();
     }
-  }, [direction]);
+  }, [entityType, direction]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -52,6 +67,19 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const handleClose = () => {
+    setDirection(null);
+    setSelectedEntity(null);
+    setEntities([]);
+    setSearchEntity('');
+    setShowEntityDropdown(false);
+    setShowAddEntity(false);
+    setNewEntityData({ name: '', phone: '' });
+    setFormData({ amount: '', dueDate: new Date().toISOString().split('T')[0], collectionDate: '', notes: '' });
+    setErrors({});
+    onClose();
+  };
 
   if (!isOpen) return null;
 
@@ -65,7 +93,7 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
       const newEntity = await dueListService.createEntity({
         name: newEntityData.name,
         phone: newEntityData.phone,
-        type: direction === 'INCOME' ? 'Customer' : 'Supplier',
+        type: entityType,
       });
 
       setEntities([...entities, newEntity]);
@@ -116,7 +144,7 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
         <div className="sticky top-0 bg-white p-4 sm:p-6 pb-4 flex items-center justify-between border-b border-gray-100">
           <h2 className="text-xl font-bold text-gray-900">Add New Due</h2>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             className="p-1 hover:bg-gray-100 rounded-lg transition"
           >
             <X size={20} className="text-gray-500" />
@@ -159,10 +187,32 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
                 ← Change transaction type
               </button>
 
+              {/* Entity Type Selector */}
+              {direction && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-medium text-gray-700">Select Type</label>
+                  <div className="flex gap-2">
+                    {ENTITY_TYPES_FOR_DIRECTION[direction].map(type => (
+                      <button
+                        key={type}
+                        onClick={() => { setEntityType(type); setSelectedEntity(null); setSearchEntity(''); }}
+                        className={`flex-1 py-2 rounded-lg border-2 text-sm font-medium transition ${
+                          entityType === type
+                            ? 'border-blue-500 bg-blue-50 text-blue-700'
+                            : 'border-gray-200 text-gray-600 hover:border-gray-300'
+                        }`}
+                      >
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Entity Selection */}
               <div className="space-y-2">
                 <label className="block text-sm font-medium text-gray-700">
-                  {direction === 'INCOME' ? 'Customer' : 'Supplier'}
+                  {entityType}
                 </label>
                 <div className="relative" ref={dropdownRef}>
                   <button
@@ -185,7 +235,7 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
                       <div className="max-h-48 overflow-y-auto">
                         {filteredEntities.length === 0 ? (
                           <div className="p-4 text-center text-gray-500 text-sm">
-                            No {direction === 'INCOME' ? 'customers' : 'suppliers'} found
+                            No {entityType.toLowerCase()}s found
                           </div>
                         ) : (
                           filteredEntities.map(entity => (
@@ -310,7 +360,7 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
               {/* Action Buttons */}
               <div className="flex gap-3 pt-6">
                 <button
-                  onClick={onClose}
+                  onClick={handleClose}
                   className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium"
                 >
                   Cancel
