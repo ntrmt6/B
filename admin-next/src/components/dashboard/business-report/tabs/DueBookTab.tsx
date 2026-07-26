@@ -573,7 +573,7 @@ const DueBookTab: React.FC<DueBookTabProps> = ({
       {!adjustModal && (
         <button
           onClick={() => setShowAddDueModal(true)}
-          className="fixed bottom-6 right-5 md:hidden z-40 w-14 h-14 rounded-full bg-gradient-to-br from-[#38bdf8] to-[#1e90ff] shadow-lg shadow-blue-200 flex items-center justify-center active:scale-95 transition-transform"
+          className="fixed bottom-20 right-5 md:hidden z-40 w-14 h-14 rounded-full bg-gradient-to-br from-[#38bdf8] to-[#1e90ff] shadow-lg shadow-blue-200 flex items-center justify-center active:scale-95 transition-transform"
         >
           <Plus size={26} className="text-white" />
         </button>
