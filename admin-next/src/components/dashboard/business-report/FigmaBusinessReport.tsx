@@ -35,7 +35,7 @@ const FigmaBusinessReport: React.FC<FigmaBusinessReportProps> = ({
   tenantId,
   initialTab,
 }) => {
-  const [activeTab, setActiveTab] = useState<TabType>('overview');
+  const [activeTab, setActiveTab] = useState<TabType>('due');
   const [dateRange, setDateRange] = useState<DateRangeType>('all');
   const [chartAnimated, setChartAnimated] = useState(false);
   const [showCustomDatePicker, setShowCustomDatePicker] = useState(false);
@@ -46,7 +46,7 @@ const FigmaBusinessReport: React.FC<FigmaBusinessReportProps> = ({
   useEffect(() => {
     if (!initialTab) return;
     const tabMap: Record<string, TabType> = {
-      'business_report': 'overview',
+      'business_report': 'due',
       'purchases': 'purchase',
       'business_report_purchase': 'purchase',
       'business_report_expense': 'expense',
@@ -248,12 +248,12 @@ const FigmaBusinessReport: React.FC<FigmaBusinessReportProps> = ({
   };
 
   const tabs = [
+    { id: 'due' as TabType, label: 'Due Book', icon: BookIcon },
     { id: 'overview' as TabType, label: 'Overview', icon: OverviewIcon },
     { id: 'profit' as TabType, label: 'Profit/Loss', icon: WaterfallIcon },
     { id: 'expense' as TabType, label: 'Expense', icon: InvoiceIcon },
     { id: 'income' as TabType, label: 'Income', icon: MoneyReceiveIcon },
     { id: 'purchase' as TabType, label: 'Purchase info', icon: ShoppingBagIcon },
-    { id: 'due' as TabType, label: 'Due Book', icon: BookIcon },
     { id: 'note' as TabType, label: 'Note', icon: NoteIcon },
   ];
 

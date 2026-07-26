@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { X, Plus } from 'lucide-react';
+import { X, Plus, ChevronDown, TrendingDown, TrendingUp } from 'lucide-react';
 import { CreateDueTransactionPayload, TransactionDirection, EntityType, DueEntity } from '../types';
 import { dueListService } from '../services/DueListService';
 
@@ -7,6 +7,7 @@ interface AddNewDueModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (data: CreateDueTransactionPayload) => void;
+  defaultEntity?: DueEntity | null;
 }
 
 const ENTITY_TYPES_FOR_DIRECTION: Record<TransactionDirection, EntityType[]> = {
@@ -14,7 +15,7 @@ const ENTITY_TYPES_FOR_DIRECTION: Record<TransactionDirection, EntityType[]> = {
   EXPENSE: ['Supplier', 'Employee'],
 };
 
-const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave }) => {
+const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave, defaultEntity }) => {
   const [direction, setDirection] = useState<TransactionDirection | null>(null);
   const [entityType, setEntityType] = useState<EntityType>('Customer');
   const [entities, setEntities] = useState<DueEntity[]>([]);
@@ -32,9 +33,16 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
   const [errors, setErrors] = useState<Record<string, string>>({});
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // Set default entity type when direction changes
+  // Pre-select entity when provided
   useEffect(() => {
-    if (direction) {
+    if (defaultEntity) {
+      setSelectedEntity(defaultEntity);
+      setEntityType((defaultEntity.type as EntityType) || 'Customer');
+    }
+  }, [defaultEntity, isOpen]);
+
+  useEffect(() => {
+    if (direction && !defaultEntity) {
       const defaultType = direction === 'INCOME' ? 'Customer' : 'Supplier';
       setEntityType(defaultType);
       setSelectedEntity(null);
@@ -42,7 +50,6 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
     }
   }, [direction]);
 
-  // Fetch entities when entityType changes
   useEffect(() => {
     const fetchEntities = async () => {
       try {
@@ -52,12 +59,9 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
         console.error('Error fetching entities:', error);
       }
     };
-    if (direction) {
-      fetchEntities();
-    }
-  }, [entityType, direction]);
+    if (direction && !defaultEntity) fetchEntities();
+  }, [entityType, direction, defaultEntity]);
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
@@ -88,14 +92,12 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
       setErrors({ entity: 'Please fill in name and phone' });
       return;
     }
-
     try {
       const newEntity = await dueListService.createEntity({
         name: newEntityData.name,
         phone: newEntityData.phone,
         type: entityType,
       });
-
       setEntities([...entities, newEntity]);
       setSelectedEntity(newEntity);
       setNewEntityData({ name: '', phone: '' });
@@ -108,11 +110,10 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
 
   const handleSave = () => {
     const newErrors: Record<string, string> = {};
-
     if (!direction) newErrors.direction = 'Please select transaction type';
-    if (!selectedEntity) newErrors.entity = 'Please select an entity';
+    if (!selectedEntity) newErrors.entity = 'Please select a person';
     if (!formData.amount || parseFloat(formData.amount) <= 0) newErrors.amount = 'Please enter a valid amount';
-    if (!formData.dueDate) newErrors.date = 'Please select a due date';
+    if (!formData.dueDate) newErrors.date = 'Please select a date';
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -128,7 +129,6 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
       dueDate: formData.collectionDate || undefined,
       notes: formData.notes || undefined,
     };
-
     onSave(payload);
   };
 
@@ -137,240 +137,288 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
     e.phone.includes(searchEntity)
   );
 
+  // When a defaultEntity is provided: skip entity-picker, go straight to direction + form
+  const hasPreselectedEntity = !!defaultEntity;
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-xl shadow-xl max-w-md w-full max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50">
+      <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md max-h-[96vh] overflow-y-auto">
+
+        {/* Drag handle — mobile only */}
+        <div className="flex justify-center pt-3 pb-1 sm:hidden">
+          <div className="w-12 h-1.5 bg-gray-300 rounded-full" />
+        </div>
+
         {/* Header */}
-        <div className="sticky top-0 bg-white p-4 sm:p-6 pb-4 flex items-center justify-between border-b border-gray-100">
-          <h2 className="text-xl font-bold text-gray-900">Add New Due</h2>
-          <button
-            onClick={handleClose}
-            className="p-1 hover:bg-gray-100 rounded-lg transition"
-          >
+        <div className="sticky top-0 bg-white px-5 pt-4 pb-4 flex items-center justify-between border-b border-gray-100 z-10">
+          <div>
+            <h2 className="text-[17px] font-bold text-gray-900 font-['Roboto']">Add Due</h2>
+            {hasPreselectedEntity && (
+              <p className="text-[12px] text-blue-600 font-semibold mt-0.5">For: {defaultEntity!.name}</p>
+            )}
+          </div>
+          <button onClick={handleClose} className="w-8 h-8 flex items-center justify-center hover:bg-gray-100 rounded-xl transition">
             <X size={20} className="text-gray-500" />
           </button>
         </div>
 
-        <div className="p-6 space-y-6">
-          {/* Transaction Type Selection */}
+        <div className="px-5 pt-5 pb-8 space-y-5">
+
+          {/* ── DIRECTION SELECTOR (always shown first) ── */}
           {!direction ? (
             <div className="space-y-3">
-              <label className="block text-sm font-semibold text-gray-700">Transaction Type</label>
-              <div className="space-y-2">
-                <button
-                  onClick={() => setDirection('INCOME')}
-                  className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-red-500 hover:bg-red-50 transition text-left"
-                >
-                  <p className="font-semibold text-gray-900">You Will Get</p>
-                  <p className="text-sm text-gray-600">Money owed by a customer</p>
-                </button>
-                <button
-                  onClick={() => setDirection('EXPENSE')}
-                  className="w-full p-4 border-2 border-gray-200 rounded-lg hover:border-green-500 hover:bg-green-50 transition text-left"
-                >
-                  <p className="font-semibold text-gray-900">You Will Give</p>
-                  <p className="text-sm text-gray-600">Money owed to a supplier</p>
-                </button>
-              </div>
-            </div>
-          ) : (
-            <>
-              {/* Back to Type Selection */}
-              <button
-                onClick={() => {
-                  setDirection(null);
-                  setSelectedEntity(null);
-                  setErrors({});
-                }}
-                className="text-theme-primary text-sm font-medium hover:underline"
-              >
-                ← Change transaction type
-              </button>
-
-              {/* Entity Type Selector */}
-              {direction && (
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-700">Select Type</label>
-                  <div className="flex gap-2">
-                    {ENTITY_TYPES_FOR_DIRECTION[direction].map(type => (
-                      <button
-                        key={type}
-                        onClick={() => { setEntityType(type); setSelectedEntity(null); setSearchEntity(''); }}
-                        className={`flex-1 py-2 rounded-lg border-2 text-sm font-medium transition ${
-                          entityType === type
-                            ? 'border-blue-500 bg-blue-50 text-blue-700'
-                            : 'border-gray-200 text-gray-600 hover:border-gray-300'
-                        }`}
-                      >
-                        {type}
-                      </button>
-                    ))}
+              {hasPreselectedEntity && (
+                <div className="flex items-center gap-3 p-3 bg-blue-50 border border-blue-200 rounded-2xl mb-2">
+                  <div className="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-[14px] shrink-0">
+                    {defaultEntity!.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-[14px] font-bold text-slate-900">{defaultEntity!.name}</p>
+                    <p className="text-[12px] text-slate-400">{defaultEntity!.phone}</p>
                   </div>
                 </div>
               )}
 
-              {/* Entity Selection */}
-              <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">
-                  {entityType}
-                </label>
-                <div className="relative" ref={dropdownRef}>
-                  <button
-                    onClick={() => setShowEntityDropdown(!showEntityDropdown)}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg text-left focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white text-gray-600"
-                  >
-                    {selectedEntity ? <span className="text-gray-900">{selectedEntity.name}</span> : 'Select or search...'}
-                  </button>
-                  
-                  {showEntityDropdown && (
-                    <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-300 rounded-lg shadow-lg z-10">
-                      <input
-                        type="text"
-                        placeholder="Search by name or phone..."
-                        value={searchEntity}
-                        onChange={e => setSearchEntity(e.target.value)}
-                        className="w-full px-4 py-2 border-b border-gray-200 focus:outline-none"
-                        autoFocus
-                      />
-                      <div className="max-h-48 overflow-y-auto">
-                        {filteredEntities.length === 0 ? (
-                          <div className="p-4 text-center text-gray-500 text-sm">
-                            No {entityType.toLowerCase()}s found
-                          </div>
-                        ) : (
-                          filteredEntities.map(entity => (
-                            <button
-                              key={entity._id}
-                              onClick={() => {
-                                setSelectedEntity(entity);
-                                setShowEntityDropdown(false);
-                                setSearchEntity('');
-                              }}
-                              className="w-full px-4 py-2 text-left hover:bg-gray-50 transition border-b border-gray-100 last:border-b-0"
-                            >
-                              <p className="font-medium text-gray-900">{entity.name}</p>
-                              <p className="text-sm text-gray-600">{entity.phone}</p>
-                            </button>
-                          ))
-                        )}
-                      </div>
-                      <button
-                        onClick={() => {
-                          setShowAddEntity(true);
-                          setShowEntityDropdown(false);
-                        }}
-                        className="w-full px-4 py-2 text-theme-primary font-medium hover:bg-theme-primary/10 transition border-t border-gray-200 flex items-center justify-center gap-2"
-                      >
-                        <Plus size={16} /> Add New
-                      </button>
-                    </div>
-                  )}
+              <p className="text-[13px] font-semibold text-gray-500 uppercase tracking-wide">What type of due?</p>
+
+              <button
+                onClick={() => setDirection('INCOME')}
+                className="w-full p-4 border-2 border-gray-200 rounded-2xl active:border-[#008c09] active:bg-green-50 transition text-left flex items-center gap-4"
+              >
+                <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+                  <TrendingUp size={20} className="text-[#008c09]" />
                 </div>
-                {errors.entity && <p className="text-sm text-red-600">{errors.entity}</p>}
+                <div>
+                  <p className="font-bold text-gray-900 text-[15px]">You Will Get</p>
+                  <p className="text-[13px] text-gray-500">
+                    {hasPreselectedEntity ? `${defaultEntity!.name} owes you money` : 'Someone owes you money'}
+                  </p>
+                </div>
+              </button>
+
+              <button
+                onClick={() => setDirection('EXPENSE')}
+                className="w-full p-4 border-2 border-gray-200 rounded-2xl active:border-[#da0000] active:bg-red-50 transition text-left flex items-center gap-4"
+              >
+                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                  <TrendingDown size={20} className="text-[#da0000]" />
+                </div>
+                <div>
+                  <p className="font-bold text-gray-900 text-[15px]">You Will Give</p>
+                  <p className="text-[13px] text-gray-500">
+                    {hasPreselectedEntity ? `You owe ${defaultEntity!.name} money` : 'You owe someone money'}
+                  </p>
+                </div>
+              </button>
+
+              {errors.direction && <p className="text-[12px] text-red-600">{errors.direction}</p>}
+            </div>
+          ) : (
+            <>
+              {/* Direction indicator */}
+              <div className={`flex items-center justify-between p-3 rounded-xl ${direction === 'INCOME' ? 'bg-green-50 border border-green-200' : 'bg-red-50 border border-red-200'}`}>
+                <div className="flex items-center gap-2">
+                  {direction === 'INCOME'
+                    ? <TrendingUp size={16} className="text-[#008c09]" />
+                    : <TrendingDown size={16} className="text-[#da0000]" />
+                  }
+                  <span className={`text-[14px] font-bold ${direction === 'INCOME' ? 'text-[#008c09]' : 'text-[#da0000]'}`}>
+                    You Will {direction === 'INCOME' ? 'Get' : 'Give'}
+                  </span>
+                </div>
+                <button
+                  onClick={() => { setDirection(null); if (!hasPreselectedEntity) setSelectedEntity(null); setErrors({}); }}
+                  className="text-[13px] text-blue-600 font-semibold"
+                >
+                  Change
+                </button>
               </div>
 
-              {/* Add New Entity Form */}
-              {showAddEntity && (
-                <div className="space-y-3 p-4 bg-gray-50 rounded-lg border border-gray-200">
-                  <input
-                    type="text"
-                    placeholder="Name"
-                    value={newEntityData.name}
-                    onChange={e => setNewEntityData({ ...newEntityData, name: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-theme-primary"
-                  />
-                  <input
-                    type="tel"
-                    placeholder="Phone"
-                    value={newEntityData.phone}
-                    onChange={e => setNewEntityData({ ...newEntityData, phone: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-theme-primary"
-                  />
-                  <div className="flex gap-2">
-                    <button
-                      onClick={handleAddEntity}
-                      className="flex-1 px-3 py-2 btn-theme-primary rounded-lg transition font-medium"
-                    >
-                      Add
-                    </button>
-                    <button
-                      onClick={() => {
-                        setShowAddEntity(false);
-                        setNewEntityData({ name: '', phone: '' });
-                      }}
-                      className="flex-1 px-3 py-2 bg-gray-300 text-gray-900 rounded-lg hover:bg-gray-400 transition font-medium"
-                    >
-                      Cancel
-                    </button>
+              {/* Pre-selected entity display */}
+              {hasPreselectedEntity ? (
+                <div className="flex items-center gap-3 p-3 bg-gray-50 border border-gray-200 rounded-2xl">
+                  <div className="w-9 h-9 rounded-full bg-blue-500 flex items-center justify-center text-white font-bold text-[14px] shrink-0">
+                    {defaultEntity!.name.charAt(0).toUpperCase()}
+                  </div>
+                  <div>
+                    <p className="text-[14px] font-bold text-slate-900">{defaultEntity!.name}</p>
+                    <p className="text-[12px] text-slate-400">{defaultEntity!.phone}</p>
                   </div>
                 </div>
+              ) : (
+                <>
+                  {/* Entity Type Selector */}
+                  <div className="space-y-2">
+                    <label className="text-[13px] font-semibold text-gray-500">Person Type</label>
+                    <div className="flex gap-2">
+                      {ENTITY_TYPES_FOR_DIRECTION[direction].map(type => (
+                        <button
+                          key={type}
+                          onClick={() => { setEntityType(type); setSelectedEntity(null); setSearchEntity(''); }}
+                          className={`flex-1 py-2.5 rounded-xl border-2 text-[14px] font-semibold transition ${
+                            entityType === type
+                              ? 'border-blue-500 bg-blue-50 text-blue-700'
+                              : 'border-gray-200 text-gray-500'
+                          }`}
+                        >
+                          {type}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Entity dropdown */}
+                  <div className="space-y-2">
+                    <label className="text-[13px] font-semibold text-gray-500">{entityType}</label>
+                    <div className="relative" ref={dropdownRef}>
+                      <button
+                        onClick={() => setShowEntityDropdown(!showEntityDropdown)}
+                        className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl text-left bg-white flex items-center justify-between gap-2 focus:border-blue-400 transition"
+                      >
+                        <span className={selectedEntity ? 'text-gray-900 font-semibold text-[14px]' : 'text-gray-400 text-[14px]'}>
+                          {selectedEntity ? selectedEntity.name : `Select ${entityType}…`}
+                        </span>
+                        <ChevronDown size={18} className="text-gray-400 shrink-0" />
+                      </button>
+
+                      {showEntityDropdown && (
+                        <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-2xl shadow-xl z-20 overflow-hidden">
+                          <div className="p-2 border-b border-gray-100">
+                            <input
+                              type="text"
+                              placeholder="Search by name or phone…"
+                              value={searchEntity}
+                              onChange={e => setSearchEntity(e.target.value)}
+                              className="w-full px-3 py-2.5 bg-gray-50 rounded-xl text-[14px] outline-none border border-gray-200 focus:border-blue-400"
+                              autoFocus
+                            />
+                          </div>
+                          <div className="max-h-52 overflow-y-auto">
+                            {filteredEntities.length === 0 ? (
+                              <div className="p-4 text-center text-gray-400 text-[13px]">No {entityType.toLowerCase()}s found</div>
+                            ) : (
+                              filteredEntities.map(entity => (
+                                <button
+                                  key={entity._id}
+                                  onClick={() => { setSelectedEntity(entity); setShowEntityDropdown(false); setSearchEntity(''); }}
+                                  className="w-full px-4 py-3 text-left active:bg-blue-50 transition border-b border-gray-50 last:border-0"
+                                >
+                                  <p className="font-semibold text-gray-900 text-[14px]">{entity.name}</p>
+                                  <p className="text-[12px] text-gray-400">{entity.phone}</p>
+                                </button>
+                              ))
+                            )}
+                          </div>
+                          <button
+                            onClick={() => { setShowAddEntity(true); setShowEntityDropdown(false); }}
+                            className="w-full px-4 py-3 text-blue-600 font-bold text-[14px] active:bg-blue-50 transition border-t border-gray-100 flex items-center justify-center gap-2"
+                          >
+                            <Plus size={16} /> Add New {entityType}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {errors.entity && <p className="text-[12px] text-red-600">{errors.entity}</p>}
+                  </div>
+
+                  {/* Add New Entity inline form */}
+                  {showAddEntity && (
+                    <div className="space-y-3 p-4 bg-blue-50 rounded-2xl border border-blue-200">
+                      <p className="text-[13px] font-bold text-blue-700">New {entityType}</p>
+                      <input
+                        type="text"
+                        placeholder="Full name *"
+                        value={newEntityData.name}
+                        onChange={e => setNewEntityData({ ...newEntityData, name: e.target.value })}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl text-[14px] outline-none focus:border-blue-400 bg-white"
+                      />
+                      <input
+                        type="tel"
+                        inputMode="tel"
+                        placeholder="Phone number *"
+                        value={newEntityData.phone}
+                        onChange={e => setNewEntityData({ ...newEntityData, phone: e.target.value })}
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl text-[14px] outline-none focus:border-blue-400 bg-white"
+                      />
+                      <div className="flex gap-2">
+                        <button onClick={handleAddEntity} className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-[14px] font-bold">Add</button>
+                        <button onClick={() => { setShowAddEntity(false); setNewEntityData({ name: '', phone: '' }); }} className="flex-1 py-2.5 bg-gray-200 text-gray-700 rounded-xl text-[14px] font-bold">Cancel</button>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               {/* Amount */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Amount (in ৳)</label>
+                <label className="text-[13px] font-semibold text-gray-500">Amount (৳)</label>
                 <input
                   type="number"
+                  inputMode="decimal"
                   min="0"
                   step="0.01"
                   value={formData.amount}
                   onChange={e => setFormData({ ...formData, amount: e.target.value })}
-                  placeholder="0"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                  placeholder="0.00"
+                  className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl text-[20px] font-bold tabular-nums outline-none focus:border-blue-400 transition bg-white"
+                  autoFocus={hasPreselectedEntity && !!direction}
                 />
-                {errors.amount && <p className="text-sm text-red-600">{errors.amount}</p>}
+                {errors.amount && <p className="text-[12px] text-red-600">{errors.amount}</p>}
               </div>
 
               {/* Due Date */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Due Date</label>
+                <label className="text-[13px] font-semibold text-gray-500">Due Date</label>
                 <input
                   type="date"
                   value={formData.dueDate}
                   onChange={e => setFormData({ ...formData, dueDate: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                  className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl text-[14px] outline-none focus:border-blue-400 transition bg-white"
                 />
-                {errors.date && <p className="text-sm text-red-600">{errors.date}</p>}
+                {errors.date && <p className="text-[12px] text-red-600">{errors.date}</p>}
               </div>
 
-              {/* Due Collection Date (Optional) */}
+              {/* Collection Date */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Due Collection Date (Optional)</label>
+                <label className="text-[13px] font-semibold text-gray-500">Collection Date <span className="text-gray-400 font-normal">(optional)</span></label>
                 <input
                   type="date"
                   value={formData.collectionDate}
                   onChange={e => setFormData({ ...formData, collectionDate: e.target.value })}
-                  placeholder="mm/dd/yyyy"
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                  className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl text-[14px] outline-none focus:border-blue-400 transition bg-white"
                 />
               </div>
 
               {/* Notes */}
               <div className="space-y-2">
-                <label className="block text-sm font-medium text-gray-700">Details/Notes</label>
+                <label className="text-[13px] font-semibold text-gray-500">Notes <span className="text-gray-400 font-normal">(optional)</span></label>
                 <textarea
                   value={formData.notes}
                   onChange={e => setFormData({ ...formData, notes: e.target.value })}
                   placeholder="e.g., Invoice #101 for 5kg coffee beans"
                   maxLength={500}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 resize-none h-24 bg-white"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-[14px] outline-none focus:border-blue-400 resize-none h-20 transition bg-white"
                 />
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-3 pt-6">
+              <div className="flex gap-3 pt-2">
                 <button
                   onClick={handleClose}
-                  className="flex-1 px-4 py-3 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition font-medium"
+                  className="flex-1 py-3.5 border-2 border-gray-200 text-gray-700 rounded-xl font-bold text-[14px]"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={!selectedEntity || !formData.amount}
-                  className="flex-1 px-4 py-3 text-blue-600 font-medium rounded-lg hover:bg-blue-50 transition disabled:opacity-50 disabled:cursor-not-allowed"
+                  className={`flex-1 py-3.5 text-white font-bold rounded-xl text-[14px] disabled:opacity-50 disabled:cursor-not-allowed transition ${
+                    direction === 'INCOME'
+                      ? 'bg-gradient-to-r from-[#008c09] to-[#00a80b]'
+                      : 'bg-gradient-to-r from-[#da0000] to-[#ff2020]'
+                  }`}
                 >
-                  Save Transaction
+                  Save Due
                 </button>
               </div>
             </>
