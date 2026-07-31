@@ -347,13 +347,18 @@ export default function TenantRegistration() {
       // Small delay before showing success for premium feel
       await new Promise(resolve => setTimeout(resolve, 1500));
 
+      const adminUrl = `https://admin.${getPrimaryDomain()}`;
       setCreatedShopInfo({
         subdomain: formData.subdomain,
         shopName: formData.shopName,
         email: formData.email,
         shopUrl: getStoreUrl(formData.subdomain),
-        adminUrl: `https://admin.${getPrimaryDomain()}`
+        adminUrl,
       });
+      // Remember admin URL so the APK can navigate there on next launch
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('shopbdit_admin_url', adminUrl);
+      }
       setRegistrationSuccess(true);
     } catch (error) {
       console.error('Registration error:', error);
@@ -694,7 +699,7 @@ export default function TenantRegistration() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4">
                 <a
                   href={createdShopInfo.adminUrl}
-                  target="_blank"
+                  target="_self"
                   rel="noopener noreferrer"
                   className="flex items-center justify-center gap-2 bg-gradient-to-r from-indigo-600 to-purple-600 text-white py-4 px-3 sm:px-4 lg:px-6 rounded-2xl font-bold text-lg hover:from-indigo-700 hover:to-purple-700 transition-all shadow-lg shadow-indigo-200 hover:shadow-xl hover:-translate-y-0.5"
                 >
@@ -703,7 +708,7 @@ export default function TenantRegistration() {
                 </a>
                 <a
                   href={createdShopInfo.shopUrl}
-                  target="_blank"
+                  target="_self"
                   rel="noopener noreferrer"
                   className="flex items-center justify-center gap-2 bg-white text-slate-700 py-4 px-3 sm:px-4 lg:px-6 rounded-2xl font-bold text-lg border-2 border-slate-200 hover:border-indigo-200 hover:bg-indigo-50 transition-all"
                 >

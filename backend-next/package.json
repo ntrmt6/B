@@ -6,9 +6,10 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
     "build": "npx tsc --project tsconfig.json",
     "start": "node dist/index.js",
-    "seed": "ts-node src/scripts/seed.ts",
-    "seed:subscriptions": "ts-node src/scripts/seedSubscriptions.ts",
-    "seed:products": "ts-node src/scripts/seedProducts.ts",
+    "seed": "ts-node-dev --transpile-only src/scripts/seed.ts",
+    "seed:subscriptions": "ts-node-dev --transpile-only src/scripts/seedSubscriptions.ts",
+    "seed:products": "ts-node-dev --transpile-only src/scripts/seedProducts.ts",
+    "seed:products:nflpredicts": "ts-node-dev --transpile-only src/scripts/seedProductsNflpredicts.ts",
     "validate:products": "node -e \"const s=require('./src/scripts/seedProductsStandalone.js');console.log('✅',s.PRODUCTS.length,'products ready')\""
   },
   "dependencies": {

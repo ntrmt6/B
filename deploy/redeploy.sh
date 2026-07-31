@@ -9,7 +9,7 @@
 # =============================================================================
 set -euo pipefail
 
-APP_DIR="/var/www/html/multi-vendor/B"
+APP_DIR="/root/B/"
 cd "$APP_DIR"
 
 log() { echo "[$(date '+%H:%M:%S')] $1"; }

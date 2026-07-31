@@ -251,13 +251,9 @@ router.post('/transactions', async (req: Request, res: Response) => {
 
     await transaction.save();
 
-    // Update entity totals
-    if (direction === 'INCOME') {
-      entity.totalOwedToMe += amount;
-    } else {
-      entity.totalIOweThemNumber += amount;
-    }
-    await entity.save();
+    // Atomically update entity totals to prevent race conditions
+    const incField = direction === 'INCOME' ? 'totalOwedToMe' : 'totalIOweThemNumber';
+    await Entity.findByIdAndUpdate(entityId, { $inc: { [incField]: amount } });
 
     res.status(201).json(transaction);
   } catch (error) {
@@ -285,28 +281,13 @@ router.patch('/transactions/:id', async (req: Request, res: Response) => {
     const oldAmount = transaction.amount;
     const direction = transaction.direction;
 
-    // Update entity totals based on status change
-    const entity = await Entity.findOne({ _id: transaction.entityId, tenantId });
-    if (entity) {
-      // Reverse old amount
-      if (oldStatus === 'Pending') {
-        if (direction === 'INCOME') {
-          entity.totalOwedToMe -= oldAmount;
-        } else {
-          entity.totalIOweThemNumber -= oldAmount;
-        }
-      }
-
-      // Add new amount if not paid or cancelled
-      if (status === 'Pending') {
-        if (direction === 'INCOME') {
-          entity.totalOwedToMe += oldAmount;
-        } else {
-          entity.totalIOweThemNumber += oldAmount;
-        }
-      }
-
-      await entity.save();
+    // Atomically update entity totals based on status change
+    const incField = direction === 'INCOME' ? 'totalOwedToMe' : 'totalIOweThemNumber';
+    let delta = 0;
+    if (oldStatus === 'Pending') delta -= oldAmount; // reverse old
+    if (status === 'Pending') delta += oldAmount;    // apply new
+    if (delta !== 0) {
+      await Entity.findByIdAndUpdate(transaction.entityId, { $inc: { [incField]: delta } });
     }
 
     transaction.status = status;
@@ -332,15 +313,10 @@ router.delete('/transactions/:id', async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Transaction not found' });
     }
 
-    // Update entity totals
-    const entity = await Entity.findOne({ _id: transaction.entityId, tenantId });
-    if (entity && transaction.status === 'Pending') {
-      if (transaction.direction === 'INCOME') {
-        entity.totalOwedToMe -= transaction.amount;
-      } else {
-        entity.totalIOweThemNumber -= transaction.amount;
-      }
-      await entity.save();
+    // Atomically reverse entity totals on delete
+    if (transaction.status === 'Pending') {
+      const decField = transaction.direction === 'INCOME' ? 'totalOwedToMe' : 'totalIOweThemNumber';
+      await Entity.findByIdAndUpdate(transaction.entityId, { $inc: { [decField]: -transaction.amount } });
     }
 
     res.json({ success: true, message: 'Transaction deleted' });

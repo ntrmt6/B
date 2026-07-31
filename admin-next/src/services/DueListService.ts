@@ -42,10 +42,10 @@ class DueListService {
 
   private getHeaders(): HeadersInit {
     const tenantId = this.getEffectiveTenantId();
-    console.log('[DueListService] Using tenant ID:', tenantId);
     return {
       'Content-Type': 'application/json',
       'X-Tenant-Id': tenantId,
+      'Cache-Control': 'no-cache, no-store',
       ...getAuthHeader()
     };
   }
@@ -63,7 +63,7 @@ class DueListService {
 
       const response = await fetch(
         `${getApiBaseUrl()}/api/entities${params.toString() ? `?${params}` : ''}`,
-        { headers: this.getHeaders() }
+        { headers: this.getHeaders(), cache: 'no-store' }
       );
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));
@@ -184,7 +184,7 @@ class DueListService {
 
       const response = await fetch(
         `${getApiBaseUrl()}/api/transactions${params.toString() ? `?${params}` : ''}`,
-        { headers: this.getHeaders() }
+        { headers: this.getHeaders(), cache: 'no-store' }
       );
       if (!response.ok) {
         const error = await response.json().catch(() => ({}));

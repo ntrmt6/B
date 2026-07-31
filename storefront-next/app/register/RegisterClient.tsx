@@ -1,10 +1,17 @@
 'use client';
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 
 const TenantRegistration = dynamic(() => import('@/views/TenantRegistration'), { ssr: false });
 
 export default function RegisterClient() {
+  useEffect(() => {
+    const savedAdminUrl = localStorage.getItem('shopbdit_admin_url');
+    if (savedAdminUrl) {
+      window.location.href = savedAdminUrl;
+    }
+  }, []);
+
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
