@@ -6,7 +6,7 @@ import { dueListService } from '../services/DueListService';
 interface AddNewDueModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSave: (data: CreateDueTransactionPayload) => void;
+  onSave: (data: CreateDueTransactionPayload) => Promise<void>;
   defaultEntity?: DueEntity | null;
 }
 
@@ -31,6 +31,7 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
     notes: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [isSaving, setIsSaving] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Pre-select entity when provided
@@ -73,6 +74,7 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
   }, []);
 
   const handleClose = () => {
+    if (isSaving) return;
     setDirection(null);
     setSelectedEntity(null);
     setEntities([]);
@@ -82,6 +84,7 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
     setNewEntityData({ name: '', phone: '' });
     setFormData({ amount: '', dueDate: new Date().toISOString().split('T')[0], collectionDate: '', notes: '' });
     setErrors({});
+    setIsSaving(false);
     onClose();
   };
 
@@ -108,7 +111,7 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
     }
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     const newErrors: Record<string, string> = {};
     if (!direction) newErrors.direction = 'Please select transaction type';
     if (!selectedEntity) newErrors.entity = 'Please select a person';
@@ -129,7 +132,13 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
       dueDate: formData.collectionDate || undefined,
       notes: formData.notes || undefined,
     };
-    onSave(payload);
+
+    setIsSaving(true);
+    try {
+      await onSave(payload);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const filteredEntities = entities.filter(e =>
@@ -411,14 +420,22 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={!selectedEntity || !formData.amount}
-                  className={`flex-1 py-3.5 text-white font-bold rounded-xl text-[14px] disabled:opacity-50 disabled:cursor-not-allowed transition ${
+                  disabled={!selectedEntity || !formData.amount || isSaving}
+                  className={`flex-1 py-3.5 text-white font-bold rounded-xl text-[14px] disabled:opacity-50 disabled:cursor-not-allowed transition flex items-center justify-center gap-2 ${
                     direction === 'INCOME'
                       ? 'bg-gradient-to-r from-[#008c09] to-[#00a80b]'
                       : 'bg-gradient-to-r from-[#da0000] to-[#ff2020]'
                   }`}
                 >
-                  Save Due
+                  {isSaving ? (
+                    <>
+                      <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg>
+                      Saving…
+                    </>
+                  ) : 'Save Due'}
                 </button>
               </div>
             </>
