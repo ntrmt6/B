@@ -82,6 +82,15 @@ export default function DueBookPage() {
   const [markingPaid, setMarkingPaid] = useState<string | null>(null);
   const txListRef = useRef<HTMLDivElement>(null);
 
+  /* pull-to-refresh */
+  const [pullDist, setPullDist] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const pullStartY = useRef(0);
+  const PULL_THRESHOLD = 60;
+
+  /* online/offline */
+  const [isOnline, setIsOnline] = useState(true);
+
   const TODAY = new Date().toISOString().split('T')[0];
   const YESTERDAY = new Date(Date.now() - 86400000).toISOString().split('T')[0];
 
@@ -106,6 +115,15 @@ export default function DueBookPage() {
   }, [tenantId]);
 
   useEffect(() => { loadEntities(); }, [loadEntities]);
+
+  useEffect(() => {
+    setIsOnline(navigator.onLine);
+    const on = () => setIsOnline(true);
+    const off = () => setIsOnline(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
+  }, []);
 
   // Android hardware back button intercept.
   // Only listen — never call replaceState, which would corrupt Next.js Router's history state.
@@ -225,6 +243,30 @@ export default function DueBookPage() {
     finally { setMarkingPaid(null); }
   };
 
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (selected || (txListRef.current?.scrollTop ?? 1) > 2) return;
+    pullStartY.current = e.touches[0].clientY;
+  }, [selected]);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (!pullStartY.current) return;
+    const dist = e.touches[0].clientY - pullStartY.current;
+    if (dist > 0) setPullDist(Math.min(dist * 0.5, PULL_THRESHOLD + 20));
+    else pullStartY.current = 0;
+  }, []);
+
+  const handleTouchEnd = useCallback(async () => {
+    if (pullDist >= PULL_THRESHOLD && !refreshing) {
+      setRefreshing(true);
+      setPullDist(0);
+      await loadEntities();
+      setRefreshing(false);
+    } else {
+      setPullDist(0);
+    }
+    pullStartY.current = 0;
+  }, [pullDist, refreshing, loadEntities]);
+
   const openAdd = (dir: 'INCOME' | 'EXPENSE') => {
     setAddDir(dir); setAddAmount(''); setAddNote('');
     setAddDate(new Date().toISOString().split('T')[0]);
@@ -287,6 +329,13 @@ export default function DueBookPage() {
         </div>
       </div>
 
+      {/* ── OFFLINE BANNER ── */}
+      {!isOnline && (
+        <div className="flex-shrink-0 bg-amber-500 text-white text-center text-[11px] font-semibold py-1 tracking-wide">
+          No internet — showing cached data
+        </div>
+      )}
+
       {/* ── SUMMARY ROW ── */}
       {!selected && (
         <div className="flex-shrink-0 flex gap-2 px-3 py-1.5 bg-white border-b border-gray-100">
@@ -312,7 +361,7 @@ export default function DueBookPage() {
         <>
           <div className="flex-shrink-0 flex bg-white border-b border-gray-100">
             {TYPES.map(t => (
-              <button key={t} onClick={() => setTab(t)}
+              <button key={t} onClick={() => { setTab(t); if (txListRef.current) txListRef.current.scrollTop = 0; }}
                 className={`flex-1 py-2 text-[12px] font-semibold border-b-2 transition-colors ${
                   tab === t ? 'text-sky-500 border-sky-500' : 'text-gray-400 border-transparent'
                 }`}>
@@ -369,7 +418,22 @@ export default function DueBookPage() {
       )}
 
       {/* ── SCROLL AREA ── */}
-      <div ref={txListRef} className="flex-1 overflow-y-auto scroll-view">
+      <div
+        ref={txListRef}
+        className="flex-1 overflow-y-auto scroll-view"
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+      >
+        {/* Pull-to-refresh indicator */}
+        {!selected && (pullDist > 0 || refreshing) && (
+          <div className="flex items-center justify-center" style={{ height: refreshing ? 48 : pullDist, overflow: 'hidden' }}>
+            <div
+              className={`ptr-spinner${refreshing ? ' spinning' : ''}`}
+              style={{ transform: refreshing ? undefined : `rotate(${pullDist * 4}deg)`, opacity: Math.min(pullDist / PULL_THRESHOLD, 1) }}
+            />
+          </div>
+        )}
 
         {/* Entity list */}
         {!selected && (
@@ -522,7 +586,7 @@ export default function DueBookPage() {
         <div className="absolute inset-0 z-50 flex flex-col justify-end" onClick={() => setShowAdd(false)}>
           <div className="absolute inset-0 bg-black/40" />
           {/* sheet-inner: shrinks with keyboard via max-height: 85dvh */}
-          <div className="relative bg-white rounded-t-2xl shadow-2xl z-10 sheet-inner" onClick={e => e.stopPropagation()}>
+          <div className="relative bg-white rounded-t-2xl shadow-2xl z-10 sheet-inner sheet-slide-up" onClick={e => e.stopPropagation()}>
 
             {/* ── Fixed header ── */}
             <div className="flex-shrink-0">
@@ -626,7 +690,7 @@ export default function DueBookPage() {
       {showAddEntity && (
         <div className="absolute inset-0 z-50 flex flex-col justify-end" onClick={() => setShowAddEntity(false)}>
           <div className="absolute inset-0 bg-black/40" />
-          <div className="relative bg-white rounded-t-2xl shadow-2xl z-10" onClick={e => e.stopPropagation()}>
+          <div className="relative bg-white rounded-t-2xl shadow-2xl z-10 sheet-slide-up" onClick={e => e.stopPropagation()}>
             <div className="flex justify-center pt-2 pb-1">
               <div className="w-9 h-1 bg-gray-300 rounded-full" />
             </div>

@@ -41,9 +41,14 @@ input, textarea, select {
 
 input::placeholder, textarea::placeholder { color: #9ca3af; }
 
-/* bottom sheet transition */
-.sheet-enter { transform: translateY(100%); }
-.sheet-open { transform: translateY(0); transition: transform 0.25s cubic-bezier(0.32,0.72,0,1); }
+/* bottom sheet slide-up animation */
+.sheet-slide-up {
+  animation: sheetSlideUp 0.28s cubic-bezier(0.32, 0.72, 0, 1) both;
+}
+@keyframes sheetSlideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
 
 /* Keyboard-safe bottom sheet: shrinks when soft keyboard is up */
 .sheet-inner {
@@ -56,4 +61,21 @@ input::placeholder, textarea::placeholder { color: #9ca3af; }
 .no-scrollbar { scrollbar-width: none; }
 .no-scrollbar::-webkit-scrollbar { display: none; }
 
+/* Pull-to-refresh spinner */
+.ptr-spinner {
+  width: 20px; height: 20px;
+  border: 2.5px solid #0ea5e9;
+  border-top-color: transparent;
+  border-radius: 50%;
+  transition: transform 0.1s;
+}
+.ptr-spinner.spinning { animation: spin 0.7s linear infinite; }
+
+/* Active state for list items */
+.list-item-active { transition: background 0.1s; }
+.list-item-active:active { background: #f1f5f9 !important; }
+
 @keyframes spin { to { transform: rotate(360deg); } }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.animate-fade-in { animation: fadeIn 0.2s ease both; }
