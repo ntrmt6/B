@@ -411,14 +411,42 @@ router.post('/generate', async (req: Request, res: Response) => {
   }
 });
 
+// Direct download for the latest DueBook APK — must be before /:buildId/:filename
+router.get('/download/duebook', (_req: Request, res: Response) => {
+  const downloadsDir = path.join(APK_BUILD_DIR, 'downloads');
+
+  let latestFile: string | null = null;
+  let latestMtime = 0;
+
+  if (fs.existsSync(downloadsDir)) {
+    for (const file of fs.readdirSync(downloadsDir)) {
+      if (file.startsWith('DueBook') && file.endsWith('.apk')) {
+        const stat = fs.statSync(path.join(downloadsDir, file));
+        if (stat.mtimeMs > latestMtime) {
+          latestMtime = stat.mtimeMs;
+          latestFile = file;
+        }
+      }
+    }
+  }
+
+  if (!latestFile) {
+    return res.status(404).json({ success: false, error: 'DueBook APK not found' });
+  }
+
+  const filePath = path.join(downloadsDir, latestFile);
+  res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+  res.download(filePath, latestFile);
+});
+
 router.get('/download/:buildId/:filename', (req: Request, res: Response) => {
   const { filename } = req.params;
   const filePath = path.join(APK_BUILD_DIR, 'downloads', filename);
-  
+
   if (!fs.existsSync(filePath)) {
     return res.status(404).json({ success: false, error: 'File not found' });
   }
-  
+
   res.download(filePath, filename);
 });
 

@@ -1,0 +1,84 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" shape-rendering="geometricPrecision" text-rendering="optimizeLegibility">
+  <defs>
+
+    <!-- Main diagonal gradient: income-green → action-blue -->
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#00900a"/>
+      <stop offset="55%"  stop-color="#0ea8c8"/>
+      <stop offset="100%" stop-color="#1e90ff"/>
+    </linearGradient>
+
+    <!-- Subtle glass highlight (top-left shine) -->
+    <radialGradient id="shine" cx="30%" cy="28%" r="55%">
+      <stop offset="0%"   stop-color="#ffffff" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+
+    <!-- Drop shadow filter for the ৳ glyph -->
+    <filter id="textShadow" x="-5%" y="-5%" width="110%" height="110%">
+      <feDropShadow dx="0" dy="6" stdDeviation="14" flood-color="#000000" flood-opacity="0.18"/>
+    </filter>
+
+    <!-- Badge shadow -->
+    <filter id="badgeShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="4" stdDeviation="8" flood-color="#000000" flood-opacity="0.20"/>
+    </filter>
+
+    <!-- Squircle clip -->
+    <clipPath id="squircle">
+      <rect width="1024" height="1024" rx="230" ry="230"/>
+    </clipPath>
+
+  </defs>
+
+  <!-- ── Background ── -->
+  <rect width="1024" height="1024" rx="230" ry="230" fill="url(#bgGrad)"/>
+
+  <!-- Glass shine overlay -->
+  <rect width="1024" height="1024" rx="230" ry="230" fill="url(#shine)"/>
+
+  <!-- Subtle inner border ring (gives crisp edge on light backgrounds) -->
+  <rect x="6" y="6" width="1012" height="1012" rx="226" ry="226"
+        fill="none" stroke="#ffffff" stroke-opacity="0.10" stroke-width="6"/>
+
+  <!-- ── ৳ Taka Symbol ── -->
+  <!--
+    Uses system/web fonts with Bengali fallbacks.
+    Centered at (512, 520) — slightly above true center so
+    the badge below reads as part of the composition.
+  -->
+  <text
+    x="512"
+    y="536"
+    font-family="'Noto Sans Bengali', 'Mukti', 'Kalpurush', 'SolaimanLipi', 'Arial Unicode MS', 'Segoe UI', sans-serif"
+    font-size="596"
+    font-weight="900"
+    fill="#ffffff"
+    fill-opacity="0.96"
+    text-anchor="middle"
+    dominant-baseline="central"
+    filter="url(#textShadow)"
+    letter-spacing="-8"
+  >৳</text>
+
+  <!-- ── Trust Badge: white circle + green checkmark ── -->
+  <!-- Circle -->
+  <circle cx="800" cy="800" r="108"
+          fill="#ffffff" fill-opacity="0.97"
+          filter="url(#badgeShadow)"/>
+
+  <!-- Green ring accent on badge -->
+  <circle cx="800" cy="800" r="108"
+          fill="none" stroke="#00900a" stroke-width="5" stroke-opacity="0.25"/>
+
+  <!-- Checkmark path (hand-tuned coordinates inside 108-radius circle) -->
+  <polyline
+    points="746,800  786,842  860,758"
+    stroke="#00900a"
+    stroke-width="36"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    fill="none"
+  />
+
+</svg>

@@ -62,21 +62,33 @@ build_hishabee() {
     log "Hishabee restarted."
 }
 
+build_duebook() {
+    log "Building duebook-app..."
+    cd "$APP_DIR/duebook-app"
+    npm ci
+    npx next build
+    chown -R www-data:www-data "$APP_DIR/duebook-app"
+    systemctl restart duebook-app
+    log "DueBook restarted."
+}
+
 case "${1:-all}" in
     backend)    build_backend ;;
     admin)      build_admin ;;
     storefront) build_storefront ;;
     hishabee)   build_hishabee ;;
+    duebook)    build_duebook ;;
     all)
         build_backend
         build_admin
         build_storefront
         build_hishabee
+        build_duebook
         systemctl reload nginx
         log "Full redeploy complete."
         ;;
     *)
-        echo "Usage: $0 {backend|admin|storefront|hishabee|all}"
+        echo "Usage: $0 {backend|admin|storefront|hishabee|duebook|all}"
         exit 1
         ;;
 esac

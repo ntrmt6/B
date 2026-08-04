@@ -188,8 +188,8 @@ const DueBookTab: React.FC<DueBookTabProps> = ({
   const handleAddDueSave = async (data: CreateDueTransactionPayload) => {
     try {
       await dueListService.createTransaction(data);
-      await refreshAllData();
       setShowAddDueModal(false);
+      window.location.reload();
     } catch (e) {
       console.error('Error creating due transaction:', e);
     }
@@ -582,7 +582,7 @@ const DueBookTab: React.FC<DueBookTabProps> = ({
       {/* ── QUICK ADJUST MODAL — bottom sheet on mobile ── */}
       {adjustModal && (
         <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40">
-          <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-sm sm:mx-4 max-h-[92vh] overflow-y-auto">
+          <div className="bg-white text-gray-900 rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-sm sm:mx-4 max-h-[92vh] overflow-y-auto">
             {/* Drag handle — mobile only */}
             <div className="flex justify-center pt-3 pb-1 sm:hidden">
               <div className="w-12 h-1.5 bg-gray-300 rounded-full" />
@@ -631,7 +631,7 @@ const DueBookTab: React.FC<DueBookTabProps> = ({
                 <select
                   value={adjustEntityId}
                   onChange={e => setAdjustEntityId(e.target.value)}
-                  className="w-full border border-gray-200 rounded-xl px-3 py-3 text-[14px] font-['Roboto'] outline-none focus:border-[#38bdf8] bg-[#f9f9f9]"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-3 text-[14px] text-gray-900 font-['Roboto'] outline-none focus:border-[#38bdf8] bg-[#f9f9f9]"
                 >
                   <option value="">— Choose —</option>
                   {allDueEntities.map(e => (
@@ -649,7 +649,7 @@ const DueBookTab: React.FC<DueBookTabProps> = ({
                   value={adjustAmount}
                   onChange={e => setAdjustAmount(e.target.value)}
                   placeholder="0.00"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-3 text-[18px] font-bold font-['Roboto'] outline-none focus:border-[#38bdf8] bg-[#f9f9f9] tabular-nums"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-3 text-[18px] font-bold text-gray-900 font-['Roboto'] outline-none focus:border-[#38bdf8] bg-[#f9f9f9] tabular-nums"
                 />
               </div>
 
@@ -660,7 +660,7 @@ const DueBookTab: React.FC<DueBookTabProps> = ({
                   value={adjustNote}
                   onChange={e => setAdjustNote(e.target.value)}
                   placeholder="Add a note…"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-3 text-[14px] font-['Roboto'] outline-none focus:border-[#38bdf8] bg-[#f9f9f9]"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-3 text-[14px] text-gray-900 font-['Roboto'] outline-none focus:border-[#38bdf8] bg-[#f9f9f9]"
                 />
               </div>
 

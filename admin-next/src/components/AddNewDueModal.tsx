@@ -151,7 +151,7 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50">
-      <div className="bg-white rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md max-h-[96vh] overflow-y-auto">
+      <div className="bg-white text-gray-900 rounded-t-3xl sm:rounded-2xl shadow-xl w-full sm:max-w-md max-h-[96vh] overflow-y-auto">
 
         {/* Drag handle — mobile only */}
         <div className="flex justify-center pt-3 pb-1 sm:hidden">
@@ -298,7 +298,7 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
                               placeholder="Search by name or phone…"
                               value={searchEntity}
                               onChange={e => setSearchEntity(e.target.value)}
-                              className="w-full px-3 py-2.5 bg-gray-50 rounded-xl text-[14px] outline-none border border-gray-200 focus:border-blue-400"
+                              className="w-full px-3 py-2.5 bg-gray-50 text-gray-900 rounded-xl text-[14px] outline-none border border-gray-200 focus:border-blue-400"
                               autoFocus
                             />
                           </div>
@@ -339,7 +339,7 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
                         placeholder="Full name *"
                         value={newEntityData.name}
                         onChange={e => setNewEntityData({ ...newEntityData, name: e.target.value })}
-                        className="w-full px-4 py-3 border border-gray-200 rounded-xl text-[14px] outline-none focus:border-blue-400 bg-white"
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl text-[14px] text-gray-900 outline-none focus:border-blue-400 bg-white"
                       />
                       <input
                         type="tel"
@@ -347,7 +347,7 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
                         placeholder="Phone number *"
                         value={newEntityData.phone}
                         onChange={e => setNewEntityData({ ...newEntityData, phone: e.target.value })}
-                        className="w-full px-4 py-3 border border-gray-200 rounded-xl text-[14px] outline-none focus:border-blue-400 bg-white"
+                        className="w-full px-4 py-3 border border-gray-200 rounded-xl text-[14px] text-gray-900 outline-none focus:border-blue-400 bg-white"
                       />
                       <div className="flex gap-2">
                         <button onClick={handleAddEntity} className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl text-[14px] font-bold">Add</button>
@@ -369,7 +369,7 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
                   value={formData.amount}
                   onChange={e => setFormData({ ...formData, amount: e.target.value })}
                   placeholder="0.00"
-                  className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl text-[20px] font-bold tabular-nums outline-none focus:border-blue-400 transition bg-white"
+                  className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl text-[20px] font-bold tabular-nums text-gray-900 outline-none focus:border-blue-400 transition bg-white"
                   autoFocus={hasPreselectedEntity && !!direction}
                 />
                 {errors.amount && <p className="text-[12px] text-red-600">{errors.amount}</p>}
@@ -382,7 +382,7 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
                   type="date"
                   value={formData.dueDate}
                   onChange={e => setFormData({ ...formData, dueDate: e.target.value })}
-                  className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl text-[14px] outline-none focus:border-blue-400 transition bg-white"
+                  className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl text-[14px] text-gray-900 outline-none focus:border-blue-400 transition bg-white"
                 />
                 {errors.date && <p className="text-[12px] text-red-600">{errors.date}</p>}
               </div>
@@ -394,7 +394,7 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
                   type="date"
                   value={formData.collectionDate}
                   onChange={e => setFormData({ ...formData, collectionDate: e.target.value })}
-                  className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl text-[14px] outline-none focus:border-blue-400 transition bg-white"
+                  className="w-full px-4 py-3.5 border-2 border-gray-200 rounded-xl text-[14px] text-gray-900 outline-none focus:border-blue-400 transition bg-white"
                 />
               </div>
 
@@ -406,7 +406,7 @@ const AddNewDueModal: React.FC<AddNewDueModalProps> = ({ isOpen, onClose, onSave
                   onChange={e => setFormData({ ...formData, notes: e.target.value })}
                   placeholder="e.g., Invoice #101 for 5kg coffee beans"
                   maxLength={500}
-                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-[14px] outline-none focus:border-blue-400 resize-none h-20 transition bg-white"
+                  className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl text-[14px] text-gray-900 outline-none focus:border-blue-400 resize-none h-20 transition bg-white"
                 />
               </div>
 
