@@ -24,6 +24,8 @@ router.get('/public/register-info', async (req: Request, res: Response) => {
     res.json({
       shopName: settings.shopName || 'Our Shop',
       bonusAmount: settings.bonusAmount || 0,
+      rewardItemName: settings.rewardItemName || '',
+      rewardItemPrice: settings.rewardItemPrice || 0,
       welcomeMessage: settings.welcomeMessage || '',
     });
   } catch {
@@ -49,12 +51,18 @@ router.post('/public/register', async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'Registration not available' });
     }
 
+    const bonus = Number(settings.bonusAmount) || 0;
+    const rewardItemName = (settings.rewardItemName || '').trim();
+    const rewardItemPrice = Number(settings.rewardItemPrice) || 0;
+
     // Returning customer: same phone already exists for this tenant
     const existing = await Entity.findOne({ tenantId: tid, phone: cleanPhone });
     if (existing) {
       return res.json({
         returning: true,
-        bonusAmount: settings.bonusAmount || 0,
+        bonusAmount: bonus,
+        rewardItemName,
+        rewardItemPrice,
         shopName: settings.shopName || 'Our Shop',
         entityId: existing._id,
         name: existing.name,
@@ -68,8 +76,9 @@ router.post('/public/register', async (req: Request, res: Response) => {
       type: 'Customer',
     });
 
-    // If a bonus is configured, credit it as an EXPENSE tx (shop owes customer)
-    const bonus = Number(settings.bonusAmount) || 0;
+    let owedInc = 0;
+
+    // Monetary bonus → EXPENSE tx (shop owes customer)
     if (bonus > 0) {
       await Transaction.create({
         tenantId: tid,
@@ -82,15 +91,38 @@ router.post('/public/register', async (req: Request, res: Response) => {
         transactionType: 'Bonus',
         status: 'Pending',
       });
+      owedInc += bonus;
+    }
+
+    // Item reward → separate EXPENSE tx (redeemable in-store)
+    if (rewardItemName && rewardItemPrice > 0) {
+      await Transaction.create({
+        tenantId: tid,
+        entityId: entity._id,
+        entityName: entity.name,
+        amount: rewardItemPrice,
+        direction: 'EXPENSE',
+        transactionDate: new Date(),
+        notes: `Free ${rewardItemName} (registration reward)`,
+        items: rewardItemName,
+        transactionType: 'Reward',
+        status: 'Pending',
+      });
+      owedInc += rewardItemPrice;
+    }
+
+    if (owedInc > 0) {
       await Entity.updateOne(
         { _id: entity._id },
-        { $inc: { totalIOweThemNumber: bonus } }
+        { $inc: { totalIOweThemNumber: owedInc } }
       );
     }
 
     res.status(201).json({
       returning: false,
       bonusAmount: bonus,
+      rewardItemName,
+      rewardItemPrice,
       shopName: settings.shopName || 'Our Shop',
       entityId: entity._id,
       name: entity.name,

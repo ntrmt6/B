@@ -188,11 +188,13 @@ router.put('/duebook/settings', async (req: Request, res: Response) => {
     const tenantId = getTenantId(req);
     if (!tenantId) return res.status(400).json({ error: 'Tenant ID is required' });
 
-    const { shopName, registrationEnabled, bonusAmount, welcomeMessage } = req.body || {};
+    const { shopName, registrationEnabled, bonusAmount, rewardItemName, rewardItemPrice, welcomeMessage } = req.body || {};
     const update: any = {};
     if (typeof shopName === 'string') update.shopName = shopName.trim().slice(0, 120);
     if (typeof registrationEnabled === 'boolean') update.registrationEnabled = registrationEnabled;
     if (typeof bonusAmount === 'number' && bonusAmount >= 0) update.bonusAmount = bonusAmount;
+    if (typeof rewardItemName === 'string') update.rewardItemName = rewardItemName.trim().slice(0, 100);
+    if (typeof rewardItemPrice === 'number' && rewardItemPrice >= 0) update.rewardItemPrice = rewardItemPrice;
     if (typeof welcomeMessage === 'string') update.welcomeMessage = welcomeMessage.trim().slice(0, 300);
 
     const settings = await DueBookSettings.findOneAndUpdate(

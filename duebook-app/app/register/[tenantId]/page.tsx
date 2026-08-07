@@ -1,17 +1,21 @@
 'use client';
 
 import { useState, useEffect, use } from 'react';
-import { Gift, CheckCircle2, Store, Loader2 } from 'lucide-react';
+import { Gift, CheckCircle2, Store, Loader2, Package } from 'lucide-react';
 
 interface RegInfo {
   shopName: string;
   bonusAmount: number;
+  rewardItemName: string;
+  rewardItemPrice: number;
   welcomeMessage: string;
 }
 
 interface RegResult {
   returning: boolean;
   bonusAmount: number;
+  rewardItemName: string;
+  rewardItemPrice: number;
   shopName: string;
   entityId: string;
   name: string;
@@ -106,13 +110,28 @@ export default function RegisterPage({ params }: { params: Promise<{ tenantId: s
               <div className="flex items-center justify-center gap-2">
                 <Gift size={20} />
                 <span className="text-xs font-semibold uppercase tracking-wide">
-                  {result.returning ? 'Your bonus' : 'Welcome bonus'}
+                  {result.returning ? 'Your credit' : 'Welcome credit'}
                 </span>
               </div>
               <p className="mt-1 text-3xl font-black tabular-nums">{fmtTk(result.bonusAmount)}</p>
               <p className="mt-1 text-[11px] opacity-90">
                 Show this screen to the shop to redeem
               </p>
+            </div>
+          )}
+
+          {result.rewardItemName && (
+            <div className="mt-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white p-4">
+              <div className="flex items-center justify-center gap-2">
+                <Package size={20} />
+                <span className="text-xs font-semibold uppercase tracking-wide">Free Item</span>
+              </div>
+              <p className="mt-1 text-2xl font-black">1 × {result.rewardItemName}</p>
+              {result.rewardItemPrice > 0 && (
+                <p className="text-[11px] opacity-90">
+                  Worth {fmtTk(result.rewardItemPrice)} — show this to claim
+                </p>
+              )}
             </div>
           )}
 
@@ -141,10 +160,23 @@ export default function RegisterPage({ params }: { params: Promise<{ tenantId: s
           <div className="mt-6 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 text-white p-4 text-center">
             <div className="flex items-center justify-center gap-2">
               <Gift size={18} />
-              <span className="text-xs font-semibold uppercase tracking-wide">Welcome Bonus</span>
+              <span className="text-xs font-semibold uppercase tracking-wide">Welcome Credit</span>
             </div>
             <p className="mt-1 text-3xl font-black tabular-nums">{fmtTk(info.bonusAmount)}</p>
             <p className="text-[11px] opacity-90 mt-1">Register now to claim your credit</p>
+          </div>
+        )}
+
+        {info.rewardItemName && (
+          <div className={`${info.bonusAmount > 0 ? 'mt-3' : 'mt-6'} rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white p-4 text-center`}>
+            <div className="flex items-center justify-center gap-2">
+              <Package size={18} />
+              <span className="text-xs font-semibold uppercase tracking-wide">Free Item</span>
+            </div>
+            <p className="mt-1 text-2xl font-black">1 × {info.rewardItemName}</p>
+            {info.rewardItemPrice > 0 && (
+              <p className="text-[11px] opacity-90 mt-1">Worth {fmtTk(info.rewardItemPrice)}</p>
+            )}
           </div>
         )}
 

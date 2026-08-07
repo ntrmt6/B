@@ -33,6 +33,8 @@ interface RegSettings {
   shopName: string;
   registrationEnabled: boolean;
   bonusAmount: number;
+  rewardItemName: string;
+  rewardItemPrice: number;
   welcomeMessage: string;
 }
 
@@ -153,7 +155,7 @@ export default function DueBookPage() {
   const [editSaving, setEditSaving] = useState(false);
 
   /* registration settings (self-registration + welcome bonus) */
-  const DEFAULT_REG: RegSettings = { shopName: '', registrationEnabled: false, bonusAmount: 0, welcomeMessage: '' };
+  const DEFAULT_REG: RegSettings = { shopName: '', registrationEnabled: false, bonusAmount: 0, rewardItemName: '', rewardItemPrice: 0, welcomeMessage: '' };
   const [regSettings, setRegSettings] = useState<RegSettings>(DEFAULT_REG);
   const [draftReg, setDraftReg] = useState<RegSettings>(DEFAULT_REG);
   const [regSaving, setRegSaving] = useState(false);
@@ -240,6 +242,8 @@ export default function DueBookPage() {
           shopName: s.shopName || '',
           registrationEnabled: !!s.registrationEnabled,
           bonusAmount: Number(s.bonusAmount) || 0,
+          rewardItemName: s.rewardItemName || '',
+          rewardItemPrice: Number(s.rewardItemPrice) || 0,
           welcomeMessage: s.welcomeMessage || '',
         });
       } catch { /* ignore */ }
@@ -377,9 +381,15 @@ export default function DueBookPage() {
         shopName: draftReg.shopName,
         registrationEnabled: draftReg.registrationEnabled,
         bonusAmount: Number(draftReg.bonusAmount) || 0,
+        rewardItemName: draftReg.rewardItemName,
+        rewardItemPrice: Number(draftReg.rewardItemPrice) || 0,
         welcomeMessage: draftReg.welcomeMessage,
       });
-      setRegSettings({ ...draftReg, bonusAmount: Number(draftReg.bonusAmount) || 0 });
+      setRegSettings({
+        ...draftReg,
+        bonusAmount: Number(draftReg.bonusAmount) || 0,
+        rewardItemPrice: Number(draftReg.rewardItemPrice) || 0,
+      });
       toast.success('Registration settings saved');
     } catch { toast.error('Failed to save'); }
     finally { setRegSaving(false); }
@@ -1410,17 +1420,66 @@ export default function DueBookPage() {
                       />
                     </div>
                     <div>
-                      <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Welcome Bonus (Tk)</label>
+                      <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Welcome Credit (Tk)</label>
                       <input
                         type="number"
                         inputMode="numeric"
                         min={0}
                         value={draftReg.bonusAmount || ''}
                         onChange={e => setDraftReg(p => ({ ...p, bonusAmount: parseFloat(e.target.value) || 0 }))}
-                        placeholder="0 = no bonus"
+                        placeholder="0 = no cash credit"
                         className="mt-0.5 w-full border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-[13px] text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400"
                       />
                     </div>
+
+                    <div className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 p-2.5 space-y-2">
+                      <p className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">Free Item (optional)</p>
+                      {catalog.length > 0 && (
+                        <select
+                          value=""
+                          onChange={e => {
+                            const item = catalog.find(c => c.id === e.target.value);
+                            if (item) setDraftReg(p => ({ ...p, rewardItemName: item.name, rewardItemPrice: item.price }));
+                          }}
+                          className="w-full border border-emerald-200 dark:border-emerald-800 rounded-lg px-2.5 py-1.5 text-[12px] text-gray-900 dark:text-slate-100 bg-white dark:bg-slate-700 outline-none focus:border-emerald-400"
+                        >
+                          <option value="">Pick from catalog…</option>
+                          {catalog.map(c => (
+                            <option key={c.id} value={c.id}>{c.name} — Tk {c.price}</option>
+                          ))}
+                        </select>
+                      )}
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={draftReg.rewardItemName}
+                          onChange={e => setDraftReg(p => ({ ...p, rewardItemName: e.target.value }))}
+                          placeholder="Item name"
+                          className="flex-1 min-w-0 border border-emerald-200 dark:border-emerald-800 rounded-lg px-2.5 py-1.5 text-[12px] text-gray-900 dark:text-slate-100 bg-white dark:bg-slate-700 outline-none focus:border-emerald-400"
+                        />
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={0}
+                          value={draftReg.rewardItemPrice || ''}
+                          onChange={e => setDraftReg(p => ({ ...p, rewardItemPrice: parseFloat(e.target.value) || 0 }))}
+                          placeholder="Tk"
+                          className="w-16 border border-emerald-200 dark:border-emerald-800 rounded-lg px-2 py-1.5 text-[12px] text-gray-900 dark:text-slate-100 bg-white dark:bg-slate-700 outline-none focus:border-emerald-400"
+                        />
+                        {(draftReg.rewardItemName || draftReg.rewardItemPrice > 0) && (
+                          <button
+                            onClick={() => setDraftReg(p => ({ ...p, rewardItemName: '', rewardItemPrice: 0 }))}
+                            className="px-2 rounded-lg bg-white dark:bg-slate-700 border border-emerald-200 dark:border-emerald-800 text-emerald-600 dark:text-emerald-400"
+                            title="Clear reward item">
+                            <X size={14} />
+                          </button>
+                        )}
+                      </div>
+                      <p className="text-[10px] text-emerald-600 dark:text-emerald-400/80">
+                        Leave empty for no item reward. Price is used to credit the customer's balance for redemption.
+                      </p>
+                    </div>
+
                     <div>
                       <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Welcome Message (optional)</label>
                       <textarea
