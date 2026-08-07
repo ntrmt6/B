@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   --sky: #0ea5e9;
@@ -40,6 +41,12 @@ input, textarea, select {
 }
 
 input::placeholder, textarea::placeholder { color: #9ca3af; }
+
+.dark input, .dark textarea, .dark select {
+  color: #f1f5f9 !important;
+  background-color: #1e293b !important;
+}
+.dark input::placeholder, .dark textarea::placeholder { color: #64748b; }
 
 /* bottom sheet slide-up animation */
 .sheet-slide-up {
