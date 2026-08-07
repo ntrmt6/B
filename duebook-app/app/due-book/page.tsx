@@ -8,8 +8,9 @@ import toast from 'react-hot-toast';
 import {
   Plus, Search, X, ChevronLeft, LogOut,
   TrendingUp, TrendingDown, UserPlus, Trash2, CheckCircle2, Circle, Download,
-  Minus, Pencil, Settings, Moon, Sun,
+  Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon,
 } from 'lucide-react';
+import { QRCodeSVG } from 'qrcode.react';
 
 /* ─── Types ─── */
 interface Entity {
@@ -28,6 +29,12 @@ interface Transaction {
 interface CatalogItem { id: string; name: string; price: number; }
 interface CartItem { item: CatalogItem; qty: number; }
 type Labels = { Customer: string; Supplier: string; Employee: string };
+interface RegSettings {
+  shopName: string;
+  registrationEnabled: boolean;
+  bonusAmount: number;
+  welcomeMessage: string;
+}
 
 const TYPES: Entity['type'][] = ['Customer', 'Supplier', 'Employee'];
 const AVATAR_COLORS = ['#0ea5e9','#8b5cf6','#10b981','#f59e0b','#ec4899','#6366f1'];
@@ -69,6 +76,25 @@ const patchTxStatus = async (tid: string, txId: string, status: 'Pending' | 'Pai
   api.patch(`/transactions/${txId}`, { status }, { headers: { 'X-Tenant-Id': tid } });
 const patchEntity = async (tid: string, id: string, payload: { name: string; phone: string }) =>
   api.put(`/entities/${id}`, payload, { headers: { 'X-Tenant-Id': tid } });
+const getRegSettings = async (tid: string): Promise<RegSettings> => {
+  const r = await api.get('/duebook/settings', { headers: { 'X-Tenant-Id': tid } });
+  return r.data;
+};
+const saveRegSettingsApi = async (tid: string, payload: Partial<RegSettings>) =>
+  api.put('/duebook/settings', payload, { headers: { 'X-Tenant-Id': tid } });
+
+/* WhatsApp phone: strip non-digits; if starts with 0 → BD (880). */
+const waNumber = (phone: string) => {
+  const d = phone.replace(/\D/g, '');
+  if (!d) return '';
+  if (d.startsWith('0') && d.length === 11) return '880' + d.slice(1);
+  return d;
+};
+const waUrl = (phone: string, message: string) => {
+  const n = waNumber(phone);
+  if (!n) return '';
+  return `https://wa.me/${n}?text=${encodeURIComponent(message)}`;
+};
 
 /* ══════════════════════════════════════════ */
 export default function DueBookPage() {
@@ -125,6 +151,13 @@ export default function DueBookPage() {
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editSaving, setEditSaving] = useState(false);
+
+  /* registration settings (self-registration + welcome bonus) */
+  const DEFAULT_REG: RegSettings = { shopName: '', registrationEnabled: false, bonusAmount: 0, welcomeMessage: '' };
+  const [regSettings, setRegSettings] = useState<RegSettings>(DEFAULT_REG);
+  const [draftReg, setDraftReg] = useState<RegSettings>(DEFAULT_REG);
+  const [regSaving, setRegSaving] = useState(false);
+  const [showQR, setShowQR] = useState(false);
 
   /* settings */
   const [showSettings, setShowSettings] = useState(false);
@@ -196,6 +229,22 @@ export default function DueBookPage() {
   }, [tenantId]);
 
   useEffect(() => { loadEntities(); }, [loadEntities]);
+
+  /* load registration settings once tenant is known */
+  useEffect(() => {
+    if (!tenantId) return;
+    (async () => {
+      try {
+        const s = await getRegSettings(tenantId);
+        setRegSettings({
+          shopName: s.shopName || '',
+          registrationEnabled: !!s.registrationEnabled,
+          bonusAmount: Number(s.bonusAmount) || 0,
+          welcomeMessage: s.welcomeMessage || '',
+        });
+      } catch { /* ignore */ }
+    })();
+  }, [tenantId]);
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
@@ -307,6 +356,8 @@ export default function DueBookPage() {
   /* ─── Labels helpers ─── */
   const openSettings = () => {
     setDraftLabels({ ...labels });
+    setDraftReg({ ...regSettings });
+    setShowQR(false);
     setShowSettings(true);
     window.history.pushState({ duebook: 'modal' }, '');
   };
@@ -316,6 +367,22 @@ export default function DueBookPage() {
     localStorage.setItem(LABELS_KEY, JSON.stringify(draftLabels));
     setShowSettings(false);
     toast.success('Labels saved');
+  };
+
+  const saveRegSettings = async () => {
+    if (!tenantId) return;
+    setRegSaving(true);
+    try {
+      await saveRegSettingsApi(tenantId, {
+        shopName: draftReg.shopName,
+        registrationEnabled: draftReg.registrationEnabled,
+        bonusAmount: Number(draftReg.bonusAmount) || 0,
+        welcomeMessage: draftReg.welcomeMessage,
+      });
+      setRegSettings({ ...draftReg, bonusAmount: Number(draftReg.bonusAmount) || 0 });
+      toast.success('Registration settings saved');
+    } catch { toast.error('Failed to save'); }
+    finally { setRegSaving(false); }
   };
 
   /* ─── Edit entity helpers ─── */
@@ -795,9 +862,18 @@ export default function DueBookPage() {
               {filtered.map(entity => {
                 const net = (entity.totalOwedToMe || 0) - (entity.totalIOweThemNumber || 0);
                 const total = (entity.totalOwedToMe || 0) + (entity.totalIOweThemNumber || 0);
+                const waHref = entity.phone
+                  ? waUrl(
+                      entity.phone,
+                      net > 0
+                        ? `Hi ${entity.name}, this is a friendly reminder — your pending balance is ${fmt(net)}. Thank you!`
+                        : `Hi ${entity.name}, we miss you at our shop! Come by soon for a special offer.`
+                    )
+                  : '';
                 return (
-                  <button key={entity._id} onClick={() => selectEntity(entity)}
-                    className="w-full flex items-center gap-2.5 bg-white dark:bg-slate-800 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.05)] active:bg-gray-50 dark:active:bg-slate-700 transition">
+                  <div key={entity._id} onClick={() => selectEntity(entity)}
+                    role="button"
+                    className="w-full flex items-center gap-2.5 bg-white dark:bg-slate-800 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.05)] active:bg-gray-50 dark:active:bg-slate-700 transition cursor-pointer">
                     <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[12px] shrink-0"
                       style={{ background: avatarColor(entity.name) }}>
                       {initial(entity.name)}
@@ -820,7 +896,18 @@ export default function DueBookPage() {
                         <p className="text-[12px] text-gray-300 dark:text-slate-600 font-medium">Clear</p>
                       )}
                     </div>
-                  </button>
+                    {waHref && (
+                      <a
+                        href={waHref}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        onClick={e => e.stopPropagation()}
+                        title={net > 0 ? 'Send WhatsApp reminder' : 'Send WhatsApp offer'}
+                        className="ml-1 w-8 h-8 flex items-center justify-center rounded-lg bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50 shrink-0">
+                        <MessageCircle size={15} />
+                      </a>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -1288,6 +1375,107 @@ export default function DueBookPage() {
                     className="w-full py-2.5 rounded-xl border-2 border-sky-400 text-sky-500 dark:text-sky-400 text-[13px] font-bold active:scale-[0.98] transition-all">
                     Copy View Link
                   </button>
+                </div>
+              )}
+
+              {/* Customer self-registration */}
+              {tenantId && (
+                <div className="pt-3 border-t border-gray-100 dark:border-slate-700">
+                  <p className="text-[12px] font-bold text-gray-500 dark:text-slate-400 mb-1 uppercase tracking-wide flex items-center gap-1.5">
+                    <Gift size={13} /> Customer Registration
+                  </p>
+                  <p className="text-[11px] text-gray-400 dark:text-slate-500 mb-3">
+                    Share a QR / link. Customers register themselves and get a welcome credit.
+                  </p>
+
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-[13px] font-semibold text-gray-700 dark:text-slate-200">Enable self-registration</span>
+                    <button
+                      onClick={() => setDraftReg(p => ({ ...p, registrationEnabled: !p.registrationEnabled }))}
+                      className={`relative w-11 h-6 rounded-full transition-colors ${draftReg.registrationEnabled ? 'bg-sky-500' : 'bg-gray-200 dark:bg-slate-600'}`}
+                    >
+                      <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${draftReg.registrationEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div>
+                      <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Shop Name</label>
+                      <input
+                        type="text"
+                        value={draftReg.shopName}
+                        onChange={e => setDraftReg(p => ({ ...p, shopName: e.target.value }))}
+                        placeholder="e.g. Karim Store"
+                        className="mt-0.5 w-full border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-[13px] text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Welcome Bonus (Tk)</label>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        value={draftReg.bonusAmount || ''}
+                        onChange={e => setDraftReg(p => ({ ...p, bonusAmount: parseFloat(e.target.value) || 0 }))}
+                        placeholder="0 = no bonus"
+                        className="mt-0.5 w-full border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-[13px] text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Welcome Message (optional)</label>
+                      <textarea
+                        value={draftReg.welcomeMessage}
+                        onChange={e => setDraftReg(p => ({ ...p, welcomeMessage: e.target.value }))}
+                        placeholder="Thanks for joining our shop!"
+                        rows={2}
+                        className="mt-0.5 w-full border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-[13px] text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400 resize-none"
+                      />
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={saveRegSettings}
+                    disabled={regSaving}
+                    className="w-full mt-3 py-2.5 rounded-xl bg-sky-500 text-white text-[13px] font-bold active:scale-[0.98] transition-all disabled:opacity-60">
+                    {regSaving ? 'Saving…' : 'Save Registration Settings'}
+                  </button>
+
+                  {regSettings.registrationEnabled && (
+                    <div className="mt-3 space-y-2">
+                      <button
+                        onClick={() => setShowQR(v => !v)}
+                        className="w-full py-2.5 rounded-xl border-2 border-sky-400 text-sky-500 dark:text-sky-400 text-[13px] font-bold active:scale-[0.98] transition-all flex items-center justify-center gap-1.5">
+                        <QrIcon size={14} /> {showQR ? 'Hide QR' : 'Show QR & Link'}
+                      </button>
+
+                      {showQR && (
+                        <div className="rounded-xl bg-white dark:bg-slate-700 p-4 flex flex-col items-center gap-2 border border-gray-100 dark:border-slate-600">
+                          <div className="bg-white p-2 rounded-lg">
+                            <QRCodeSVG
+                              value={`${typeof window !== 'undefined' ? window.location.origin : ''}/register/${tenantId}`}
+                              size={168}
+                              level="M"
+                            />
+                          </div>
+                          <p className="text-[10px] text-center text-gray-500 dark:text-slate-400 break-all px-2">
+                            {typeof window !== 'undefined' ? window.location.origin : ''}/register/{tenantId}
+                          </p>
+                          <button
+                            id="copy-reg-btn"
+                            onClick={() => {
+                              const url = `${window.location.origin}/register/${tenantId}`;
+                              navigator.clipboard.writeText(url).then(() => {
+                                const el = document.getElementById('copy-reg-btn');
+                                if (el) { el.textContent = 'Copied!'; setTimeout(() => { if (el) el.textContent = 'Copy Registration Link'; }, 2000); }
+                              });
+                            }}
+                            className="w-full py-2 rounded-lg bg-sky-500 text-white text-[12px] font-bold active:scale-[0.98]">
+                            Copy Registration Link
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

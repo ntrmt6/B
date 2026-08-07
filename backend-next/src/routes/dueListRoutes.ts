@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { Entity, IEntity } from '../models/Entity';
 import { Transaction, ITransaction } from '../models/Transaction';
+import { DueBookSettings } from '../models/DueBookSettings';
 import { authenticateToken, requireAdmin } from '../middleware/auth';
 
 const router = Router();
@@ -157,6 +158,52 @@ router.delete('/entities/:id', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error deleting entity:', error);
     res.status(500).json({ error: 'Error deleting entity' });
+  }
+});
+
+// ============ DUEBOOK SETTINGS (self-registration + bonus) ============
+
+router.get('/duebook/settings', async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantId(req);
+    if (!tenantId) return res.status(400).json({ error: 'Tenant ID is required' });
+    const settings = await DueBookSettings.findOne({ tenantId }).lean();
+    res.json(
+      settings || {
+        tenantId,
+        shopName: '',
+        registrationEnabled: false,
+        bonusAmount: 0,
+        welcomeMessage: '',
+      }
+    );
+  } catch (error) {
+    console.error('Error fetching duebook settings:', error);
+    res.status(500).json({ error: 'Error fetching settings' });
+  }
+});
+
+router.put('/duebook/settings', async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantId(req);
+    if (!tenantId) return res.status(400).json({ error: 'Tenant ID is required' });
+
+    const { shopName, registrationEnabled, bonusAmount, welcomeMessage } = req.body || {};
+    const update: any = {};
+    if (typeof shopName === 'string') update.shopName = shopName.trim().slice(0, 120);
+    if (typeof registrationEnabled === 'boolean') update.registrationEnabled = registrationEnabled;
+    if (typeof bonusAmount === 'number' && bonusAmount >= 0) update.bonusAmount = bonusAmount;
+    if (typeof welcomeMessage === 'string') update.welcomeMessage = welcomeMessage.trim().slice(0, 300);
+
+    const settings = await DueBookSettings.findOneAndUpdate(
+      { tenantId },
+      { $set: update, $setOnInsert: { tenantId } },
+      { new: true, upsert: true, runValidators: true }
+    );
+    res.json(settings);
+  } catch (error) {
+    console.error('Error saving duebook settings:', error);
+    res.status(500).json({ error: 'Error saving settings' });
   }
 });
 

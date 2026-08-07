@@ -21,6 +21,7 @@ import { incomesRouter } from './routes/incomes';
 import purchasesRouter from './routes/purchases';
 import dueListRoutes from './routes/dueListRoutes';
 import publicDueViewRouter from './routes/publicDueView';
+import publicRegisterRouter from './routes/publicRegister';
 import uploadRouter from './routes/upload';
 import authRouter from './routes/auth';
 import reviewsRouter from './routes/reviews';
@@ -286,6 +287,7 @@ app.use('/api/stores', storesDirectoryRouter);
 app.use('/api/v1', imagekitAuthRouter);
 app.use('/api/super-admin/blog', blogRouter);
 app.use('/api', publicDueViewRouter);
+app.use('/api', publicRegisterRouter);
 app.use('/api', dueListRoutes);
 
 app.use('/', uploadRouter);
