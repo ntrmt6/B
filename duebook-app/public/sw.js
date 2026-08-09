@@ -1,4 +1,4 @@
-const CACHE = 'duebook-v2';
+const CACHE = 'duebook-v3';
 const SHELL = ['/due-book', '/login', '/manifest.json'];
 
 self.addEventListener('install', e => {

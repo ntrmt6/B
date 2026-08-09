@@ -4,19 +4,27 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/lib/api';
+import {
+  getEntitiesOffline, getTxOffline,
+  createEntityOffline, addTxOffline, patchTxStatusOffline,
+  patchEntityOffline, deleteEntityOffline, isTempId,
+} from '@/lib/offlineApi';
+import { drain as drainQueue } from '@/lib/offlineQueue';
 import toast from 'react-hot-toast';
 import {
   Plus, Search, X, ChevronLeft, LogOut,
   TrendingUp, TrendingDown, UserPlus, Trash2, CheckCircle2, Circle, Download,
-  Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon,
+  Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon, CloudOff,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
+import SyncBar from './SyncBar';
 
 /* ─── Types ─── */
 interface Entity {
   _id: string; name: string; phone?: string;
   type: 'Customer' | 'Supplier' | 'Employee';
   totalOwedToMe: number; totalIOweThemNumber: number;
+  _pending?: boolean;
 }
 
 interface Transaction {
@@ -24,6 +32,7 @@ interface Transaction {
   direction: 'INCOME' | 'EXPENSE';
   transactionDate: string; notes?: string;
   status: 'Pending' | 'Paid' | 'Cancelled';
+  _pending?: boolean;
 }
 
 interface CatalogItem { id: string; name: string; price: number; }
@@ -61,23 +70,13 @@ const fmtDate = (s: string) => new Date(s).toLocaleDateString('en-GB', { day:'2-
 
 /* ─── API helpers ─── */
 const getEntities = async (tid: string): Promise<Entity[]> => {
-  const r = await api.get('/entities', { headers: { 'X-Tenant-Id': tid } });
-  return r.data?.entities || r.data || [];
+  const { data } = await getEntitiesOffline(tid);
+  return data as Entity[];
 };
 const getTx = async (tid: string, entityId: string): Promise<Transaction[]> => {
-  const r = await api.get('/transactions', { params: { entityId }, headers: { 'X-Tenant-Id': tid } });
-  return r.data?.transactions || r.data || [];
+  const { data } = await getTxOffline(tid, entityId);
+  return data as Transaction[];
 };
-const addTx = async (tid: string, payload: object) =>
-  api.post('/transactions', payload, { headers: { 'X-Tenant-Id': tid } });
-const addEntity = async (tid: string, payload: object) =>
-  api.post('/entities', payload, { headers: { 'X-Tenant-Id': tid } });
-const deleteEntity = async (tid: string, id: string) =>
-  api.delete(`/entities/${id}`, { headers: { 'X-Tenant-Id': tid } });
-const patchTxStatus = async (tid: string, txId: string, status: 'Pending' | 'Paid') =>
-  api.patch(`/transactions/${txId}`, { status }, { headers: { 'X-Tenant-Id': tid } });
-const patchEntity = async (tid: string, id: string, payload: { name: string; phone: string }) =>
-  api.put(`/entities/${id}`, payload, { headers: { 'X-Tenant-Id': tid } });
 const getRegSettings = async (tid: string): Promise<RegSettings> => {
   const r = await api.get('/duebook/settings', { headers: { 'X-Tenant-Id': tid } });
   return r.data;
@@ -252,12 +251,17 @@ export default function DueBookPage() {
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
-    const on = () => setIsOnline(true);
+    const on = () => {
+      setIsOnline(true);
+      void drainQueue().then(res => {
+        if (res.synced > 0 && tenantId) loadEntities();
+      });
+    };
     const off = () => setIsOnline(false);
     window.addEventListener('online', on);
     window.addEventListener('offline', off);
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
-  }, []);
+  }, [tenantId, loadEntities]);
 
   useEffect(() => {
     const onPop = () => {
@@ -409,14 +413,22 @@ export default function DueBookPage() {
     if (!editName.trim()) { toast.error('Name required'); return; }
     setEditSaving(true);
     try {
-      await patchEntity(tenantId, selected._id, { name: editName.trim(), phone: editPhone.trim() });
-      toast.success('Updated');
+      const res = await patchEntityOffline(tenantId, selected._id, { name: editName.trim(), phone: editPhone.trim() });
+      toast.success(res.queued ? 'Saved offline — will sync' : 'Updated');
       setShowEditEntity(false);
-      const updated = await getEntities(tenantId);
-      setEntities(updated);
-      const fresh = updated.find(e => e._id === selected._id);
-      if (fresh) setSelected(fresh);
-    } catch { toast.error('Failed to update'); }
+      // Optimistic local update
+      setEntities(prev => prev.map(e => e._id === selected._id ? { ...e, name: editName.trim(), phone: editPhone.trim() } : e));
+      setSelected(prev => prev ? { ...prev, name: editName.trim(), phone: editPhone.trim() } : prev);
+      if (!res.queued) {
+        const updated = await getEntities(tenantId);
+        setEntities(updated);
+        const fresh = updated.find(e => e._id === selected._id);
+        if (fresh) setSelected(fresh);
+      }
+    } catch (e) {
+      const err = e as { message?: string };
+      toast.error(err?.message || 'Failed to update');
+    }
     finally { setEditSaving(false); }
   };
 
@@ -430,12 +442,12 @@ export default function DueBookPage() {
       : addNote || undefined;
     setAddSaving(true);
     try {
-      await addTx(tenantId, {
+      const res = await addTxOffline(tenantId, {
         entityId: selected._id, entityName: selected.name,
         amount: amt, direction: addDir,
         transactionDate: addDate, notes: autoNote,
       });
-      toast.success('Saved');
+      toast.success(res.queued ? 'Saved offline — will sync' : 'Saved');
       setShowAdd(false);
       setAddAmount(''); setAddNote(''); setCart([]);
       setAddDate(new Date().toISOString().split('T')[0]);
@@ -444,7 +456,10 @@ export default function DueBookPage() {
       const fresh = updated.find(e => e._id === selected._id);
       if (fresh) setSelected(fresh);
       await loadTx(fresh || selected);
-    } catch { toast.error('Failed to save'); }
+    } catch (e) {
+      const err = e as { message?: string };
+      toast.error(err?.message || 'Failed to save');
+    }
     finally { setAddSaving(false); }
   };
 
@@ -452,22 +467,28 @@ export default function DueBookPage() {
     if (!tenantId || !newName || !newPhone) { toast.error('Name and phone required'); return; }
     setEntitySaving(true);
     try {
-      await addEntity(tenantId, { name: newName, phone: newPhone, type: newType });
-      toast.success('Added');
+      const res = await createEntityOffline(tenantId, { name: newName, phone: newPhone, type: newType });
+      toast.success(res.queued ? 'Saved offline — will sync' : 'Added');
       setShowAddEntity(false); setNewName(''); setNewPhone('');
       await loadEntities();
-    } catch { toast.error('Failed to add'); }
+    } catch (e) {
+      const err = e as { message?: string };
+      toast.error(err?.message || 'Failed to add');
+    }
     finally { setEntitySaving(false); }
   };
 
   const handleDeleteEntity = async (entity: Entity) => {
     if (!tenantId || !confirm(`Delete ${entity.name}?`)) return;
     try {
-      await deleteEntity(tenantId, entity._id);
+      const res = await deleteEntityOffline(tenantId, entity._id, entity.name);
       setSelected(null); setTx([]);
       await loadEntities();
-      toast.success('Deleted');
-    } catch { toast.error('Cannot delete — has transactions'); }
+      toast.success(res.queued ? 'Delete queued — will sync' : 'Deleted');
+    } catch (e) {
+      const err = e as { response?: { data?: { message?: string } }; message?: string };
+      toast.error(err?.response?.data?.message || err?.message || 'Cannot delete — has transactions');
+    }
   };
 
   const handleMarkPaid = async (tx: Transaction & { bal: number }) => {
@@ -475,14 +496,25 @@ export default function DueBookPage() {
     const newStatus = tx.status === 'Paid' ? 'Pending' : 'Paid';
     setMarkingPaid(tx._id);
     try {
-      await patchTxStatus(tenantId, tx._id, newStatus);
-      toast.success(newStatus === 'Paid' ? 'Marked as paid' : 'Marked as pending');
-      const updated = await getEntities(tenantId);
-      setEntities(updated);
-      const fresh = updated.find(e => e._id === selected?._id);
-      if (fresh) setSelected(fresh);
-      if (selected) await loadTx(fresh || selected);
-    } catch { toast.error('Failed to update'); }
+      const res = await patchTxStatusOffline(tenantId, tx._id, newStatus);
+      toast.success(
+        res.queued
+          ? `Marked as ${newStatus.toLowerCase()} — will sync`
+          : (newStatus === 'Paid' ? 'Marked as paid' : 'Marked as pending')
+      );
+      // Optimistic local flip
+      setTx(prev => prev.map(t => t._id === tx._id ? { ...t, status: newStatus } : t));
+      if (!res.queued) {
+        const updated = await getEntities(tenantId);
+        setEntities(updated);
+        const fresh = updated.find(e => e._id === selected?._id);
+        if (fresh) setSelected(fresh);
+        if (selected) await loadTx(fresh || selected);
+      }
+    } catch (e) {
+      const err = e as { message?: string };
+      toast.error(err?.message || 'Failed to update');
+    }
     finally { setMarkingPaid(null); }
   };
 
@@ -732,12 +764,8 @@ export default function DueBookPage() {
         </div>
       </div>
 
-      {/* ── OFFLINE BANNER ── */}
-      {!isOnline && (
-        <div className="flex-shrink-0 bg-amber-500 text-white text-center text-[11px] font-semibold py-1 tracking-wide">
-          No internet — showing cached data
-        </div>
-      )}
+      {/* ── SYNC / OFFLINE BAR ── */}
+      <SyncBar isOnline={isOnline} onSynced={loadEntities} />
 
       {/* ── SUMMARY ROW ── */}
       {!selected && (
@@ -889,7 +917,14 @@ export default function DueBookPage() {
                       {initial(entity.name)}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-[13px] font-semibold text-gray-900 dark:text-slate-100 truncate">{entity.name}</p>
+                      <div className="flex items-center gap-1">
+                        <p className="text-[13px] font-semibold text-gray-900 dark:text-slate-100 truncate">{entity.name}</p>
+                        {isTempId(entity._id) && (
+                          <span title="Waiting to sync" className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/40 px-1 rounded">
+                            <CloudOff size={9} /> SYNC
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[11px] text-gray-400 dark:text-slate-500 truncate">{entity.phone || labels[entity.type]}</p>
                     </div>
                     <div className="text-right shrink-0">
@@ -949,6 +984,7 @@ export default function DueBookPage() {
                         <div className="flex items-center gap-1.5">
                           <p className={`text-[11px] ${isPaid ? 'text-gray-400 dark:text-slate-500' : 'text-gray-500 dark:text-slate-400'}`}>{fmtDate(tx.transactionDate)}</p>
                           {isPaid && <span className="text-[9px] font-bold text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400 px-1 rounded">PAID</span>}
+                          {isTempId(tx._id) && <span className="text-[9px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/40 dark:text-amber-400 px-1 rounded inline-flex items-center gap-0.5"><CloudOff size={9} /> SYNC</span>}
                         </div>
                         {tx.notes && <p className="text-[11px] text-gray-400 dark:text-slate-500 truncate mt-0.5">{tx.notes}</p>}
                       </div>
