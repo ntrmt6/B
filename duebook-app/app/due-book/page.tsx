@@ -14,7 +14,7 @@ import toast from 'react-hot-toast';
 import {
   Plus, Search, X, ChevronLeft, LogOut,
   TrendingUp, TrendingDown, UserPlus, Trash2, CheckCircle2, Circle, Download,
-  Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon, CloudOff, Send,
+  Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon, CloudOff, Send, Bell,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import SyncBar from './SyncBar';
@@ -127,6 +127,57 @@ const netPending = (
     (s, t) => (t.status === 'Pending' ? s + (t.direction === 'INCOME' ? t.amount : -t.amount) : s),
     0,
   );
+
+const buildDueReminder = (
+  entityName: string,
+  totalDue: number,
+  shopName: string,
+  pendingTxs?: { amount: number; direction: 'INCOME' | 'EXPENSE'; transactionDate: string; notes?: string; status: string }[],
+) => {
+  const header = shopName?.trim() || 'DueBook';
+  const line = '━━━━━━━━━━━━━━━━━━';
+  const amount = `Tk ${totalDue.toLocaleString('en-IN')}`;
+
+  const unpaid = (pendingTxs || [])
+    .filter(t => t.status === 'Pending' && t.direction === 'INCOME')
+    .sort((a, b) => new Date(a.transactionDate).getTime() - new Date(b.transactionDate).getTime());
+
+  const parts: string[] = [
+    `🔔 *Payment Reminder*`,
+    line,
+    `Hello *${entityName}*,`,
+    ``,
+    `This is a friendly reminder from *${header}*.`,
+    ``,
+    `💰 Total due: *${amount}*`,
+  ];
+
+  if (unpaid.length > 0) {
+    const oldest = unpaid[0];
+    const days = Math.max(0, Math.floor((Date.now() - new Date(oldest.transactionDate).getTime()) / 86400000));
+    parts.push(`📊 Unpaid entries: *${unpaid.length}*`);
+    parts.push(`📅 Pending since: ${fmtDate(oldest.transactionDate)}${days > 0 ? ` (${days} day${days === 1 ? '' : 's'})` : ''}`);
+
+    const recent = unpaid.slice(-3).reverse();
+    parts.push(``);
+    parts.push(`*Recent unpaid:*`);
+    for (const t of recent) {
+      const note = t.notes?.trim();
+      parts.push(`• ${fmtDate(t.transactionDate)} — Tk ${t.amount.toLocaleString('en-IN')}${note ? ` (${note})` : ''}`);
+    }
+  }
+
+  parts.push(line);
+  parts.push(
+    unpaid.length > 1
+      ? `Your balance has been growing. Kindly clear at your earliest convenience.`
+      : `Kindly clear at your earliest convenience.`,
+  );
+  parts.push(``);
+  parts.push(`Thank you! 🙏`);
+
+  return parts.join('\n');
+};
 
 /* ─── API helpers ─── */
 const getEntities = async (tid: string): Promise<Entity[]> => {
@@ -518,6 +569,28 @@ export default function DueBookPage() {
     } catch {
       toast.error('Unable to share');
     }
+  };
+
+  const shareText = async (msg: string, phone?: string, copiedLabel = 'Copied') => {
+    if (phone) {
+      const href = waUrl(phone, msg);
+      if (href) { window.open(href, '_blank', 'noopener,noreferrer'); return; }
+    }
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try { await navigator.share({ text: msg }); return; } catch { /* user cancelled */ }
+    }
+    try { await navigator.clipboard.writeText(msg); toast.success(copiedLabel); }
+    catch { toast.error('Unable to share'); }
+  };
+
+  const handleSendReminder = async (
+    entity: Entity,
+    pendingTxs?: Transaction[],
+  ) => {
+    const totalDue = (entity.totalOwedToMe || 0) - (entity.totalIOweThemNumber || 0);
+    if (totalDue <= 0) { toast('No pending due for this customer'); return; }
+    const msg = buildDueReminder(entity.name, totalDue, regSettings.shopName || '', pendingTxs);
+    await shareText(msg, entity.phone, 'Reminder copied');
   };
 
   const handleAddTx = async () => {
@@ -965,6 +1038,16 @@ export default function DueBookPage() {
               </p>
             </div>
           </div>
+          {(selected.totalOwedToMe - selected.totalIOweThemNumber) > 0 && (
+            <button
+              onClick={() => handleSendReminder(selected, transactions)}
+              className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 text-[12px] font-bold border border-amber-200 dark:border-amber-800 active:scale-[0.98] transition"
+              title={selected.phone ? 'Send WhatsApp due reminder' : 'Share due reminder'}
+            >
+              <Bell size={13} />
+              Send Due Reminder — {fmt(selected.totalOwedToMe - selected.totalIOweThemNumber)}
+            </button>
+          )}
         </div>
       )}
 
@@ -1024,7 +1107,7 @@ export default function DueBookPage() {
                   ? waUrl(
                       entity.phone,
                       net > 0
-                        ? `Hi ${entity.name}, this is a friendly reminder — your pending balance is ${fmt(net)}. Thank you!`
+                        ? buildDueReminder(entity.name, net, regSettings.shopName || '')
                         : `Hi ${entity.name}, we miss you at our shop! Come by soon for a special offer.`
                     )
                   : '';
