@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import SyncBar from './SyncBar';
+import ReminderInbox from './ReminderInbox';
 
 /* ─── Types ─── */
 interface Entity {
@@ -924,6 +925,7 @@ export default function DueBookPage() {
                   ? <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
                   : <Download size={14} />}
               </button>
+              <ReminderInbox isDark={isDark} />
               <button onClick={toggleDark}
                 className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700">
                 {isDark ? <Sun size={14} /> : <Moon size={14} />}

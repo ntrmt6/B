@@ -20,6 +20,8 @@ import { profitLossRouter } from './routes/profitLoss';
 import { incomesRouter } from './routes/incomes';
 import purchasesRouter from './routes/purchases';
 import dueListRoutes from './routes/dueListRoutes';
+import reminderRoutes from './routes/reminderRoutes';
+import { startReminderScheduler } from './services/reminderScheduler';
 import publicDueViewRouter from './routes/publicDueView';
 import publicRegisterRouter from './routes/publicRegister';
 import uploadRouter from './routes/upload';
@@ -289,6 +291,7 @@ app.use('/api/super-admin/blog', blogRouter);
 app.use('/api', publicDueViewRouter);
 app.use('/api', publicRegisterRouter);
 app.use('/api', dueListRoutes);
+app.use('/api', reminderRoutes);
 
 app.use('/', uploadRouter);
 
@@ -362,6 +365,12 @@ const bootstrap = async () => {
     await ensureTenantIndexes();
   } catch (indexError) {
     console.warn('[backend] Tenant index creation failed (non-fatal):', indexError);
+  }
+
+  try {
+    startReminderScheduler();
+  } catch (schedErr) {
+    console.warn('[backend] Reminder scheduler failed to start (non-fatal):', schedErr);
   }
   
   // Changed from app.listen to httpServer.listen for Socket.IO
