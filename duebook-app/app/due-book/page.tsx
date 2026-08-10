@@ -14,7 +14,7 @@ import toast from 'react-hot-toast';
 import {
   Plus, Search, X, ChevronLeft, LogOut,
   TrendingUp, TrendingDown, UserPlus, Trash2, CheckCircle2, Circle, Download,
-  Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon, CloudOff,
+  Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon, CloudOff, Send,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import SyncBar from './SyncBar';
@@ -67,6 +67,35 @@ const avatarColor = (name: string) => AVATAR_COLORS[name.charCodeAt(0) % AVATAR_
 const initial = (name: string) => (name || '?')[0].toUpperCase();
 const fmt = (n: number) => 'Tk ' + Math.abs(n).toLocaleString('en-IN');
 const fmtDate = (s: string) => new Date(s).toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
+const fmtDateTime = (s: string) => new Date(s).toLocaleString('en-GB', {
+  day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true,
+});
+
+const buildReceipt = (
+  tx: { amount: number; direction: 'INCOME' | 'EXPENSE'; transactionDate: string; notes?: string; status: string },
+  entityName: string,
+  shopName: string,
+) => {
+  const header = shopName?.trim() || 'DueBook';
+  const line = '━━━━━━━━━━━━━━━━━━';
+  const dir = tx.direction === 'INCOME' ? 'Due (They Owe)' : 'Payment (I Owe)';
+  const status = tx.status === 'Paid' ? '✅ PAID' : '⏳ PENDING';
+  const items = tx.notes?.trim() || '—';
+  return [
+    `🧾 *${header}*`,
+    line,
+    `Date: ${fmtDateTime(tx.transactionDate)}`,
+    `Customer: ${entityName}`,
+    ``,
+    `Items: ${items}`,
+    ``,
+    `Amount: *Tk ${tx.amount.toLocaleString('en-IN')}*`,
+    `Type: ${dir}`,
+    `Status: ${status}`,
+    line,
+    `Thank you!`,
+  ].join('\n');
+};
 
 /* ─── API helpers ─── */
 const getEntities = async (tid: string): Promise<Entity[]> => {
@@ -433,6 +462,29 @@ export default function DueBookPage() {
   };
 
   /* ─── Transaction handlers ─── */
+  const handleSendTx = async (
+    tx: { amount: number; direction: 'INCOME' | 'EXPENSE'; transactionDate: string; notes?: string; status: string },
+    entity?: Entity | null,
+  ) => {
+    const target = entity ?? selected;
+    if (!target) return;
+    const msg = buildReceipt(tx, target.name, regSettings.shopName || '');
+    const phone = target.phone || '';
+    if (phone) {
+      const href = waUrl(phone, msg);
+      if (href) { window.open(href, '_blank', 'noopener,noreferrer'); return; }
+    }
+    if (typeof navigator !== 'undefined' && navigator.share) {
+      try { await navigator.share({ text: msg }); return; } catch { /* user cancelled */ }
+    }
+    try {
+      await navigator.clipboard.writeText(msg);
+      toast.success('Receipt copied');
+    } catch {
+      toast.error('Unable to share');
+    }
+  };
+
   const handleAddTx = async () => {
     if (!selected || !tenantId) return;
     const amt = cart.length > 0 ? cartTotal : parseFloat(addAmount);
@@ -447,7 +499,25 @@ export default function DueBookPage() {
         amount: amt, direction: addDir,
         transactionDate: addDate, notes: autoNote,
       });
-      toast.success(res.queued ? 'Saved offline — will sync' : 'Saved');
+      const savedForShare = {
+        amount: amt, direction: addDir,
+        transactionDate: addDate, notes: autoNote,
+        status: 'Pending' as const,
+      };
+      const entityForShare = selected;
+      toast.custom((t) => (
+        <div className="flex items-center gap-2 bg-white dark:bg-slate-800 shadow-lg rounded-xl px-3 py-2 border border-gray-200 dark:border-slate-700">
+          <span className="text-[13px] text-gray-800 dark:text-slate-200">
+            {res.queued ? 'Saved offline — will sync' : 'Saved'}
+          </span>
+          <button
+            onClick={() => { toast.dismiss(t.id); handleSendTx(savedForShare, entityForShare); }}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-sky-500 text-white text-[12px] font-semibold active:scale-95 transition"
+          >
+            <Send size={12} /> Send receipt
+          </button>
+        </div>
+      ), { duration: 5000 });
       setShowAdd(false);
       setAddAmount(''); setAddNote(''); setCart([]);
       setAddDate(new Date().toISOString().split('T')[0]);
@@ -994,6 +1064,13 @@ export default function DueBookPage() {
                         </p>
                         {!isPaid && <p className="text-[10px] text-gray-400 dark:text-slate-500 tabular-nums">bal: {fmt(tx.bal)}</p>}
                       </div>
+                      <button
+                        onClick={() => handleSendTx(tx)}
+                        title={selected?.phone ? 'Send receipt via WhatsApp' : 'Share receipt'}
+                        className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-sky-500 dark:text-sky-400 active:bg-sky-50 dark:active:bg-sky-900/30 transition"
+                      >
+                        <Send size={15} />
+                      </button>
                       <button
                         onClick={() => handleMarkPaid(tx)}
                         disabled={!!markingPaid}
