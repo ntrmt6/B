@@ -71,15 +71,38 @@ const fmtDateTime = (s: string) => new Date(s).toLocaleString('en-GB', {
   day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true,
 });
 
+const dueLineFor = (remainingDue?: number): string | null => {
+  if (typeof remainingDue !== 'number') return null;
+  if (remainingDue > 0) return `Remaining due: *Tk ${remainingDue.toLocaleString('en-IN')}*`;
+  if (remainingDue < 0) return `I owe you: *Tk ${Math.abs(remainingDue).toLocaleString('en-IN')}*`;
+  return `All dues cleared 🎉`;
+};
+
 const buildReceipt = (
   tx: { amount: number; direction: 'INCOME' | 'EXPENSE'; transactionDate: string; notes?: string; status: string },
   entityName: string,
   shopName: string,
+  remainingDue?: number,
 ) => {
   const header = shopName?.trim() || 'DueBook';
   const line = '━━━━━━━━━━━━━━━━━━';
+  const dueLine = dueLineFor(remainingDue);
+
+  if (tx.status === 'Paid') {
+    return [
+      `🧾 *${header}*`,
+      line,
+      `Date: ${fmtDateTime(tx.transactionDate)}`,
+      `Customer: ${entityName}`,
+      ``,
+      `✅ Payment received: *Tk ${tx.amount.toLocaleString('en-IN')}*`,
+      ...(dueLine ? [dueLine] : []),
+      line,
+      `Thanks for your payment!`,
+    ].join('\n');
+  }
+
   const dir = tx.direction === 'INCOME' ? 'Due (They Owe)' : 'Payment (I Owe)';
-  const status = tx.status === 'Paid' ? '✅ PAID' : '⏳ PENDING';
   const items = tx.notes?.trim() || '—';
   return [
     `🧾 *${header}*`,
@@ -91,11 +114,19 @@ const buildReceipt = (
     ``,
     `Amount: *Tk ${tx.amount.toLocaleString('en-IN')}*`,
     `Type: ${dir}`,
-    `Status: ${status}`,
+    ...(dueLine ? [dueLine] : []),
     line,
     `Thank you!`,
   ].join('\n');
 };
+
+const netPending = (
+  txs: { direction: 'INCOME' | 'EXPENSE'; amount: number; status: string }[],
+): number =>
+  txs.reduce(
+    (s, t) => (t.status === 'Pending' ? s + (t.direction === 'INCOME' ? t.amount : -t.amount) : s),
+    0,
+  );
 
 /* ─── API helpers ─── */
 const getEntities = async (tid: string): Promise<Entity[]> => {
@@ -465,10 +496,14 @@ export default function DueBookPage() {
   const handleSendTx = async (
     tx: { amount: number; direction: 'INCOME' | 'EXPENSE'; transactionDate: string; notes?: string; status: string },
     entity?: Entity | null,
+    remainingOverride?: number,
   ) => {
     const target = entity ?? selected;
     if (!target) return;
-    const msg = buildReceipt(tx, target.name, regSettings.shopName || '');
+    const remaining = typeof remainingOverride === 'number'
+      ? remainingOverride
+      : netPending(transactions);
+    const msg = buildReceipt(tx, target.name, regSettings.shopName || '', remaining);
     const phone = target.phone || '';
     if (phone) {
       const href = waUrl(phone, msg);
@@ -505,13 +540,14 @@ export default function DueBookPage() {
         status: 'Pending' as const,
       };
       const entityForShare = selected;
+      const remainingAfterSave = netPending(transactions) + (addDir === 'INCOME' ? amt : -amt);
       toast.custom((t) => (
         <div className="flex items-center gap-2 bg-white dark:bg-slate-800 shadow-lg rounded-xl px-3 py-2 border border-gray-200 dark:border-slate-700">
           <span className="text-[13px] text-gray-800 dark:text-slate-200">
             {res.queued ? 'Saved offline — will sync' : 'Saved'}
           </span>
           <button
-            onClick={() => { toast.dismiss(t.id); handleSendTx(savedForShare, entityForShare); }}
+            onClick={() => { toast.dismiss(t.id); handleSendTx(savedForShare, entityForShare, remainingAfterSave); }}
             className="flex items-center gap-1 px-2 py-1 rounded-lg bg-sky-500 text-white text-[12px] font-semibold active:scale-95 transition"
           >
             <Send size={12} /> Send receipt
@@ -567,11 +603,25 @@ export default function DueBookPage() {
     setMarkingPaid(tx._id);
     try {
       const res = await patchTxStatusOffline(tenantId, tx._id, newStatus);
-      toast.success(
-        res.queued
-          ? `Marked as ${newStatus.toLowerCase()} — will sync`
-          : (newStatus === 'Paid' ? 'Marked as paid' : 'Marked as pending')
-      );
+      if (newStatus === 'Paid') {
+        const paidTx = { ...tx, status: 'Paid' as const };
+        const entityForShare = selected;
+        const remaining = netPending(transactions) - (tx.direction === 'INCOME' ? tx.amount : -tx.amount);
+        const label = res.queued ? 'Marked as paid — will sync' : 'Marked as paid';
+        toast.custom((t) => (
+          <div className="flex items-center gap-2 bg-white dark:bg-slate-800 shadow-lg rounded-xl px-3 py-2 border border-gray-200 dark:border-slate-700">
+            <span className="text-[13px] text-gray-800 dark:text-slate-200">{label}</span>
+            <button
+              onClick={() => { toast.dismiss(t.id); handleSendTx(paidTx, entityForShare, remaining); }}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-green-500 text-white text-[12px] font-semibold active:scale-95 transition"
+            >
+              <Send size={12} /> Send thanks
+            </button>
+          </div>
+        ), { duration: 5000 });
+      } else {
+        toast.success(res.queued ? 'Marked as pending — will sync' : 'Marked as pending');
+      }
       // Optimistic local flip
       setTx(prev => prev.map(t => t._id === tx._id ? { ...t, status: newStatus } : t));
       if (!res.queued) {
