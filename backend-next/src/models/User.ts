@@ -16,6 +16,8 @@ export interface IUser extends Document {
   provider?: 'local' | 'google' | 'facebook';
   providerId?: string;
   lastLogin?: Date;
+  resetTokenHash?: string;
+  resetTokenExpiresAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -38,7 +40,9 @@ const UserSchema = new Schema<IUser>({
   isActive: { type: Boolean, default: true },
     provider: { type: String, enum: ['local', 'google', 'facebook'], default: 'local' },
   providerId: { type: String },
-  lastLogin: { type: Date }
+  lastLogin: { type: Date },
+  resetTokenHash: { type: String, select: false },
+  resetTokenExpiresAt: { type: Date, select: false }
 }, {
   timestamps: true
 });

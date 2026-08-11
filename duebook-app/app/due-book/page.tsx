@@ -47,6 +47,7 @@ interface RegSettings {
   rewardItemName: string;
   rewardItemPrice: number;
   welcomeMessage: string;
+  shopLogo: string;
 }
 type FieldType = 'text' | 'textarea' | 'number' | 'date' | 'time' | 'select';
 interface TemplateField {
@@ -414,7 +415,7 @@ export default function DueBookPage() {
   const [editSaving, setEditSaving] = useState(false);
 
   /* registration settings (self-registration + welcome bonus) */
-  const DEFAULT_REG: RegSettings = { shopName: '', registrationEnabled: false, bonusAmount: 0, rewardItemName: '', rewardItemPrice: 0, welcomeMessage: '' };
+  const DEFAULT_REG: RegSettings = { shopName: '', registrationEnabled: false, bonusAmount: 0, rewardItemName: '', rewardItemPrice: 0, welcomeMessage: '', shopLogo: '' };
   const [regSettings, setRegSettings] = useState<RegSettings>(DEFAULT_REG);
   const [draftReg, setDraftReg] = useState<RegSettings>(DEFAULT_REG);
   const [regSaving, setRegSaving] = useState(false);
@@ -551,10 +552,62 @@ export default function DueBookPage() {
           rewardItemName: s.rewardItemName || '',
           rewardItemPrice: Number(s.rewardItemPrice) || 0,
           welcomeMessage: s.welcomeMessage || '',
+          shopLogo: s.shopLogo || '',
         });
       } catch { /* ignore */ }
     })();
   }, [tenantId]);
+
+  /* runtime PWA branding: update title, favicon, and manifest per shop */
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const shopName = regSettings.shopName?.trim();
+    const logo = regSettings.shopLogo;
+    if (shopName) document.title = `${shopName} · DueBook`;
+    else document.title = 'DueBook';
+
+    const setIcon = (rel: string, href: string) => {
+      let link = document.querySelector<HTMLLinkElement>(`link[rel="${rel}"][data-shop="1"]`);
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = rel;
+        link.setAttribute('data-shop', '1');
+        document.head.appendChild(link);
+      }
+      link.href = href;
+    };
+    if (logo) {
+      setIcon('icon', logo);
+      setIcon('apple-touch-icon', logo);
+    }
+
+    if (logo || shopName) {
+      const manifest = {
+        name: shopName ? `${shopName} — DueBook` : 'DueBook',
+        short_name: shopName || 'DueBook',
+        start_url: '/due-book',
+        scope: '/',
+        display: 'standalone',
+        background_color: '#f8fafc',
+        theme_color: '#0ea5e9',
+        icons: logo
+          ? [{ src: logo, sizes: '192x192', type: 'image/png', purpose: 'any' }]
+          : [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }],
+      };
+      const blob = new Blob([JSON.stringify(manifest)], { type: 'application/manifest+json' });
+      const url = URL.createObjectURL(blob);
+      let link = document.querySelector<HTMLLinkElement>('link[rel="manifest"][data-shop="1"]');
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'manifest';
+        link.setAttribute('data-shop', '1');
+        document.head.appendChild(link);
+      }
+      const prev = link.href;
+      link.href = url;
+      if (prev?.startsWith('blob:')) URL.revokeObjectURL(prev);
+    }
+  }, [regSettings.shopName, regSettings.shopLogo]);
 
   useEffect(() => {
     setIsOnline(navigator.onLine);
@@ -720,6 +773,7 @@ export default function DueBookPage() {
         rewardItemName: draftReg.rewardItemName,
         rewardItemPrice: Number(draftReg.rewardItemPrice) || 0,
         welcomeMessage: draftReg.welcomeMessage,
+        shopLogo: draftReg.shopLogo,
       });
       setRegSettings({
         ...draftReg,
@@ -1388,10 +1442,17 @@ export default function DueBookPage() {
           </button>
         ) : (
           <div className="flex items-center gap-1.5">
-            <div className="w-6 h-6 rounded-md bg-sky-500 flex items-center justify-center">
-              <span className="text-white text-[10px] font-bold">DB</span>
+            <div className="w-6 h-6 rounded-md bg-sky-500 flex items-center justify-center overflow-hidden">
+              {regSettings.shopLogo ? (
+                /* eslint-disable-next-line @next/next/no-img-element */
+                <img src={regSettings.shopLogo} alt="" className="w-full h-full object-cover" />
+              ) : (
+                <span className="text-white text-[10px] font-bold">DB</span>
+              )}
             </div>
-            <span className="text-[14px] font-bold text-gray-900 dark:text-slate-100">DueBook</span>
+            <span className="text-[14px] font-bold text-gray-900 dark:text-slate-100 truncate max-w-[140px]">
+              {regSettings.shopName?.trim() || 'DueBook'}
+            </span>
           </div>
         )}
         <div className="flex items-center gap-1">
@@ -2181,6 +2242,53 @@ export default function DueBookPage() {
                         className="mt-0.5 w-full border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-[13px] text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400"
                       />
                     </div>
+
+                    <div>
+                      <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 block mb-1">Shop Logo</label>
+                      <div className="flex items-center gap-2">
+                        <div className="w-14 h-14 rounded-xl bg-gray-100 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 flex items-center justify-center overflow-hidden shrink-0">
+                          {draftReg.shopLogo ? (
+                            /* eslint-disable-next-line @next/next/no-img-element */
+                            <img src={draftReg.shopLogo} alt="Shop logo" className="w-full h-full object-cover" />
+                          ) : (
+                            <span className="text-[10px] text-gray-400">No logo</span>
+                          )}
+                        </div>
+                        <div className="flex-1 space-y-1">
+                          <label className="w-full py-1.5 rounded-lg border-2 border-dashed border-sky-300 dark:border-sky-700 text-sky-500 dark:text-sky-400 text-[11px] font-bold flex items-center justify-center cursor-pointer active:scale-[0.98] transition">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              className="hidden"
+                              onChange={async e => {
+                                const f = e.target.files?.[0];
+                                if (!f) return;
+                                if (f.size > 300 * 1024) { toast.error('Max 300 KB — please resize'); return; }
+                                const dataUrl = await new Promise<string>((resolve, reject) => {
+                                  const r = new FileReader();
+                                  r.onload = () => resolve(String(r.result));
+                                  r.onerror = () => reject(r.error);
+                                  r.readAsDataURL(f);
+                                });
+                                setDraftReg(p => ({ ...p, shopLogo: dataUrl }));
+                              }}
+                            />
+                            {draftReg.shopLogo ? 'Change Logo' : 'Upload Logo (≤300 KB)'}
+                          </label>
+                          {draftReg.shopLogo && (
+                            <button
+                              onClick={() => setDraftReg(p => ({ ...p, shopLogo: '' }))}
+                              className="w-full py-1 rounded-lg text-[10px] font-semibold text-red-500 border border-red-200 dark:border-red-800">
+                              Remove Logo
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-1">
+                        Shown in the top bar, receipts, and as the install icon after Save.
+                      </p>
+                    </div>
+
                     <div>
                       <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Welcome Credit (Tk)</label>
                       <input

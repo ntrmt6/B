@@ -1,11 +1,26 @@
 import { Router, Request, Response } from 'express';
 import { Entity } from '../models/Entity';
 import { Transaction } from '../models/Transaction';
+import { DueBookSettings } from '../models/DueBookSettings';
 
 const router = Router();
 
 const validTid = (tid: unknown): tid is string =>
   typeof tid === 'string' && /^[a-f\d]{24}$/i.test(tid);
+
+// GET /api/public/duebook/shop?tid=TENANTID  →  { shopName, shopLogo } (public)
+router.get('/public/duebook/shop', async (req: Request, res: Response) => {
+  try {
+    const { tid } = req.query;
+    if (!validTid(tid)) return res.status(400).json({ error: 'Invalid tenant' });
+    const s = await DueBookSettings.findOne({ tenantId: tid })
+      .select('shopName shopLogo')
+      .lean();
+    res.json({ shopName: s?.shopName || '', shopLogo: s?.shopLogo || '' });
+  } catch {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // GET /api/public/due-view?tid=TENANTID  →  all entities with balances
 router.get('/public/due-view', async (req: Request, res: Response) => {

@@ -8,6 +8,7 @@ export interface IDueBookSettings extends Document {
   rewardItemName: string;
   rewardItemPrice: number;
   welcomeMessage: string;
+  shopLogo: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -21,6 +22,7 @@ const DueBookSettingsSchema = new Schema<IDueBookSettings>(
     rewardItemName: { type: String, trim: true, maxlength: 100, default: '' },
     rewardItemPrice: { type: Number, default: 0, min: 0 },
     welcomeMessage: { type: String, trim: true, maxlength: 300, default: '' },
+    shopLogo: { type: String, default: '' },
   },
   { timestamps: true }
 );

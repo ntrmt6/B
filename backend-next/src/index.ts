@@ -20,6 +20,7 @@ import { profitLossRouter } from './routes/profitLoss';
 import { incomesRouter } from './routes/incomes';
 import purchasesRouter from './routes/purchases';
 import dueListRoutes from './routes/dueListRoutes';
+import duebookAuthRouter from './routes/duebookAuth';
 import reminderRoutes from './routes/reminderRoutes';
 import { startReminderScheduler } from './services/reminderScheduler';
 import publicDueViewRouter from './routes/publicDueView';
@@ -290,6 +291,7 @@ app.use('/api/v1', imagekitAuthRouter);
 app.use('/api/super-admin/blog', blogRouter);
 app.use('/api', publicDueViewRouter);
 app.use('/api', publicRegisterRouter);
+app.use('/api/duebook/auth', duebookAuthRouter);
 app.use('/api', dueListRoutes);
 app.use('/api', reminderRoutes);
 
