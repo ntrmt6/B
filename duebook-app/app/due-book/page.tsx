@@ -15,7 +15,7 @@ import {
   Plus, Search, X, ChevronLeft, LogOut,
   TrendingUp, TrendingDown, UserPlus, Trash2, CheckCircle2, Circle, Download,
   Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon, CloudOff, Send, Bell,
-  MessageSquare, Copy,
+  MessageSquare, Copy, Users, Upload, ClipboardPaste, Check,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import SyncBar from './SyncBar';
@@ -68,6 +68,15 @@ const DARK_KEY = 'duebook_dark';
 const USAGE_KEY = 'duebook_usage';
 const TEMPLATES_KEY = 'duebook_templates';
 const LISTS_KEY = 'duebook_lists';
+const LAST_TPL_VALUES_KEY = 'duebook_tpl_last';
+
+type SettingsTab = 'general' | 'business' | 'templates' | 'lists';
+const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
+  { id: 'general', label: 'General' },
+  { id: 'business', label: 'Business' },
+  { id: 'templates', label: 'Templates' },
+  { id: 'lists', label: 'Lists' },
+];
 const DEFAULT_CATALOG: CatalogItem[] = [
   { id: '1', name: 'Chai', price: 10 },
   { id: '2', name: 'Coke', price: 30 },
@@ -454,6 +463,21 @@ export default function DueBookPage() {
   const [newListName, setNewListName] = useState('');
   const [newListItem, setNewListItem] = useState<Record<string, string>>({});
 
+  /* settings tab */
+  const [settingsTab, setSettingsTab] = useState<SettingsTab>('general');
+
+  /* import / export */
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState('');
+
+  /* bulk send */
+  const [showBulk, setShowBulk] = useState(false);
+  const [bulkTplId, setBulkTplId] = useState<string>('');
+  const [bulkFilter, setBulkFilter] = useState<'has_due' | 'all_customers' | 'all_suppliers' | 'all_employees'>('has_due');
+  const [bulkFieldValues, setBulkFieldValues] = useState<Record<string, string>>({});
+  const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
+  const [bulkSentIds, setBulkSentIds] = useState<Set<string>>(new Set());
+
   /* dark mode */
   const [isDark, setIsDark] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -548,6 +572,8 @@ export default function DueBookPage() {
 
   useEffect(() => {
     const onPop = () => {
+      if (showImport) { setShowImport(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
+      if (showBulk) { setShowBulk(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showTplPreview) { setShowTplPreview(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showTplEditor) { setShowTplEditor(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showTplPicker) { setShowTplPicker(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
@@ -560,7 +586,7 @@ export default function DueBookPage() {
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, [showAdd, showAddEntity, showCatalog, showSettings, showEditEntity, selected, showTplPicker, showTplEditor, showTplPreview]);
+  }, [showAdd, showAddEntity, showCatalog, showSettings, showEditEntity, selected, showTplPicker, showTplEditor, showTplPreview, showBulk, showImport]);
 
   const loadTx = useCallback(async (entity: Entity) => {
     if (!tenantId) return;
@@ -652,8 +678,28 @@ export default function DueBookPage() {
     setDraftLabels({ ...labels });
     setDraftReg({ ...regSettings });
     setShowQR(false);
+    setSettingsTab('general');
     setShowSettings(true);
     window.history.pushState({ duebook: 'modal' }, '');
+  };
+
+  /* last-used template field values (per template) */
+  const getLastValues = (tplId: string): Record<string, string> => {
+    if (typeof window === 'undefined') return {};
+    try {
+      const s = localStorage.getItem(LAST_TPL_VALUES_KEY);
+      const all = s ? JSON.parse(s) as Record<string, Record<string, string>> : {};
+      return all[tplId] || {};
+    } catch { return {}; }
+  };
+  const saveLastValues = (tplId: string, values: Record<string, string>) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const s = localStorage.getItem(LAST_TPL_VALUES_KEY);
+      const all = s ? JSON.parse(s) as Record<string, Record<string, string>> : {};
+      all[tplId] = values;
+      localStorage.setItem(LAST_TPL_VALUES_KEY, JSON.stringify(all));
+    } catch {/* ignore */}
   };
 
   const saveLabels = () => {
@@ -844,8 +890,9 @@ export default function DueBookPage() {
 
   const pickTpl = (t: MessageTemplate) => {
     if (!selected) return;
+    const last = getLastValues(t.id);
     const initValues: Record<string, string> = {};
-    (t.fields || []).forEach(f => { initValues[f.id] = f.defaultValue || ''; });
+    (t.fields || []).forEach(f => { initValues[f.id] = last[f.id] || f.defaultValue || ''; });
     setTplPreviewTpl(t);
     setTplFieldValues(initValues);
     setTplBodyOverride(null);
@@ -878,6 +925,9 @@ export default function DueBookPage() {
 
   const sendTplPreview = async () => {
     if (!selected) return;
+    if (tplPreviewTpl && tplPreviewTpl.fields?.length) {
+      saveLastValues(tplPreviewTpl.id, tplFieldValues);
+    }
     await shareText(tplPreview, selected.phone, 'Message copied');
     setShowTplPreview(false);
   };
@@ -885,6 +935,110 @@ export default function DueBookPage() {
   const copyTplPreview = async () => {
     try { await navigator.clipboard.writeText(tplPreview); toast.success('Copied'); }
     catch { toast.error('Copy failed'); }
+  };
+
+  /* ─── Import / Export helpers ─── */
+  const exportTemplatesJson = async () => {
+    const payload = { version: 1, templates, lists };
+    const json = JSON.stringify(payload, null, 2);
+    try {
+      await navigator.clipboard.writeText(json);
+      toast.success('Templates + lists copied as JSON');
+    } catch {
+      if (typeof navigator !== 'undefined' && navigator.share) {
+        try { await navigator.share({ text: json }); return; } catch {/* ignore */}
+      }
+      toast.error('Copy failed');
+    }
+  };
+  const importTemplatesJson = () => {
+    const text = importText.trim();
+    if (!text) { toast.error('Paste JSON first'); return; }
+    try {
+      const parsed = JSON.parse(text);
+      const incomingTpls: MessageTemplate[] = Array.isArray(parsed) ? parsed
+        : Array.isArray(parsed.templates) ? parsed.templates : [];
+      const incomingLists: NamedList[] = Array.isArray(parsed.lists) ? parsed.lists : [];
+      if (incomingTpls.length === 0 && incomingLists.length === 0) {
+        toast.error('No templates or lists found'); return;
+      }
+      const existingIds = new Set(templates.map(t => t.id));
+      const mergedTpls = [...templates];
+      for (const t of incomingTpls) {
+        if (!t?.name || !t?.body) continue;
+        const id = existingIds.has(t.id) ? 'tpl-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6) : t.id;
+        mergedTpls.push({ ...t, id });
+      }
+      const existingListIds = new Set(lists.map(l => l.id));
+      const mergedLists = [...lists];
+      for (const l of incomingLists) {
+        if (!l?.name || !Array.isArray(l.items)) continue;
+        const id = existingListIds.has(l.id) ? 'lst-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6) : l.id;
+        mergedLists.push({ ...l, id });
+      }
+      saveTemplates(mergedTpls);
+      saveLists(mergedLists);
+      setImportText('');
+      setShowImport(false);
+      toast.success(`Imported ${incomingTpls.length} templates, ${incomingLists.length} lists`);
+    } catch {
+      toast.error('Invalid JSON');
+    }
+  };
+
+  /* ─── Bulk send ─── */
+  const openBulk = () => {
+    setBulkTplId(templates[0]?.id || '');
+    setBulkFilter('has_due');
+    setBulkFieldValues({});
+    setBulkSelected(new Set());
+    setBulkSentIds(new Set());
+    setShowBulk(true);
+    window.history.pushState({ duebook: 'modal' }, '');
+  };
+  const bulkTpl = useMemo(() => templates.find(t => t.id === bulkTplId), [templates, bulkTplId]);
+  const bulkCandidates = useMemo(() => {
+    return entities.filter(e => {
+      if (!e.phone) return false;
+      if (bulkFilter === 'has_due') return (e.totalOwedToMe - e.totalIOweThemNumber) > 0;
+      if (bulkFilter === 'all_customers') return e.type === 'Customer';
+      if (bulkFilter === 'all_suppliers') return e.type === 'Supplier';
+      if (bulkFilter === 'all_employees') return e.type === 'Employee';
+      return false;
+    });
+  }, [entities, bulkFilter]);
+  useEffect(() => {
+    if (!showBulk) return;
+    setBulkSelected(new Set(bulkCandidates.map(e => e._id)));
+    setBulkSentIds(new Set());
+  }, [showBulk, bulkCandidates]);
+
+  const toggleBulk = (id: string) => {
+    setBulkSelected(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  };
+  const buildBulkMessage = (e: Entity) => {
+    if (!bulkTpl) return '';
+    const net = (e.totalOwedToMe || 0) - (e.totalIOweThemNumber || 0);
+    const withCustom = applyFieldValues(bulkTpl.body, bulkTpl.fields, bulkFieldValues);
+    return applyPlaceholders(withCustom, {
+      shopName: regSettings.shopName,
+      customerName: e.name,
+      phone: e.phone,
+      due: net > 0 ? net : 0,
+      net,
+    });
+  };
+  const sendBulkOne = (e: Entity) => {
+    const msg = buildBulkMessage(e);
+    if (!msg) { toast.error('Pick a template first'); return; }
+    const href = waUrl(e.phone || '', msg);
+    if (!href) { toast.error('No phone'); return; }
+    window.open(href, '_blank', 'noopener,noreferrer');
+    setBulkSentIds(prev => new Set(prev).add(e._id));
   };
 
   /* ─── Named list helpers ─── */
@@ -1254,6 +1408,10 @@ export default function DueBookPage() {
                   : <Download size={14} />}
               </button>
               <ReminderInbox isDark={isDark} />
+              <button onClick={openBulk} title="Bulk send"
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-700">
+                <Users size={14} />
+              </button>
               <button onClick={toggleDark}
                 className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700">
                 {isDark ? <Sun size={14} /> : <Moon size={14} />}
@@ -1916,7 +2074,23 @@ export default function DueBookPage() {
                 <X size={15} className="text-gray-400 dark:text-slate-500" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto scroll-view px-4 pb-5 space-y-4">
+            {/* Tab bar */}
+            <div className="flex-shrink-0 flex gap-1 px-3 pb-2 pt-1 border-b border-gray-100 dark:border-slate-700">
+              {SETTINGS_TABS.map(tab => (
+                <button key={tab.id} onClick={() => setSettingsTab(tab.id)}
+                  className={`flex-1 py-1.5 rounded-lg text-[11px] font-bold transition ${
+                    settingsTab === tab.id
+                      ? 'bg-sky-500 text-white'
+                      : 'text-gray-500 dark:text-slate-400 active:bg-gray-100 dark:active:bg-slate-700'
+                  }`}>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex-1 overflow-y-auto scroll-view px-4 pb-5 pt-3 space-y-4">
+              {settingsTab === 'general' && (
+                <>
               {/* Dark mode toggle */}
               <div className="flex items-center justify-between">
                 <span className="text-[13px] font-semibold text-gray-700 dark:text-slate-200">Dark Mode</span>
@@ -1971,10 +2145,14 @@ export default function DueBookPage() {
                   </button>
                 </div>
               )}
+                </>
+              )}
 
+              {settingsTab === 'business' && tenantId && (
+                <>
               {/* Customer self-registration */}
               {tenantId && (
-                <div className="pt-3 border-t border-gray-100 dark:border-slate-700">
+                <div>
                   <p className="text-[12px] font-bold text-gray-500 dark:text-slate-400 mb-1 uppercase tracking-wide flex items-center gap-1.5">
                     <Gift size={13} /> Customer Registration
                   </p>
@@ -2121,9 +2299,12 @@ export default function DueBookPage() {
                   )}
                 </div>
               )}
+                </>
+              )}
 
-              {/* Reusable Lists (vehicles, locations, ...) */}
-              <div className="pt-3 border-t border-gray-100 dark:border-slate-700">
+              {settingsTab === 'lists' && (
+              /* Reusable Lists (vehicles, locations, ...) */
+              <div>
                 <p className="text-[12px] font-bold text-gray-500 dark:text-slate-400 mb-1 uppercase tracking-wide">
                   Reusable Lists
                 </p>
@@ -2194,9 +2375,11 @@ export default function DueBookPage() {
                   </button>
                 </div>
               </div>
+              )}
 
-              {/* Message Templates */}
-              <div className="pt-3 border-t border-gray-100 dark:border-slate-700">
+              {settingsTab === 'templates' && (
+              /* Message Templates */
+              <div>
                 <p className="text-[12px] font-bold text-gray-500 dark:text-slate-400 mb-1 uppercase tracking-wide flex items-center gap-1.5">
                   <MessageSquare size={13} /> Message Templates
                 </p>
@@ -2235,7 +2418,26 @@ export default function DueBookPage() {
                   className="w-full py-2 rounded-lg border-2 border-dashed border-sky-300 dark:border-sky-700 text-sky-500 dark:text-sky-400 text-[12px] font-bold active:scale-[0.98] transition flex items-center justify-center gap-1">
                   <Plus size={13} /> Add Template
                 </button>
+
+                {/* Import / Export */}
+                <div className="mt-3 pt-3 border-t border-gray-100 dark:border-slate-700">
+                  <p className="text-[11px] font-bold text-gray-500 dark:text-slate-400 mb-1.5 uppercase tracking-wide">Share Templates</p>
+                  <p className="text-[10px] text-gray-400 dark:text-slate-500 mb-2">
+                    Export as JSON to share with another shop, or paste JSON to import.
+                  </p>
+                  <div className="flex gap-1.5">
+                    <button onClick={exportTemplatesJson}
+                      className="flex-1 py-2 rounded-lg border-2 border-sky-300 dark:border-sky-700 text-sky-500 dark:text-sky-400 text-[12px] font-bold active:scale-[0.98] flex items-center justify-center gap-1">
+                      <Upload size={12} /> Export
+                    </button>
+                    <button onClick={() => { setImportText(''); setShowImport(true); window.history.pushState({ duebook: 'modal' }, ''); }}
+                      className="flex-1 py-2 rounded-lg border-2 border-emerald-300 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400 text-[12px] font-bold active:scale-[0.98] flex items-center justify-center gap-1">
+                      <ClipboardPaste size={12} /> Import
+                    </button>
+                  </div>
+                </div>
               </div>
+              )}
             </div>
           </div>
         </div>
@@ -2335,15 +2537,33 @@ export default function DueBookPage() {
               )}
 
               <div>
+                <label className="text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide block mb-1">
+                  WhatsApp Preview
+                </label>
+                <div className="rounded-xl p-3" style={{ background: isDark ? '#0b1f1a' : '#e5ddd5' }}>
+                  <div className="max-w-[85%] ml-auto relative rounded-lg px-2.5 py-1.5 shadow-sm"
+                    style={{ background: isDark ? '#005c4b' : '#d9fdd3' }}>
+                    <div className="whitespace-pre-wrap break-words text-[12.5px] leading-snug text-gray-900 dark:text-slate-100">
+                      {tplPreview || <span className="text-gray-400 italic">Empty message…</span>}
+                    </div>
+                    <div className="text-[9px] text-gray-500 dark:text-slate-300/70 text-right mt-0.5 flex items-center justify-end gap-0.5">
+                      {new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}
+                      <Check size={9} className="ml-0.5" strokeWidth={3} />
+                      <Check size={9} className="-ml-1.5" strokeWidth={3} />
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Preview</label>
-                  <span className="text-[10px] text-gray-400 dark:text-slate-500">Editable</span>
+                  <label className="text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Edit Message</label>
+                  <span className="text-[10px] text-gray-400 dark:text-slate-500">{tplPreview.length} chars</span>
                 </div>
                 <textarea
                   value={tplPreview}
                   onChange={e => onTplPreviewEdit(e.target.value)}
-                  rows={12}
-                  className="w-full border border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2 text-[13px] text-gray-900 dark:text-slate-100 bg-gray-50 dark:bg-slate-700 outline-none focus:border-sky-400 resize-none font-mono leading-snug"
+                  rows={8}
+                  className="w-full border border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2 text-[12.5px] text-gray-900 dark:text-slate-100 bg-gray-50 dark:bg-slate-700 outline-none focus:border-sky-400 resize-none font-mono leading-snug"
                 />
               </div>
               <p className="text-[10px] text-gray-400 dark:text-slate-500">
@@ -2490,6 +2710,193 @@ export default function DueBookPage() {
                 className="w-full py-3 rounded-xl bg-sky-500 text-white text-[14px] font-bold active:scale-[0.98] transition">
                 {editingTpl ? 'Save Changes' : 'Add Template'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════
+          IMPORT SHEET
+          ══════════════════════════════════════ */}
+      {showImport && (
+        <div className="absolute inset-0 z-[70] flex flex-col justify-end" onClick={() => setShowImport(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative bg-white dark:bg-slate-800 rounded-t-2xl shadow-2xl z-10 sheet-slide-up flex flex-col max-h-[85dvh]" onClick={e => e.stopPropagation()}>
+            <div className="flex-shrink-0 flex justify-center pt-2 pb-1">
+              <div className="w-9 h-1 bg-gray-300 dark:bg-slate-600 rounded-full" />
+            </div>
+            <div className="flex-shrink-0 flex items-center justify-between px-4 pb-2 pt-1">
+              <h3 className="text-[14px] font-bold text-gray-900 dark:text-slate-100">Import Templates</h3>
+              <button onClick={() => setShowImport(false)} className="w-6 h-6 flex items-center justify-center">
+                <X size={15} className="text-gray-400 dark:text-slate-500" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 pb-2 space-y-2">
+              <p className="text-[11px] text-gray-500 dark:text-slate-400">
+                Paste JSON exported from another shop. Existing templates are kept — new ones are appended.
+              </p>
+              <textarea
+                value={importText}
+                onChange={e => setImportText(e.target.value)}
+                rows={12}
+                placeholder='{"templates":[...], "lists":[...]}'
+                className="w-full border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 text-[12px] font-mono text-gray-900 dark:text-slate-100 bg-gray-50 dark:bg-slate-700 outline-none focus:border-emerald-400 resize-none"
+              />
+              <button
+                onClick={async () => {
+                  try { const t = await navigator.clipboard.readText(); if (t) setImportText(t); }
+                  catch { toast.error('Clipboard read blocked'); }
+                }}
+                className="w-full py-2 rounded-lg border-2 border-emerald-300 dark:border-emerald-700 text-emerald-600 dark:text-emerald-400 text-[12px] font-bold active:scale-[0.98] flex items-center justify-center gap-1">
+                <ClipboardPaste size={12} /> Paste from clipboard
+              </button>
+            </div>
+            <div className="flex-shrink-0 px-4 pt-2 pb-5">
+              <button onClick={importTemplatesJson}
+                className="w-full py-3 rounded-xl bg-emerald-500 text-white text-[14px] font-bold active:scale-[0.98] transition">
+                Import
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════
+          BULK SEND SHEET
+          ══════════════════════════════════════ */}
+      {showBulk && (
+        <div className="absolute inset-0 z-[65] flex flex-col justify-end" onClick={() => setShowBulk(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative bg-white dark:bg-slate-800 rounded-t-2xl shadow-2xl z-10 sheet-slide-up flex flex-col max-h-[92dvh]" onClick={e => e.stopPropagation()}>
+            <div className="flex-shrink-0 flex justify-center pt-2 pb-1">
+              <div className="w-9 h-1 bg-gray-300 dark:bg-slate-600 rounded-full" />
+            </div>
+            <div className="flex-shrink-0 flex items-center justify-between px-4 pb-2 pt-1">
+              <h3 className="text-[14px] font-bold text-gray-900 dark:text-slate-100 flex items-center gap-1.5">
+                <Users size={14} /> Bulk Send
+              </h3>
+              <button onClick={() => setShowBulk(false)} className="w-6 h-6 flex items-center justify-center">
+                <X size={15} className="text-gray-400 dark:text-slate-500" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 pb-2 space-y-3">
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 block mb-1">Template</label>
+                <select
+                  value={bulkTplId}
+                  onChange={e => setBulkTplId(e.target.value)}
+                  className="w-full border border-gray-200 dark:border-slate-600 rounded-lg px-2.5 py-2 text-[13px] bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400">
+                  <option value="">— pick template —</option>
+                  {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
+              </div>
+
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 block mb-1">Send to</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  {([
+                    { id: 'has_due', label: 'With Dues' },
+                    { id: 'all_customers', label: 'All ' + labels.Customer + 's' },
+                    { id: 'all_suppliers', label: 'All ' + labels.Supplier + 's' },
+                    { id: 'all_employees', label: 'All ' + labels.Employee + 's' },
+                  ] as const).map(f => (
+                    <button key={f.id} onClick={() => setBulkFilter(f.id)}
+                      className={`py-1.5 rounded-lg text-[11px] font-bold border-2 transition ${
+                        bulkFilter === f.id
+                          ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400'
+                          : 'border-gray-200 dark:border-slate-600 text-gray-400 dark:text-slate-500'
+                      }`}>
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {bulkTpl?.fields && bulkTpl.fields.length > 0 && (
+                <div className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 p-2 space-y-1.5">
+                  <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">Common Fields</p>
+                  {bulkTpl.fields.map(f => {
+                    const val = bulkFieldValues[f.id] || '';
+                    const list = f.listId ? lists.find(l => l.id === f.listId) : undefined;
+                    const cls = 'w-full border border-emerald-200 dark:border-emerald-800 rounded-md px-2 py-1 text-[12px] bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 outline-none focus:border-emerald-400';
+                    return (
+                      <div key={f.id}>
+                        <label className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 block">{f.label}</label>
+                        {f.type === 'select' && list ? (
+                          <select value={val} onChange={e => setBulkFieldValues(prev => ({ ...prev, [f.id]: e.target.value }))} className={cls}>
+                            <option value="">— select —</option>
+                            {list.items.map((it, i) => <option key={i} value={it}>{it}</option>)}
+                          </select>
+                        ) : f.type === 'textarea' ? (
+                          <textarea rows={2} value={val} onChange={e => setBulkFieldValues(prev => ({ ...prev, [f.id]: e.target.value }))} className={cls + ' resize-none'} />
+                        ) : (
+                          <input
+                            type={f.type === 'select' ? 'text' : f.type}
+                            inputMode={f.type === 'number' ? 'decimal' : undefined}
+                            value={val}
+                            onChange={e => setBulkFieldValues(prev => ({ ...prev, [f.id]: e.target.value }))}
+                            className={cls}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">
+                    Recipients ({bulkCandidates.length} with phone) — {bulkSelected.size} selected, {bulkSentIds.size} sent
+                  </label>
+                  <button onClick={() => setBulkSelected(new Set(bulkCandidates.map(e => e._id)))}
+                    className="text-[10px] font-bold text-sky-500">Select All</button>
+                </div>
+                {bulkCandidates.length === 0 ? (
+                  <p className="text-center text-[12px] text-gray-400 dark:text-slate-500 py-4">
+                    No matching contacts with phone numbers.
+                  </p>
+                ) : (
+                  <div className="space-y-1">
+                    {bulkCandidates.map(e => {
+                      const isSel = bulkSelected.has(e._id);
+                      const isSent = bulkSentIds.has(e._id);
+                      const net = e.totalOwedToMe - e.totalIOweThemNumber;
+                      return (
+                        <div key={e._id} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${isSent ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-slate-700'}`}>
+                          <button onClick={() => toggleBulk(e._id)}
+                            className="w-5 h-5 flex items-center justify-center shrink-0">
+                            {isSel
+                              ? <CheckCircle2 size={17} className="text-sky-500" />
+                              : <Circle size={17} className="text-gray-300 dark:text-slate-600" />}
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[12px] font-semibold text-gray-800 dark:text-slate-200 truncate">{e.name}</p>
+                            <p className="text-[10px] text-gray-500 dark:text-slate-400 truncate">
+                              {e.phone}{net > 0 ? ` • Due ${fmt(net)}` : ''}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => sendBulkOne(e)}
+                            disabled={!isSel || !bulkTpl}
+                            className={`shrink-0 px-2 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 ${
+                              isSent
+                                ? 'bg-green-500 text-white'
+                                : 'bg-sky-500 text-white disabled:opacity-40'
+                            } active:scale-95`}>
+                            {isSent ? <><Check size={11} /> Sent</> : <><Send size={11} /> Send</>}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="flex-shrink-0 px-4 pt-2 pb-5 text-center">
+              <p className="text-[10px] text-gray-400 dark:text-slate-500">
+                WhatsApp only allows one message per tap — send one at a time and come back for the next.
+              </p>
             </div>
           </div>
         </div>
