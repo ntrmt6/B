@@ -48,7 +48,17 @@ interface RegSettings {
   rewardItemPrice: number;
   welcomeMessage: string;
 }
-interface MessageTemplate { id: string; name: string; body: string; }
+type FieldType = 'text' | 'textarea' | 'number' | 'date' | 'time' | 'select';
+interface TemplateField {
+  id: string;
+  label: string;
+  type: FieldType;
+  listId?: string;
+  options?: string[];
+  defaultValue?: string;
+}
+interface MessageTemplate { id: string; name: string; body: string; fields?: TemplateField[]; }
+interface NamedList { id: string; name: string; items: string[]; }
 
 const TYPES: Entity['type'][] = ['Customer', 'Supplier', 'Employee'];
 const AVATAR_COLORS = ['#0ea5e9','#8b5cf6','#10b981','#f59e0b','#ec4899','#6366f1'];
@@ -57,6 +67,7 @@ const LABELS_KEY = 'duebook_labels';
 const DARK_KEY = 'duebook_dark';
 const USAGE_KEY = 'duebook_usage';
 const TEMPLATES_KEY = 'duebook_templates';
+const LISTS_KEY = 'duebook_lists';
 const DEFAULT_CATALOG: CatalogItem[] = [
   { id: '1', name: 'Chai', price: 10 },
   { id: '2', name: 'Coke', price: 30 },
@@ -66,6 +77,11 @@ const DEFAULT_CATALOG: CatalogItem[] = [
   { id: '6', name: 'Biscuit', price: 10 },
 ];
 const DEFAULT_LABELS: Labels = { Customer: 'Customer', Supplier: 'Supplier', Employee: 'Employee' };
+
+const DEFAULT_LISTS: NamedList[] = [
+  { id: 'vehicles', name: 'Vehicle Types', items: ['AC Bus', 'Non-AC Bus', 'Microbus', 'Sedan Car', 'SUV', 'Hiace'] },
+  { id: 'locations', name: 'Locations', items: ['Dhaka', 'Chittagong', "Cox's Bazar", 'Sylhet', 'Rangamati', 'Bandarban'] },
+];
 
 const DEFAULT_TEMPLATES: MessageTemplate[] = [
   {
@@ -88,17 +104,25 @@ Regards,
 Booking Date: {today}
 Name: {customerName}
 Contact Number: {phone}
-Service:
-Date:
-Time:
-Location:
+Service: {service}
+Date: {date}
+Time: {time}
+Location: {location}
 
 
-Total:
-Advance:
+Total: {total}
+Advance: {advance}
 Remaining due: {due}
 ━━━━━━━━━━━━━━━━━━
 Thank you!`,
+    fields: [
+      { id: 'service', label: 'Service', type: 'text' },
+      { id: 'date', label: 'Date', type: 'date' },
+      { id: 'time', label: 'Time', type: 'time' },
+      { id: 'location', label: 'Location', type: 'select', listId: 'locations' },
+      { id: 'total', label: 'Total (Tk)', type: 'number' },
+      { id: 'advance', label: 'Advance (Tk)', type: 'number' },
+    ],
   },
   {
     id: 'car-rental',
@@ -108,21 +132,33 @@ Thank you!`,
 Booking Date: {today}
 Name: {customerName}
 Contact Number: {phone}
-Vehicle Type:
-Journey Date:
-Pickup location:
-Pickup time:
-Destination:
-Return Drop location:
-Return date:
-Return Time:
+Vehicle Type: {vehicleType}
+Journey Date: {journeyDate}
+Pickup location: {pickup}
+Pickup time: {pickupTime}
+Destination: {destination}
+Return Drop location: {returnDrop}
+Return date: {returnDate}
+Return Time: {returnTime}
 
 
-Total Rent:
-Advance Amount:
+Total Rent: {totalRent}
+Advance Amount: {advance}
 Remaining due: {due}
 ━━━━━━━━━━━━━━━━━━
 Thank you!`,
+    fields: [
+      { id: 'vehicleType', label: 'Vehicle Type', type: 'select', listId: 'vehicles' },
+      { id: 'journeyDate', label: 'Journey Date', type: 'date' },
+      { id: 'pickup', label: 'Pickup Location', type: 'select', listId: 'locations' },
+      { id: 'pickupTime', label: 'Pickup Time', type: 'time' },
+      { id: 'destination', label: 'Destination', type: 'select', listId: 'locations' },
+      { id: 'returnDrop', label: 'Return Drop Location', type: 'select', listId: 'locations' },
+      { id: 'returnDate', label: 'Return Date', type: 'date' },
+      { id: 'returnTime', label: 'Return Time', type: 'time' },
+      { id: 'totalRent', label: 'Total Rent (Tk)', type: 'number' },
+      { id: 'advance', label: 'Advance (Tk)', type: 'number' },
+    ],
   },
   {
     id: 'delivery',
@@ -155,6 +191,16 @@ const applyPlaceholders = (
     .replace(/\{today\}/g, today)
     .replace(/\{due\}/g, dueStr)
     .replace(/\{net\}/g, netStr);
+};
+
+const applyFieldValues = (body: string, fields: TemplateField[] | undefined, values: Record<string, string>) => {
+  if (!fields?.length) return body;
+  let out = body;
+  for (const f of fields) {
+    const v = (values[f.id] ?? '').toString();
+    out = out.split(`{${f.id}}`).join(v);
+  }
+  return out;
 };
 
 const avatarColor = (name: string) => AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
@@ -389,8 +435,24 @@ export default function DueBookPage() {
   const [editingTpl, setEditingTpl] = useState<MessageTemplate | null>(null);
   const [tplDraftName, setTplDraftName] = useState('');
   const [tplDraftBody, setTplDraftBody] = useState('');
+  const [tplDraftFields, setTplDraftFields] = useState<TemplateField[]>([]);
   const [showTplPreview, setShowTplPreview] = useState(false);
   const [tplPreview, setTplPreview] = useState('');
+  const [tplPreviewTpl, setTplPreviewTpl] = useState<MessageTemplate | null>(null);
+  const [tplFieldValues, setTplFieldValues] = useState<Record<string, string>>({});
+  const [tplBodyOverride, setTplBodyOverride] = useState<string | null>(null);
+
+  /* named lists (vehicles, locations, etc.) */
+  const [lists, setLists] = useState<NamedList[]>(() => {
+    if (typeof window === 'undefined') return DEFAULT_LISTS;
+    try {
+      const s = localStorage.getItem(LISTS_KEY);
+      return s ? JSON.parse(s) : DEFAULT_LISTS;
+    } catch { return DEFAULT_LISTS; }
+  });
+  const [expandedListId, setExpandedListId] = useState<string | null>(null);
+  const [newListName, setNewListName] = useState('');
+  const [newListItem, setNewListItem] = useState<Record<string, string>>({});
 
   /* dark mode */
   const [isDark, setIsDark] = useState(() => {
@@ -712,6 +774,7 @@ export default function DueBookPage() {
     setEditingTpl(null);
     setTplDraftName('');
     setTplDraftBody('');
+    setTplDraftFields([]);
     setShowTplEditor(true);
     window.history.pushState({ duebook: 'modal' }, '');
   };
@@ -720,6 +783,7 @@ export default function DueBookPage() {
     setEditingTpl(t);
     setTplDraftName(t.name);
     setTplDraftBody(t.body);
+    setTplDraftFields(t.fields ? t.fields.map(f => ({ ...f })) : []);
     setShowTplEditor(true);
     window.history.pushState({ duebook: 'modal' }, '');
   };
@@ -729,15 +793,31 @@ export default function DueBookPage() {
     const body = tplDraftBody;
     if (!name) { toast.error('Template name required'); return; }
     if (!body.trim()) { toast.error('Message body required'); return; }
+    const fields = tplDraftFields
+      .map(f => ({ ...f, id: (f.id || '').trim(), label: (f.label || '').trim() }))
+      .filter(f => f.id && f.label);
     if (editingTpl) {
-      saveTemplates(templates.map(t => t.id === editingTpl.id ? { ...t, name, body } : t));
+      saveTemplates(templates.map(t => t.id === editingTpl.id ? { ...t, name, body, fields } : t));
       toast.success('Template updated');
     } else {
-      saveTemplates([...templates, { id: 'tpl-' + Date.now(), name, body }]);
+      saveTemplates([...templates, { id: 'tpl-' + Date.now(), name, body, fields }]);
       toast.success('Template added');
     }
     setShowTplEditor(false);
     setEditingTpl(null);
+  };
+
+  const addDraftField = () => {
+    const idx = tplDraftFields.length + 1;
+    const id = `field${idx}`;
+    setTplDraftFields(prev => [...prev, { id, label: `Field ${idx}`, type: 'text' }]);
+    setTplDraftBody(v => v + (v.endsWith('\n') || v === '' ? '' : '\n') + `${id}: {${id}}`);
+  };
+  const updateDraftField = (idx: number, patch: Partial<TemplateField>) => {
+    setTplDraftFields(prev => prev.map((f, i) => i === idx ? { ...f, ...patch } : f));
+  };
+  const removeDraftField = (idx: number) => {
+    setTplDraftFields(prev => prev.filter((_, i) => i !== idx));
   };
 
   const deleteTpl = (id: string) => {
@@ -746,20 +826,54 @@ export default function DueBookPage() {
     toast.success('Deleted');
   };
 
+  const buildTplPreview = useCallback(
+    (t: MessageTemplate, values: Record<string, string>) => {
+      if (!selected) return '';
+      const net = (selected.totalOwedToMe || 0) - (selected.totalIOweThemNumber || 0);
+      const withCustom = applyFieldValues(t.body, t.fields, values);
+      return applyPlaceholders(withCustom, {
+        shopName: regSettings.shopName,
+        customerName: selected.name,
+        phone: selected.phone,
+        due: net > 0 ? net : 0,
+        net,
+      });
+    },
+    [selected, regSettings.shopName],
+  );
+
   const pickTpl = (t: MessageTemplate) => {
     if (!selected) return;
-    const net = (selected.totalOwedToMe || 0) - (selected.totalIOweThemNumber || 0);
-    const msg = applyPlaceholders(t.body, {
-      shopName: regSettings.shopName,
-      customerName: selected.name,
-      phone: selected.phone,
-      due: net > 0 ? net : 0,
-      net,
-    });
-    setTplPreview(msg);
+    const initValues: Record<string, string> = {};
+    (t.fields || []).forEach(f => { initValues[f.id] = f.defaultValue || ''; });
+    setTplPreviewTpl(t);
+    setTplFieldValues(initValues);
+    setTplBodyOverride(null);
+    setTplPreview(buildTplPreview(t, initValues));
     setShowTplPicker(false);
     setShowTplPreview(true);
     window.history.pushState({ duebook: 'modal' }, '');
+  };
+
+  const updateTplField = (fieldId: string, value: string) => {
+    setTplFieldValues(prev => {
+      const next = { ...prev, [fieldId]: value };
+      if (tplPreviewTpl && tplBodyOverride === null) {
+        setTplPreview(buildTplPreview(tplPreviewTpl, next));
+      }
+      return next;
+    });
+  };
+
+  const onTplPreviewEdit = (value: string) => {
+    setTplBodyOverride(value);
+    setTplPreview(value);
+  };
+
+  const resetTplPreview = () => {
+    if (!tplPreviewTpl) return;
+    setTplBodyOverride(null);
+    setTplPreview(buildTplPreview(tplPreviewTpl, tplFieldValues));
   };
 
   const sendTplPreview = async () => {
@@ -771,6 +885,31 @@ export default function DueBookPage() {
   const copyTplPreview = async () => {
     try { await navigator.clipboard.writeText(tplPreview); toast.success('Copied'); }
     catch { toast.error('Copy failed'); }
+  };
+
+  /* ─── Named list helpers ─── */
+  const saveLists = (l: NamedList[]) => {
+    setLists(l);
+    try { localStorage.setItem(LISTS_KEY, JSON.stringify(l)); } catch {/* ignore */}
+  };
+  const addList = () => {
+    const name = newListName.trim();
+    if (!name) return;
+    saveLists([...lists, { id: 'lst-' + Date.now(), name, items: [] }]);
+    setNewListName('');
+  };
+  const deleteList = (id: string) => {
+    if (!confirm('Delete this list? Templates using it will show a plain text field.')) return;
+    saveLists(lists.filter(l => l.id !== id));
+  };
+  const addItemToList = (listId: string) => {
+    const val = (newListItem[listId] || '').trim();
+    if (!val) return;
+    saveLists(lists.map(l => l.id === listId ? { ...l, items: [...l.items, val] } : l));
+    setNewListItem(prev => ({ ...prev, [listId]: '' }));
+  };
+  const removeItemFromList = (listId: string, idx: number) => {
+    saveLists(lists.map(l => l.id === listId ? { ...l, items: l.items.filter((_, i) => i !== idx) } : l));
   };
 
   const handleSendReminder = async (
@@ -1767,17 +1906,17 @@ export default function DueBookPage() {
       {showSettings && (
         <div className="absolute inset-0 z-50 flex flex-col justify-end" onClick={() => setShowSettings(false)}>
           <div className="absolute inset-0 bg-black/40" />
-          <div className="relative bg-white dark:bg-slate-800 rounded-t-2xl shadow-2xl z-10 sheet-slide-up" onClick={e => e.stopPropagation()}>
-            <div className="flex justify-center pt-2 pb-1">
+          <div className="relative bg-white dark:bg-slate-800 rounded-t-2xl shadow-2xl z-10 sheet-slide-up flex flex-col max-h-[90dvh]" onClick={e => e.stopPropagation()}>
+            <div className="flex-shrink-0 flex justify-center pt-2 pb-1">
               <div className="w-9 h-1 bg-gray-300 dark:bg-slate-600 rounded-full" />
             </div>
-            <div className="flex items-center justify-between px-4 pb-2 pt-1">
+            <div className="flex-shrink-0 flex items-center justify-between px-4 pb-2 pt-1">
               <h3 className="text-[14px] font-bold text-gray-900 dark:text-slate-100">Settings</h3>
               <button onClick={() => setShowSettings(false)} className="w-6 h-6 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-slate-700">
                 <X size={15} className="text-gray-400 dark:text-slate-500" />
               </button>
             </div>
-            <div className="px-4 pb-5 space-y-4">
+            <div className="flex-1 overflow-y-auto scroll-view px-4 pb-5 space-y-4">
               {/* Dark mode toggle */}
               <div className="flex items-center justify-between">
                 <span className="text-[13px] font-semibold text-gray-700 dark:text-slate-200">Dark Mode</span>
@@ -1983,6 +2122,79 @@ export default function DueBookPage() {
                 </div>
               )}
 
+              {/* Reusable Lists (vehicles, locations, ...) */}
+              <div className="pt-3 border-t border-gray-100 dark:border-slate-700">
+                <p className="text-[12px] font-bold text-gray-500 dark:text-slate-400 mb-1 uppercase tracking-wide">
+                  Reusable Lists
+                </p>
+                <p className="text-[11px] text-gray-400 dark:text-slate-500 mb-2">
+                  Named dropdown lists (Vehicle Types, Locations, Services…) that templates can reuse.
+                </p>
+
+                <div className="space-y-1.5 mb-2">
+                  {lists.length === 0 && (
+                    <p className="text-[11px] text-gray-400 dark:text-slate-500 py-2 text-center">No lists yet.</p>
+                  )}
+                  {lists.map(l => {
+                    const isOpen = expandedListId === l.id;
+                    return (
+                      <div key={l.id} className="rounded-lg bg-gray-50 dark:bg-slate-700">
+                        <div className="flex items-center gap-2 px-2.5 py-1.5">
+                          <button onClick={() => setExpandedListId(isOpen ? null : l.id)}
+                            className="flex-1 text-left text-[12px] font-semibold text-gray-800 dark:text-slate-200">
+                            {l.name} <span className="text-gray-400 dark:text-slate-500 font-normal">({l.items.length})</span>
+                          </button>
+                          <button onClick={() => deleteList(l.id)}
+                            className="w-6 h-6 flex items-center justify-center rounded-md text-red-400 active:bg-red-50 dark:active:bg-red-900/30">
+                            <Trash2 size={12} />
+                          </button>
+                        </div>
+                        {isOpen && (
+                          <div className="px-2.5 pb-2 space-y-1.5">
+                            {l.items.map((it, i) => (
+                              <div key={i} className="flex items-center gap-2 bg-white dark:bg-slate-800 rounded-md px-2 py-1">
+                                <span className="flex-1 text-[12px] text-gray-800 dark:text-slate-200 truncate">{it}</span>
+                                <button onClick={() => removeItemFromList(l.id, i)}
+                                  className="w-5 h-5 flex items-center justify-center rounded text-red-400">
+                                  <X size={11} />
+                                </button>
+                              </div>
+                            ))}
+                            <div className="flex gap-1.5">
+                              <input
+                                value={newListItem[l.id] || ''}
+                                onChange={e => setNewListItem(prev => ({ ...prev, [l.id]: e.target.value }))}
+                                onKeyDown={e => e.key === 'Enter' && addItemToList(l.id)}
+                                placeholder="New item"
+                                className="flex-1 border border-gray-200 dark:border-slate-600 rounded-md px-2 py-1 text-[12px] text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400 bg-white dark:bg-slate-800"
+                              />
+                              <button onClick={() => addItemToList(l.id)}
+                                className="px-2 rounded-md bg-sky-500 text-white text-[11px] font-bold">
+                                Add
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <div className="flex gap-1.5">
+                  <input
+                    value={newListName}
+                    onChange={e => setNewListName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && addList()}
+                    placeholder="New list name (e.g. Vehicles)"
+                    className="flex-1 border border-gray-200 dark:border-slate-600 rounded-lg px-2.5 py-1.5 text-[12px] text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400"
+                  />
+                  <button onClick={addList}
+                    className="px-3 rounded-lg bg-sky-500 text-white text-[12px] font-bold">
+                    <Plus size={12} className="inline -mt-0.5" /> List
+                  </button>
+                </div>
+              </div>
+
               {/* Message Templates */}
               <div className="pt-3 border-t border-gray-100 dark:border-slate-700">
                 <p className="text-[12px] font-bold text-gray-500 dark:text-slate-400 mb-1 uppercase tracking-wide flex items-center gap-1.5">
@@ -2079,15 +2291,63 @@ export default function DueBookPage() {
                 <X size={15} className="text-gray-400 dark:text-slate-500" />
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto px-4 pb-2">
-              <textarea
-                value={tplPreview}
-                onChange={e => setTplPreview(e.target.value)}
-                rows={14}
-                className="w-full border border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2 text-[13px] text-gray-900 dark:text-slate-100 bg-gray-50 dark:bg-slate-700 outline-none focus:border-sky-400 resize-none font-mono leading-snug"
-              />
-              <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-1.5">
-                Fill in blank fields before sending. Recipient: {selected?.name}{selected?.phone ? ` (${selected.phone})` : ''}
+            <div className="flex-1 overflow-y-auto px-4 pb-2 space-y-2">
+              {tplPreviewTpl?.fields && tplPreviewTpl.fields.length > 0 && (
+                <div className="rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 p-2.5 space-y-2">
+                  <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">Fill Details</p>
+                  {tplPreviewTpl.fields.map(f => {
+                    const val = tplFieldValues[f.id] || '';
+                    const list = f.listId ? lists.find(l => l.id === f.listId) : undefined;
+                    const commonCls = 'w-full border border-emerald-200 dark:border-emerald-800 rounded-md px-2 py-1.5 text-[12px] bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100 outline-none focus:border-emerald-400';
+                    return (
+                      <div key={f.id}>
+                        <label className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 block mb-0.5">{f.label}</label>
+                        {f.type === 'textarea' ? (
+                          <textarea rows={2} value={val}
+                            onChange={e => updateTplField(f.id, e.target.value)}
+                            className={commonCls + ' resize-none'} />
+                        ) : f.type === 'select' && list ? (
+                          <select value={val}
+                            onChange={e => updateTplField(f.id, e.target.value)}
+                            className={commonCls}>
+                            <option value="">— select —</option>
+                            {list.items.map((it, i) => <option key={i} value={it}>{it}</option>)}
+                          </select>
+                        ) : (
+                          <input
+                            type={f.type === 'select' ? 'text' : f.type}
+                            inputMode={f.type === 'number' ? 'decimal' : undefined}
+                            value={val}
+                            onChange={e => updateTplField(f.id, e.target.value)}
+                            className={commonCls}
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                  {tplBodyOverride !== null && (
+                    <button onClick={resetTplPreview}
+                      className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 underline">
+                      Regenerate preview from fields
+                    </button>
+                  )}
+                </div>
+              )}
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[10px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Preview</label>
+                  <span className="text-[10px] text-gray-400 dark:text-slate-500">Editable</span>
+                </div>
+                <textarea
+                  value={tplPreview}
+                  onChange={e => onTplPreviewEdit(e.target.value)}
+                  rows={12}
+                  className="w-full border border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2 text-[13px] text-gray-900 dark:text-slate-100 bg-gray-50 dark:bg-slate-700 outline-none focus:border-sky-400 resize-none font-mono leading-snug"
+                />
+              </div>
+              <p className="text-[10px] text-gray-400 dark:text-slate-500">
+                Recipient: {selected?.name}{selected?.phone ? ` (${selected.phone})` : ''}
               </p>
             </div>
             <div className="flex-shrink-0 flex gap-2 px-4 pt-2 pb-5">
@@ -2151,10 +2411,79 @@ export default function DueBookPage() {
                     + {`{${k}}`}
                   </button>
                 ))}
+                {tplDraftFields.map(f => (
+                  <button key={f.id}
+                    onClick={() => setTplDraftBody(v => v + `{${f.id}}`)}
+                    className="px-2 py-1 rounded-md bg-emerald-50 dark:bg-emerald-900/30 border border-emerald-200 dark:border-emerald-800 text-[10px] font-semibold text-emerald-600 dark:text-emerald-400 active:scale-95">
+                    + {`{${f.id}}`}
+                  </button>
+                ))}
               </div>
               <p className="text-[10px] text-gray-400 dark:text-slate-500">
-                Placeholders will be filled with contact / shop info when you send.
+                Blue: built-in. Green: your custom fields. Both filled in when you send.
               </p>
+
+              {/* Dynamic fields editor */}
+              <div className="pt-2 mt-1 border-t border-gray-100 dark:border-slate-700">
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Custom Fields</span>
+                  <button onClick={addDraftField}
+                    className="text-[11px] font-bold text-sky-500 flex items-center gap-0.5">
+                    <Plus size={11} /> Add field
+                  </button>
+                </div>
+                {tplDraftFields.length === 0 && (
+                  <p className="text-[10px] text-gray-400 dark:text-slate-500 py-1">
+                    Add fields for date, time, vehicle, location etc. They become selectable inputs when sending.
+                  </p>
+                )}
+                <div className="space-y-2">
+                  {tplDraftFields.map((f, i) => (
+                    <div key={i} className="rounded-lg bg-gray-50 dark:bg-slate-700 p-2 space-y-1.5">
+                      <div className="flex gap-1.5">
+                        <input
+                          value={f.label}
+                          onChange={e => updateDraftField(i, { label: e.target.value })}
+                          placeholder="Label"
+                          className="flex-1 min-w-0 border border-gray-200 dark:border-slate-600 rounded-md px-2 py-1 text-[12px] outline-none focus:border-sky-400 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
+                        />
+                        <input
+                          value={f.id}
+                          onChange={e => updateDraftField(i, { id: e.target.value.replace(/[^a-zA-Z0-9_]/g, '') })}
+                          placeholder="key"
+                          className="w-20 border border-gray-200 dark:border-slate-600 rounded-md px-2 py-1 text-[11px] font-mono outline-none focus:border-sky-400 bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100"
+                        />
+                        <button onClick={() => removeDraftField(i)}
+                          className="w-7 h-7 flex items-center justify-center rounded-md text-red-400 active:bg-red-50 dark:active:bg-red-900/30">
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                      <div className="flex gap-1.5">
+                        <select
+                          value={f.type}
+                          onChange={e => updateDraftField(i, { type: e.target.value as FieldType, listId: undefined })}
+                          className="flex-1 border border-gray-200 dark:border-slate-600 rounded-md px-2 py-1 text-[12px] bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100">
+                          <option value="text">Text</option>
+                          <option value="textarea">Textarea</option>
+                          <option value="number">Number</option>
+                          <option value="date">Date</option>
+                          <option value="time">Time</option>
+                          <option value="select">Dropdown (list)</option>
+                        </select>
+                        {f.type === 'select' && (
+                          <select
+                            value={f.listId || ''}
+                            onChange={e => updateDraftField(i, { listId: e.target.value })}
+                            className="flex-1 border border-gray-200 dark:border-slate-600 rounded-md px-2 py-1 text-[12px] bg-white dark:bg-slate-800 text-gray-900 dark:text-slate-100">
+                            <option value="">— pick list —</option>
+                            {lists.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+                          </select>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
             <div className="flex-shrink-0 px-4 pt-2 pb-5">
               <button onClick={saveTpl}
