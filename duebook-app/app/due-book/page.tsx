@@ -15,7 +15,7 @@ import {
   Plus, Search, X, ChevronLeft, LogOut,
   TrendingUp, TrendingDown, UserPlus, Trash2, CheckCircle2, Circle, Download,
   Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon, CloudOff, Send, Bell,
-  MessageSquare, Copy, Users, Upload, ClipboardPaste, Check,
+  MessageSquare, Copy, Users, Upload, ClipboardPaste, Check, Pin, PinOff,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import SyncBar from './SyncBar';
@@ -26,6 +26,7 @@ interface Entity {
   _id: string; name: string; phone?: string;
   type: 'Customer' | 'Supplier' | 'Employee';
   totalOwedToMe: number; totalIOweThemNumber: number;
+  updatedAt?: string; createdAt?: string;
   _pending?: boolean;
 }
 
@@ -70,6 +71,7 @@ const USAGE_KEY = 'duebook_usage';
 const TEMPLATES_KEY = 'duebook_templates';
 const LISTS_KEY = 'duebook_lists';
 const LAST_TPL_VALUES_KEY = 'duebook_tpl_last';
+const PINNED_KEY = 'duebook_pinned';
 
 type SettingsTab = 'general' | 'business' | 'templates' | 'lists';
 const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
@@ -467,6 +469,23 @@ export default function DueBookPage() {
   /* settings tab */
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('general');
 
+  /* pinned entities (top of list) */
+  const [pinned, setPinned] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set();
+    try {
+      const s = localStorage.getItem(PINNED_KEY);
+      return new Set(s ? JSON.parse(s) as string[] : []);
+    } catch { return new Set(); }
+  });
+  const togglePin = (id: string) => {
+    setPinned(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      try { localStorage.setItem(PINNED_KEY, JSON.stringify(Array.from(n))); } catch {/* ignore */}
+      return n;
+    });
+  };
+
   /* import / export */
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState('');
@@ -655,14 +674,23 @@ export default function DueBookPage() {
     window.history.pushState({ duebook: 'detail' }, '');
   };
 
-  const filtered = useMemo(() => entities.filter(e => {
-    const matchTab = e.type?.toLowerCase() === tab.toLowerCase();
-    if (!search) return matchTab;
-    return matchTab && (
-      e.name?.toLowerCase().includes(search.toLowerCase()) ||
-      e.phone?.includes(search)
-    );
-  }), [entities, tab, search]);
+  const filtered = useMemo(() => {
+    const matched = entities.filter(e => {
+      const matchTab = e.type?.toLowerCase() === tab.toLowerCase();
+      if (!search) return matchTab;
+      return matchTab && (
+        e.name?.toLowerCase().includes(search.toLowerCase()) ||
+        e.phone?.includes(search)
+      );
+    });
+    const ts = (e: Entity) => new Date(e.updatedAt || e.createdAt || 0).getTime();
+    return matched.sort((a, b) => {
+      const pa = pinned.has(a._id) ? 1 : 0;
+      const pb = pinned.has(b._id) ? 1 : 0;
+      if (pa !== pb) return pb - pa;
+      return ts(b) - ts(a);
+    });
+  }, [entities, tab, search, pinned]);
 
   const totalGet = entities.reduce((s, e) => s + (e.totalOwedToMe || 0), 0);
   const totalGive = entities.reduce((s, e) => s + (e.totalIOweThemNumber || 0), 0);
@@ -1672,9 +1700,16 @@ export default function DueBookPage() {
                   <div key={entity._id} onClick={() => selectEntity(entity)}
                     role="button"
                     className="w-full flex items-center gap-2.5 bg-white dark:bg-slate-800 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.05)] active:bg-gray-50 dark:active:bg-slate-700 transition cursor-pointer">
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[12px] shrink-0"
-                      style={{ background: avatarColor(entity.name) }}>
-                      {initial(entity.name)}
+                    <div className="relative shrink-0">
+                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[12px]"
+                        style={{ background: avatarColor(entity.name) }}>
+                        {initial(entity.name)}
+                      </div>
+                      {pinned.has(entity._id) && (
+                        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-400 border-2 border-white dark:border-slate-800 flex items-center justify-center">
+                          <Pin size={8} className="text-white" strokeWidth={3} />
+                        </span>
+                      )}
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-1">
@@ -1687,6 +1722,17 @@ export default function DueBookPage() {
                       </div>
                       <p className="text-[11px] text-gray-400 dark:text-slate-500 truncate">{entity.phone || labels[entity.type]}</p>
                     </div>
+                    <button
+                      onClick={e => { e.stopPropagation(); togglePin(entity._id); }}
+                      title={pinned.has(entity._id) ? 'Unpin' : 'Pin to top'}
+                      className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-lg transition ${
+                        pinned.has(entity._id)
+                          ? 'text-amber-500 active:bg-amber-50 dark:active:bg-amber-900/30'
+                          : 'text-gray-300 dark:text-slate-600 active:bg-gray-100 dark:active:bg-slate-700'
+                      }`}
+                    >
+                      {pinned.has(entity._id) ? <PinOff size={14} /> : <Pin size={14} />}
+                    </button>
                     <div className="text-right shrink-0">
                       {total > 0 ? (
                         <>
