@@ -15,6 +15,7 @@ import {
   Plus, Search, X, ChevronLeft, LogOut,
   TrendingUp, TrendingDown, UserPlus, Trash2, CheckCircle2, Circle, Download,
   Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon, CloudOff, Send, Bell,
+  MessageSquare, Copy,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import SyncBar from './SyncBar';
@@ -47,6 +48,7 @@ interface RegSettings {
   rewardItemPrice: number;
   welcomeMessage: string;
 }
+interface MessageTemplate { id: string; name: string; body: string; }
 
 const TYPES: Entity['type'][] = ['Customer', 'Supplier', 'Employee'];
 const AVATAR_COLORS = ['#0ea5e9','#8b5cf6','#10b981','#f59e0b','#ec4899','#6366f1'];
@@ -54,6 +56,7 @@ const CATALOG_KEY = 'duebook_catalog';
 const LABELS_KEY = 'duebook_labels';
 const DARK_KEY = 'duebook_dark';
 const USAGE_KEY = 'duebook_usage';
+const TEMPLATES_KEY = 'duebook_templates';
 const DEFAULT_CATALOG: CatalogItem[] = [
   { id: '1', name: 'Chai', price: 10 },
   { id: '2', name: 'Coke', price: 30 },
@@ -63,6 +66,96 @@ const DEFAULT_CATALOG: CatalogItem[] = [
   { id: '6', name: 'Biscuit', price: 10 },
 ];
 const DEFAULT_LABELS: Labels = { Customer: 'Customer', Supplier: 'Supplier', Employee: 'Employee' };
+
+const DEFAULT_TEMPLATES: MessageTemplate[] = [
+  {
+    id: 'greeting',
+    name: 'Greeting',
+    body: `Hi {customerName},
+
+Thank you for choosing *{shopName}*. We appreciate your trust in us.
+
+For any query, feel free to reach out.
+
+Regards,
+{shopName}`,
+  },
+  {
+    id: 'booking',
+    name: 'Booking Confirmation',
+    body: `*{shopName}*
+━━━━━━━━━━━━━━━━━━
+Booking Date: {today}
+Name: {customerName}
+Contact Number: {phone}
+Service:
+Date:
+Time:
+Location:
+
+
+Total:
+Advance:
+Remaining due: {due}
+━━━━━━━━━━━━━━━━━━
+Thank you!`,
+  },
+  {
+    id: 'car-rental',
+    name: 'Car Rental Booking',
+    body: `*{shopName} - Tourist Bus Rental Service*
+━━━━━━━━━━━━━━━━━━
+Booking Date: {today}
+Name: {customerName}
+Contact Number: {phone}
+Vehicle Type:
+Journey Date:
+Pickup location:
+Pickup time:
+Destination:
+Return Drop location:
+Return date:
+Return Time:
+
+
+Total Rent:
+Advance Amount:
+Remaining due: {due}
+━━━━━━━━━━━━━━━━━━
+Thank you!`,
+  },
+  {
+    id: 'delivery',
+    name: 'Delivery Update',
+    body: `Hi {customerName},
+
+Your order from *{shopName}* is on the way and will be delivered soon.
+
+Amount to collect: {due}
+
+Thank you!`,
+  },
+];
+
+const PLACEHOLDER_KEYS = ['shopName', 'customerName', 'phone', 'today', 'due', 'net'] as const;
+
+const applyPlaceholders = (
+  body: string,
+  ctx: { shopName?: string; customerName?: string; phone?: string; today?: string; due?: number; net?: number },
+) => {
+  const today = ctx.today || new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  const dueStr = typeof ctx.due === 'number' && ctx.due > 0
+    ? `Tk ${ctx.due.toLocaleString('en-IN')}`
+    : (typeof ctx.due === 'number' ? '—' : '');
+  const netStr = typeof ctx.net === 'number' ? `Tk ${ctx.net.toLocaleString('en-IN')}` : '';
+  return body
+    .replace(/\{shopName\}/g, (ctx.shopName || '').trim() || 'Our Shop')
+    .replace(/\{customerName\}/g, ctx.customerName || '')
+    .replace(/\{phone\}/g, ctx.phone || '')
+    .replace(/\{today\}/g, today)
+    .replace(/\{due\}/g, dueStr)
+    .replace(/\{net\}/g, netStr);
+};
 
 const avatarColor = (name: string) => AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
 const initial = (name: string) => (name || '?')[0].toUpperCase();
@@ -283,6 +376,22 @@ export default function DueBookPage() {
   });
   const [draftLabels, setDraftLabels] = useState<Labels>(DEFAULT_LABELS);
 
+  /* message templates */
+  const [templates, setTemplates] = useState<MessageTemplate[]>(() => {
+    if (typeof window === 'undefined') return DEFAULT_TEMPLATES;
+    try {
+      const s = localStorage.getItem(TEMPLATES_KEY);
+      return s ? JSON.parse(s) : DEFAULT_TEMPLATES;
+    } catch { return DEFAULT_TEMPLATES; }
+  });
+  const [showTplPicker, setShowTplPicker] = useState(false);
+  const [showTplEditor, setShowTplEditor] = useState(false);
+  const [editingTpl, setEditingTpl] = useState<MessageTemplate | null>(null);
+  const [tplDraftName, setTplDraftName] = useState('');
+  const [tplDraftBody, setTplDraftBody] = useState('');
+  const [showTplPreview, setShowTplPreview] = useState(false);
+  const [tplPreview, setTplPreview] = useState('');
+
   /* dark mode */
   const [isDark, setIsDark] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -377,6 +486,9 @@ export default function DueBookPage() {
 
   useEffect(() => {
     const onPop = () => {
+      if (showTplPreview) { setShowTplPreview(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
+      if (showTplEditor) { setShowTplEditor(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
+      if (showTplPicker) { setShowTplPicker(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showCatalog) { setShowCatalog(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showSettings) { setShowSettings(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showEditEntity) { setShowEditEntity(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
@@ -386,7 +498,7 @@ export default function DueBookPage() {
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, [showAdd, showAddEntity, showCatalog, showSettings, showEditEntity, selected]);
+  }, [showAdd, showAddEntity, showCatalog, showSettings, showEditEntity, selected, showTplPicker, showTplEditor, showTplPreview]);
 
   const loadTx = useCallback(async (entity: Entity) => {
     if (!tenantId) return;
@@ -582,6 +694,83 @@ export default function DueBookPage() {
     }
     try { await navigator.clipboard.writeText(msg); toast.success(copiedLabel); }
     catch { toast.error('Unable to share'); }
+  };
+
+  /* ─── Template helpers ─── */
+  const saveTemplates = (list: MessageTemplate[]) => {
+    setTemplates(list);
+    try { localStorage.setItem(TEMPLATES_KEY, JSON.stringify(list)); } catch {/* ignore */}
+  };
+
+  const openTplPicker = () => {
+    if (!selected) return;
+    setShowTplPicker(true);
+    window.history.pushState({ duebook: 'modal' }, '');
+  };
+
+  const openNewTpl = () => {
+    setEditingTpl(null);
+    setTplDraftName('');
+    setTplDraftBody('');
+    setShowTplEditor(true);
+    window.history.pushState({ duebook: 'modal' }, '');
+  };
+
+  const openEditTpl = (t: MessageTemplate) => {
+    setEditingTpl(t);
+    setTplDraftName(t.name);
+    setTplDraftBody(t.body);
+    setShowTplEditor(true);
+    window.history.pushState({ duebook: 'modal' }, '');
+  };
+
+  const saveTpl = () => {
+    const name = tplDraftName.trim();
+    const body = tplDraftBody;
+    if (!name) { toast.error('Template name required'); return; }
+    if (!body.trim()) { toast.error('Message body required'); return; }
+    if (editingTpl) {
+      saveTemplates(templates.map(t => t.id === editingTpl.id ? { ...t, name, body } : t));
+      toast.success('Template updated');
+    } else {
+      saveTemplates([...templates, { id: 'tpl-' + Date.now(), name, body }]);
+      toast.success('Template added');
+    }
+    setShowTplEditor(false);
+    setEditingTpl(null);
+  };
+
+  const deleteTpl = (id: string) => {
+    if (!confirm('Delete this template?')) return;
+    saveTemplates(templates.filter(t => t.id !== id));
+    toast.success('Deleted');
+  };
+
+  const pickTpl = (t: MessageTemplate) => {
+    if (!selected) return;
+    const net = (selected.totalOwedToMe || 0) - (selected.totalIOweThemNumber || 0);
+    const msg = applyPlaceholders(t.body, {
+      shopName: regSettings.shopName,
+      customerName: selected.name,
+      phone: selected.phone,
+      due: net > 0 ? net : 0,
+      net,
+    });
+    setTplPreview(msg);
+    setShowTplPicker(false);
+    setShowTplPreview(true);
+    window.history.pushState({ duebook: 'modal' }, '');
+  };
+
+  const sendTplPreview = async () => {
+    if (!selected) return;
+    await shareText(tplPreview, selected.phone, 'Message copied');
+    setShowTplPreview(false);
+  };
+
+  const copyTplPreview = async () => {
+    try { await navigator.clipboard.writeText(tplPreview); toast.success('Copied'); }
+    catch { toast.error('Copy failed'); }
   };
 
   const handleSendReminder = async (
@@ -1050,6 +1239,14 @@ export default function DueBookPage() {
               Send Due Reminder — {fmt(selected.totalOwedToMe - selected.totalIOweThemNumber)}
             </button>
           )}
+          <button
+            onClick={openTplPicker}
+            className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400 text-[12px] font-bold border border-sky-200 dark:border-sky-800 active:scale-[0.98] transition"
+            title="Send custom message from template"
+          >
+            <MessageSquare size={13} />
+            Send Custom Message
+          </button>
         </div>
       )}
 
@@ -1785,6 +1982,185 @@ export default function DueBookPage() {
                   )}
                 </div>
               )}
+
+              {/* Message Templates */}
+              <div className="pt-3 border-t border-gray-100 dark:border-slate-700">
+                <p className="text-[12px] font-bold text-gray-500 dark:text-slate-400 mb-1 uppercase tracking-wide flex items-center gap-1.5">
+                  <MessageSquare size={13} /> Message Templates
+                </p>
+                <p className="text-[11px] text-gray-400 dark:text-slate-500 mb-2">
+                  Customize WhatsApp / SMS templates. Use{' '}
+                  <code className="text-[10px] bg-gray-100 dark:bg-slate-700 px-1 rounded">{'{shopName}'}</code>,{' '}
+                  <code className="text-[10px] bg-gray-100 dark:bg-slate-700 px-1 rounded">{'{customerName}'}</code>,{' '}
+                  <code className="text-[10px] bg-gray-100 dark:bg-slate-700 px-1 rounded">{'{phone}'}</code>,{' '}
+                  <code className="text-[10px] bg-gray-100 dark:bg-slate-700 px-1 rounded">{'{today}'}</code>,{' '}
+                  <code className="text-[10px] bg-gray-100 dark:bg-slate-700 px-1 rounded">{'{due}'}</code>.
+                </p>
+
+                <div className="space-y-1.5 mb-2">
+                  {templates.length === 0 && (
+                    <p className="text-[11px] text-gray-400 dark:text-slate-500 py-2 text-center">
+                      No templates. Add one below.
+                    </p>
+                  )}
+                  {templates.map(t => (
+                    <div key={t.id} className="flex items-center gap-2 bg-gray-50 dark:bg-slate-700 rounded-lg px-2.5 py-1.5">
+                      <span className="flex-1 text-[12px] font-semibold text-gray-800 dark:text-slate-200 truncate">{t.name}</span>
+                      <button onClick={() => openEditTpl(t)}
+                        className="w-6 h-6 flex items-center justify-center rounded-md text-sky-500 active:bg-sky-100 dark:active:bg-sky-900/30">
+                        <Pencil size={12} />
+                      </button>
+                      <button onClick={() => deleteTpl(t.id)}
+                        className="w-6 h-6 flex items-center justify-center rounded-md text-red-400 active:bg-red-50 dark:active:bg-red-900/30">
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={openNewTpl}
+                  className="w-full py-2 rounded-lg border-2 border-dashed border-sky-300 dark:border-sky-700 text-sky-500 dark:text-sky-400 text-[12px] font-bold active:scale-[0.98] transition flex items-center justify-center gap-1">
+                  <Plus size={13} /> Add Template
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════
+          TEMPLATE PICKER SHEET
+          ══════════════════════════════════════ */}
+      {showTplPicker && (
+        <div className="absolute inset-0 z-[55] flex flex-col justify-end" onClick={() => setShowTplPicker(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative bg-white dark:bg-slate-800 rounded-t-2xl shadow-2xl z-10 sheet-slide-up flex flex-col max-h-[80dvh]" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-2 pb-1">
+              <div className="w-9 h-1 bg-gray-300 dark:bg-slate-600 rounded-full" />
+            </div>
+            <div className="flex items-center justify-between px-4 pb-2 pt-1">
+              <h3 className="text-[14px] font-bold text-gray-900 dark:text-slate-100">Choose Template</h3>
+              <button onClick={() => setShowTplPicker(false)} className="w-6 h-6 flex items-center justify-center">
+                <X size={15} className="text-gray-400 dark:text-slate-500" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-1.5">
+              {templates.length === 0 && (
+                <p className="text-center text-[12px] text-gray-400 dark:text-slate-500 py-6">
+                  No templates yet. Open Settings → Message Templates to add one.
+                </p>
+              )}
+              {templates.map(t => (
+                <button key={t.id} onClick={() => pickTpl(t)}
+                  className="w-full text-left bg-gray-50 dark:bg-slate-700 hover:bg-sky-50 dark:hover:bg-sky-900/30 rounded-xl px-3 py-2.5 active:scale-[0.99] transition">
+                  <p className="text-[13px] font-bold text-gray-800 dark:text-slate-200 mb-0.5">{t.name}</p>
+                  <p className="text-[10px] text-gray-500 dark:text-slate-400 line-clamp-2 whitespace-pre-line">{t.body}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════
+          TEMPLATE PREVIEW / EDIT + SEND SHEET
+          ══════════════════════════════════════ */}
+      {showTplPreview && (
+        <div className="absolute inset-0 z-[60] flex flex-col justify-end" onClick={() => setShowTplPreview(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative bg-white dark:bg-slate-800 rounded-t-2xl shadow-2xl z-10 sheet-slide-up flex flex-col max-h-[90dvh]" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-2 pb-1">
+              <div className="w-9 h-1 bg-gray-300 dark:bg-slate-600 rounded-full" />
+            </div>
+            <div className="flex items-center justify-between px-4 pb-2 pt-1">
+              <h3 className="text-[14px] font-bold text-gray-900 dark:text-slate-100">Review & Send</h3>
+              <button onClick={() => setShowTplPreview(false)} className="w-6 h-6 flex items-center justify-center">
+                <X size={15} className="text-gray-400 dark:text-slate-500" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 pb-2">
+              <textarea
+                value={tplPreview}
+                onChange={e => setTplPreview(e.target.value)}
+                rows={14}
+                className="w-full border border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2 text-[13px] text-gray-900 dark:text-slate-100 bg-gray-50 dark:bg-slate-700 outline-none focus:border-sky-400 resize-none font-mono leading-snug"
+              />
+              <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-1.5">
+                Fill in blank fields before sending. Recipient: {selected?.name}{selected?.phone ? ` (${selected.phone})` : ''}
+              </p>
+            </div>
+            <div className="flex-shrink-0 flex gap-2 px-4 pt-2 pb-5">
+              <button onClick={copyTplPreview}
+                className="flex-1 py-3 rounded-xl border-2 border-sky-300 dark:border-sky-700 text-sky-600 dark:text-sky-400 text-[13px] font-bold flex items-center justify-center gap-1.5 active:scale-[0.98] transition">
+                <Copy size={14} /> Copy
+              </button>
+              <button onClick={sendTplPreview}
+                className="flex-[2] py-3 rounded-xl bg-green-500 text-white text-[14px] font-bold flex items-center justify-center gap-1.5 active:scale-[0.98] transition">
+                <MessageCircle size={14} /> Send via WhatsApp
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════
+          TEMPLATE EDITOR SHEET
+          ══════════════════════════════════════ */}
+      {showTplEditor && (
+        <div className="absolute inset-0 z-[60] flex flex-col justify-end" onClick={() => setShowTplEditor(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative bg-white dark:bg-slate-800 rounded-t-2xl shadow-2xl z-10 sheet-slide-up flex flex-col max-h-[90dvh]" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-2 pb-1">
+              <div className="w-9 h-1 bg-gray-300 dark:bg-slate-600 rounded-full" />
+            </div>
+            <div className="flex items-center justify-between px-4 pb-2 pt-1">
+              <h3 className="text-[14px] font-bold text-gray-900 dark:text-slate-100">
+                {editingTpl ? 'Edit Template' : 'New Template'}
+              </h3>
+              <button onClick={() => setShowTplEditor(false)} className="w-6 h-6 flex items-center justify-center">
+                <X size={15} className="text-gray-400 dark:text-slate-500" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto px-4 pb-2 space-y-2">
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 block mb-1">Name</label>
+                <input
+                  type="text"
+                  value={tplDraftName}
+                  onChange={e => setTplDraftName(e.target.value)}
+                  placeholder="e.g. Car Rental Booking"
+                  className="w-full border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 text-[13px] text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400"
+                />
+              </div>
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 block mb-1">Message Body</label>
+                <textarea
+                  value={tplDraftBody}
+                  onChange={e => setTplDraftBody(e.target.value)}
+                  rows={14}
+                  placeholder="Write your message here…"
+                  className="w-full border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-2 text-[13px] text-gray-900 dark:text-slate-100 bg-gray-50 dark:bg-slate-700 outline-none focus:border-sky-400 resize-none font-mono leading-snug"
+                />
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {PLACEHOLDER_KEYS.map(k => (
+                  <button key={k}
+                    onClick={() => setTplDraftBody(v => v + `{${k}}`)}
+                    className="px-2 py-1 rounded-md bg-sky-50 dark:bg-sky-900/30 border border-sky-200 dark:border-sky-800 text-[10px] font-semibold text-sky-600 dark:text-sky-400 active:scale-95 transition">
+                    + {`{${k}}`}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-gray-400 dark:text-slate-500">
+                Placeholders will be filled with contact / shop info when you send.
+              </p>
+            </div>
+            <div className="flex-shrink-0 px-4 pt-2 pb-5">
+              <button onClick={saveTpl}
+                className="w-full py-3 rounded-xl bg-sky-500 text-white text-[14px] font-bold active:scale-[0.98] transition">
+                {editingTpl ? 'Save Changes' : 'Add Template'}
+              </button>
             </div>
           </div>
         </div>
