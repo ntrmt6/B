@@ -15,7 +15,7 @@ import {
   Plus, Search, X, ChevronLeft, LogOut,
   TrendingUp, TrendingDown, UserPlus, Trash2, CheckCircle2, Circle, Download,
   Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon, CloudOff, Send, Bell,
-  MessageSquare, Copy, Users, Upload, ClipboardPaste, Check, Pin, PinOff,
+  MessageSquare, Copy, Users, Upload, ClipboardPaste, Check, Pin, PinOff, ShieldCheck,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import SyncBar from './SyncBar';
@@ -26,6 +26,7 @@ interface Entity {
   _id: string; name: string; phone?: string;
   type: 'Customer' | 'Supplier' | 'Employee';
   totalOwedToMe: number; totalIOweThemNumber: number;
+  rewardsClaimed?: number;
   updatedAt?: string; createdAt?: string;
   _pending?: boolean;
 }
@@ -47,6 +48,7 @@ interface RegSettings {
   bonusAmount: number;
   rewardItemName: string;
   rewardItemPrice: number;
+  paymentRewardThreshold: number;
   welcomeMessage: string;
   shopLogo: string;
 }
@@ -346,6 +348,10 @@ const getRegSettings = async (tid: string): Promise<RegSettings> => {
 };
 const saveRegSettingsApi = async (tid: string, payload: Partial<RegSettings>) =>
   api.put('/duebook/settings', payload, { headers: { 'X-Tenant-Id': tid } });
+const claimRewardApi = async (tid: string, entityId: string) => {
+  const r = await api.post(`/entities/${entityId}/claim-reward`, {}, { headers: { 'X-Tenant-Id': tid } });
+  return r.data as Entity;
+};
 
 /* WhatsApp phone: strip non-digits; if starts with 0 → BD (880). */
 const waNumber = (phone: string) => {
@@ -417,7 +423,7 @@ export default function DueBookPage() {
   const [editSaving, setEditSaving] = useState(false);
 
   /* registration settings (self-registration + welcome bonus) */
-  const DEFAULT_REG: RegSettings = { shopName: '', registrationEnabled: false, bonusAmount: 0, rewardItemName: '', rewardItemPrice: 0, welcomeMessage: '', shopLogo: '' };
+  const DEFAULT_REG: RegSettings = { shopName: '', registrationEnabled: false, bonusAmount: 0, rewardItemName: '', rewardItemPrice: 0, paymentRewardThreshold: 0, welcomeMessage: '', shopLogo: '' };
   const [regSettings, setRegSettings] = useState<RegSettings>(DEFAULT_REG);
   const [draftReg, setDraftReg] = useState<RegSettings>(DEFAULT_REG);
   const [regSaving, setRegSaving] = useState(false);
@@ -469,6 +475,14 @@ export default function DueBookPage() {
   /* settings tab */
   const [settingsTab, setSettingsTab] = useState<SettingsTab>('general');
 
+  /* recovery (security Q&A) */
+  const [recoveryHasSet, setRecoveryHasSet] = useState<boolean | null>(null);
+  const [recoveryCurrentQ, setRecoveryCurrentQ] = useState('');
+  const [recPassword, setRecPassword] = useState('');
+  const [recQuestion, setRecQuestion] = useState('');
+  const [recAnswer, setRecAnswer] = useState('');
+  const [recSaving, setRecSaving] = useState(false);
+
   /* pinned entities (top of list) */
   const [pinned, setPinned] = useState<Set<string>>(() => {
     if (typeof window === 'undefined') return new Set();
@@ -515,6 +529,7 @@ export default function DueBookPage() {
   const [showSearch, setShowSearch] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const [markingPaid, setMarkingPaid] = useState<string | null>(null);
+  const [claimingReward, setClaimingReward] = useState(false);
   const txListRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
 
@@ -570,6 +585,7 @@ export default function DueBookPage() {
           bonusAmount: Number(s.bonusAmount) || 0,
           rewardItemName: s.rewardItemName || '',
           rewardItemPrice: Number(s.rewardItemPrice) || 0,
+          paymentRewardThreshold: Number(s.paymentRewardThreshold) || 0,
           welcomeMessage: s.welcomeMessage || '',
           shopLogo: s.shopLogo || '',
         });
@@ -761,7 +777,37 @@ export default function DueBookPage() {
     setShowQR(false);
     setSettingsTab('general');
     setShowSettings(true);
+    setRecPassword(''); setRecAnswer('');
+    // fetch current recovery status
+    api.get('/duebook/auth/recovery-status')
+      .then(r => {
+        setRecoveryHasSet(!!r.data?.hasRecovery);
+        setRecoveryCurrentQ(r.data?.question || '');
+        if (!recQuestion) setRecQuestion(r.data?.question || '');
+      })
+      .catch(() => setRecoveryHasSet(null));
     window.history.pushState({ duebook: 'modal' }, '');
+  };
+
+  const saveRecovery = async () => {
+    if (!recPassword) { toast.error('Enter current password'); return; }
+    if (!recQuestion.trim() || recQuestion.trim().length < 4) { toast.error('Question too short'); return; }
+    if (!recAnswer.trim() || recAnswer.trim().length < 2) { toast.error('Answer too short'); return; }
+    setRecSaving(true);
+    try {
+      await api.put('/duebook/auth/security-question', {
+        currentPassword: recPassword,
+        securityQuestion: recQuestion.trim(),
+        securityAnswer: recAnswer.trim(),
+      });
+      toast.success('Recovery updated');
+      setRecoveryHasSet(true);
+      setRecoveryCurrentQ(recQuestion.trim());
+      setRecPassword(''); setRecAnswer('');
+    } catch (e) {
+      const err = e as { response?: { data?: { error?: string } } };
+      toast.error(typeof err?.response?.data?.error === 'string' ? err.response!.data!.error! : 'Failed to save');
+    } finally { setRecSaving(false); }
   };
 
   /* last-used template field values (per template) */
@@ -800,6 +846,7 @@ export default function DueBookPage() {
         bonusAmount: Number(draftReg.bonusAmount) || 0,
         rewardItemName: draftReg.rewardItemName,
         rewardItemPrice: Number(draftReg.rewardItemPrice) || 0,
+        paymentRewardThreshold: Number(draftReg.paymentRewardThreshold) || 0,
         welcomeMessage: draftReg.welcomeMessage,
         shopLogo: draftReg.shopLogo,
       });
@@ -807,6 +854,7 @@ export default function DueBookPage() {
         ...draftReg,
         bonusAmount: Number(draftReg.bonusAmount) || 0,
         rewardItemPrice: Number(draftReg.rewardItemPrice) || 0,
+        paymentRewardThreshold: Number(draftReg.paymentRewardThreshold) || 0,
       });
       toast.success('Registration settings saved');
     } catch { toast.error('Failed to save'); }
@@ -1276,6 +1324,20 @@ export default function DueBookPage() {
     finally { setMarkingPaid(null); }
   };
 
+  const handleClaimReward = async () => {
+    if (!selected || !tenantId || claimingReward) return;
+    setClaimingReward(true);
+    try {
+      const updated = await claimRewardApi(tenantId, selected._id);
+      setSelected(prev => prev ? { ...prev, rewardsClaimed: updated.rewardsClaimed } : prev);
+      setEntities(prev => prev.map(e => e._id === selected._id ? { ...e, rewardsClaimed: updated.rewardsClaimed } : e));
+      toast.success('Reward given');
+    } catch (e) {
+      const err = e as { message?: string };
+      toast.error(err?.message || 'Failed to claim reward');
+    } finally { setClaimingReward(false); }
+  };
+
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     if (selected || (txListRef.current?.scrollTop ?? 1) > 2) return;
     pullStartY.current = e.touches[0].clientY;
@@ -1587,7 +1649,19 @@ export default function DueBookPage() {
       )}
 
       {/* ── ENTITY DETAIL HEADER ── */}
-      {selected && (
+      {selected && (() => {
+        const totalPaid = transactions
+          .filter(t => t.direction === 'INCOME' && t.status === 'Paid')
+          .reduce((s, t) => s + (t.amount || 0), 0);
+        const threshold = Number(regSettings.paymentRewardThreshold) || 0;
+        const claimed = Number(selected.rewardsClaimed) || 0;
+        const earned = threshold > 0 ? Math.floor(totalPaid / threshold) : 0;
+        const rewardsDue = Math.max(0, earned - claimed);
+        const showRewardBlock = selected.type === 'Customer'
+          && threshold > 0
+          && !!regSettings.rewardItemName;
+        const nextRemaining = threshold > 0 ? threshold - (totalPaid % threshold) : 0;
+        return (
         <div className="flex-shrink-0 px-3 py-2 bg-white dark:bg-slate-800 border-b border-gray-100 dark:border-slate-700">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[13px] shrink-0"
@@ -1614,6 +1688,12 @@ export default function DueBookPage() {
                 {fmt(selected.totalOwedToMe - selected.totalIOweThemNumber)}
               </p>
             </div>
+            {selected.type === 'Customer' && (
+              <div className="flex-1 text-center bg-emerald-50 dark:bg-emerald-900/30 rounded-lg py-1.5">
+                <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-medium">Paid</p>
+                <p className="text-[13px] font-bold text-emerald-700 dark:text-emerald-400 tabular-nums">{fmt(totalPaid)}</p>
+              </div>
+            )}
           </div>
           {(selected.totalOwedToMe - selected.totalIOweThemNumber) > 0 && (
             <button
@@ -1625,6 +1705,29 @@ export default function DueBookPage() {
               Send Due Reminder — {fmt(selected.totalOwedToMe - selected.totalIOweThemNumber)}
             </button>
           )}
+          {showRewardBlock && rewardsDue > 0 && (
+            <div className="mt-2 flex items-center gap-2 px-2.5 py-2 rounded-lg bg-gradient-to-r from-emerald-500 to-teal-500 text-white shadow-sm">
+              <Gift size={16} className="shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-[12px] font-bold leading-tight truncate">
+                  Reward due{rewardsDue > 1 ? ` × ${rewardsDue}` : ''}: {regSettings.rewardItemName}
+                </p>
+                <p className="text-[10px] opacity-90 leading-tight">Paid Tk {fmt(totalPaid)} · earned every Tk {fmt(threshold)}</p>
+              </div>
+              <button
+                onClick={handleClaimReward}
+                disabled={claimingReward}
+                className="shrink-0 px-2.5 py-1 rounded-md bg-white/95 text-emerald-700 text-[11px] font-bold active:scale-95 disabled:opacity-60"
+              >
+                {claimingReward ? '…' : 'Mark given'}
+              </button>
+            </div>
+          )}
+          {showRewardBlock && rewardsDue === 0 && totalPaid > 0 && (
+            <p className="mt-1.5 text-[10px] text-emerald-600 dark:text-emerald-400/80 text-center">
+              <Gift size={10} className="inline -mt-0.5" /> Tk {fmt(nextRemaining)} more paid to earn a free {regSettings.rewardItemName || 'item'}
+            </p>
+          )}
           <button
             onClick={openTplPicker}
             className="mt-2 w-full flex items-center justify-center gap-1.5 py-2 rounded-lg bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400 text-[12px] font-bold border border-sky-200 dark:border-sky-800 active:scale-[0.98] transition"
@@ -1634,7 +1737,8 @@ export default function DueBookPage() {
             Send Custom Message
           </button>
         </div>
-      )}
+        );
+      })()}
 
       {/* ── SCROLL AREA ── */}
       <div
@@ -2252,6 +2356,42 @@ export default function DueBookPage() {
                   </button>
                 </div>
               )}
+
+              {/* Account Recovery */}
+              <div className="pt-3 border-t border-gray-100 dark:border-slate-700">
+                <p className="text-[12px] font-bold text-gray-500 dark:text-slate-400 mb-1 uppercase tracking-wide flex items-center gap-1.5">
+                  <ShieldCheck size={13} /> Account Recovery
+                </p>
+                <p className="text-[11px] text-gray-400 dark:text-slate-500 mb-2">
+                  {recoveryHasSet
+                    ? 'A security question is set. Change it below (requires your current password).'
+                    : 'No security question set. Without this, forgot-password is disabled for your account.'}
+                </p>
+                {recoveryHasSet && recoveryCurrentQ && (
+                  <div className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-800 px-2.5 py-1.5 mb-2">
+                    <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide">Current question</p>
+                    <p className="text-[12px] text-gray-800 dark:text-slate-200">{recoveryCurrentQ}</p>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  <input type="password" value={recPassword} onChange={e => setRecPassword(e.target.value)}
+                    placeholder="Current password"
+                    className="w-full border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-[13px] text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400 bg-white dark:bg-slate-700"
+                  />
+                  <input type="text" value={recQuestion} onChange={e => setRecQuestion(e.target.value)}
+                    placeholder="Security question"
+                    className="w-full border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-[13px] text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400 bg-white dark:bg-slate-700"
+                  />
+                  <input type="text" value={recAnswer} onChange={e => setRecAnswer(e.target.value)}
+                    placeholder="Your answer"
+                    className="w-full border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-[13px] text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400 bg-white dark:bg-slate-700"
+                  />
+                  <button onClick={saveRecovery} disabled={recSaving}
+                    className="w-full py-2 rounded-lg bg-sky-500 text-white text-[12px] font-bold disabled:opacity-60 active:scale-[0.98] transition">
+                    {recSaving ? 'Saving…' : (recoveryHasSet ? 'Update Recovery' : 'Set Recovery')}
+                  </button>
+                </div>
+              </div>
                 </>
               )}
 
@@ -2393,6 +2533,23 @@ export default function DueBookPage() {
                       </div>
                       <p className="text-[10px] text-emerald-600 dark:text-emerald-400/80">
                         Leave empty for no item reward. Price is used to credit the customer's balance for redemption.
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg bg-amber-50 dark:bg-amber-900/20 p-2.5 space-y-2">
+                      <p className="text-[11px] font-semibold text-amber-700 dark:text-amber-400 uppercase tracking-wide">Payment Milestone Reward</p>
+                      <label className="block text-[11px] font-semibold text-gray-600 dark:text-slate-300">Give free item every (Tk)</label>
+                      <input
+                        type="number"
+                        inputMode="numeric"
+                        min={0}
+                        value={draftReg.paymentRewardThreshold || ''}
+                        onChange={e => setDraftReg(p => ({ ...p, paymentRewardThreshold: parseFloat(e.target.value) || 0 }))}
+                        placeholder="e.g. 500 (0 = disabled)"
+                        className="w-full border border-amber-200 dark:border-amber-800 rounded-lg px-2.5 py-1.5 text-[12px] text-gray-900 dark:text-slate-100 bg-white dark:bg-slate-700 outline-none focus:border-amber-400"
+                      />
+                      <p className="text-[10px] text-amber-700 dark:text-amber-400/80">
+                        Uses the Free Item above. Customer earns one item each time their total paid crosses this amount.
                       </p>
                     </div>
 

@@ -9,6 +9,7 @@ export interface IEntity extends Document {
   type: 'Customer' | 'Supplier' | 'Employee';
   totalOwedToMe: number;
   totalIOweThemNumber: number;
+  rewardsClaimed: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -53,6 +54,11 @@ const EntitySchema = new Schema<IEntity>(
       min: 0,
     },
     totalIOweThemNumber: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    rewardsClaimed: {
       type: Number,
       default: 0,
       min: 0,

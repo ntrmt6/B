@@ -161,6 +161,47 @@ router.delete('/entities/:id', async (req: Request, res: Response) => {
   }
 });
 
+// POST claim a payment-milestone reward (increments rewardsClaimed by 1)
+router.post('/entities/:id/claim-reward', async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantId(req);
+    if (!tenantId) return res.status(400).json({ error: 'Tenant ID is required' });
+
+    const entity = await Entity.findOneAndUpdate(
+      { _id: req.params.id, tenantId },
+      { $inc: { rewardsClaimed: 1 } },
+      { new: true }
+    );
+    if (!entity) return res.status(404).json({ error: 'Entity not found' });
+    res.json(entity);
+  } catch (error) {
+    console.error('Error claiming reward:', error);
+    res.status(500).json({ error: 'Error claiming reward' });
+  }
+});
+
+// PATCH reset rewardsClaimed (e.g. to skip past milestones) — body: { rewardsClaimed: number }
+router.patch('/entities/:id/rewards-claimed', async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantId(req);
+    if (!tenantId) return res.status(400).json({ error: 'Tenant ID is required' });
+    const { rewardsClaimed } = req.body || {};
+    if (typeof rewardsClaimed !== 'number' || rewardsClaimed < 0) {
+      return res.status(400).json({ error: 'rewardsClaimed must be a non-negative number' });
+    }
+    const entity = await Entity.findOneAndUpdate(
+      { _id: req.params.id, tenantId },
+      { rewardsClaimed: Math.floor(rewardsClaimed) },
+      { new: true }
+    );
+    if (!entity) return res.status(404).json({ error: 'Entity not found' });
+    res.json(entity);
+  } catch (error) {
+    console.error('Error resetting rewards claimed:', error);
+    res.status(500).json({ error: 'Error resetting rewards claimed' });
+  }
+});
+
 // ============ DUEBOOK SETTINGS (self-registration + bonus) ============
 
 router.get('/duebook/settings', async (req: Request, res: Response) => {
@@ -174,6 +215,9 @@ router.get('/duebook/settings', async (req: Request, res: Response) => {
         shopName: '',
         registrationEnabled: false,
         bonusAmount: 0,
+        rewardItemName: '',
+        rewardItemPrice: 0,
+        paymentRewardThreshold: 0,
         welcomeMessage: '',
       }
     );
@@ -188,13 +232,14 @@ router.put('/duebook/settings', async (req: Request, res: Response) => {
     const tenantId = getTenantId(req);
     if (!tenantId) return res.status(400).json({ error: 'Tenant ID is required' });
 
-    const { shopName, registrationEnabled, bonusAmount, rewardItemName, rewardItemPrice, welcomeMessage, shopLogo } = req.body || {};
+    const { shopName, registrationEnabled, bonusAmount, rewardItemName, rewardItemPrice, paymentRewardThreshold, welcomeMessage, shopLogo } = req.body || {};
     const update: any = {};
     if (typeof shopName === 'string') update.shopName = shopName.trim().slice(0, 120);
     if (typeof registrationEnabled === 'boolean') update.registrationEnabled = registrationEnabled;
     if (typeof bonusAmount === 'number' && bonusAmount >= 0) update.bonusAmount = bonusAmount;
     if (typeof rewardItemName === 'string') update.rewardItemName = rewardItemName.trim().slice(0, 100);
     if (typeof rewardItemPrice === 'number' && rewardItemPrice >= 0) update.rewardItemPrice = rewardItemPrice;
+    if (typeof paymentRewardThreshold === 'number' && paymentRewardThreshold >= 0) update.paymentRewardThreshold = paymentRewardThreshold;
     if (typeof welcomeMessage === 'string') update.welcomeMessage = welcomeMessage.trim().slice(0, 300);
     if (typeof shopLogo === 'string' && shopLogo.length <= 300000) update.shopLogo = shopLogo;
 
