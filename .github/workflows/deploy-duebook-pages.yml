@@ -41,13 +41,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # Enables GitHub Pages automatically on first run (build_type = workflow),
-      # so no manual Settings -> Pages toggle is required.
-      - name: Configure Pages
-        uses: actions/configure-pages@v5
-        with:
-          enablement: true
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
