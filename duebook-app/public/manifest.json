@@ -2,8 +2,8 @@
   "name": "DueBook",
   "short_name": "DueBook",
   "description": "Track money owed and given",
-  "start_url": "/due-book",
-  "scope": "/",
+  "start_url": "due-book",
+  "scope": "./",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
   "background_color": "#f8fafc",
@@ -11,14 +11,14 @@
   "orientation": "portrait",
   "categories": ["finance", "productivity"],
   "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
   ],
   "shortcuts": [
     {
       "name": "Add Transaction",
       "short_name": "Add",
-      "url": "/due-book",
+      "url": "due-book",
       "description": "Open DueBook to add a transaction"
     }
   ],

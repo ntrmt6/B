@@ -24,3 +24,7 @@ storefront-next/tsconfig.tsbuildinfo
 # ==========================================
 backend-next/uploads/
 backend-next/core
+
+# DueBook static export output
+duebook-app/out/
+out/

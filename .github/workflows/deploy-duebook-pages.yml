@@ -1,0 +1,73 @@
+name: Deploy DueBook to GitHub Pages
+
+# Builds duebook-app as a static export and publishes it to GitHub Pages.
+#
+# One-time setup in the repo:
+#   1. Settings -> Pages -> Build and deployment -> Source = "GitHub Actions".
+#   2. Settings -> Secrets and variables -> Actions -> Variables tab ->
+#      add a repository variable NEXT_PUBLIC_API_BASE_URL = your backend URL
+#      (e.g. https://duebook-backend.onrender.com), no trailing slash, no /api.
+#
+# The site will be served at https://<user>.github.io/B/ (basePath /B, set in
+# duebook-app/next.config.ts). Rename GH_PAGES_BASE_PATH there if the repo name
+# changes or you attach a custom domain served at the root.
+
+on:
+  push:
+    branches:
+      - main
+      - claude/vercel-deployment-1ulzuv
+    paths:
+      - 'duebook-app/**'
+      - '.github/workflows/deploy-duebook-pages.yml'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Only one Pages deployment at a time; don't cancel an in-progress one.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: duebook-app
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: duebook-app/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build static export
+        env:
+          GITHUB_PAGES: 'true'
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.NEXT_PUBLIC_API_BASE_URL }}
+        run: npm run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: duebook-app/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

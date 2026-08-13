@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/lib/api';
+import { shareUrl } from '@/lib/config';
 import {
   getEntitiesOffline, getTxOffline,
   createEntityOffline, addTxOffline, patchTxStatusOffline,
@@ -2240,7 +2241,7 @@ export default function DueBookPage() {
                   <p className="text-[11px] text-gray-400 dark:text-slate-500 mb-2">Share this link with family / manager. They can see all dues — read-only, no login needed.</p>
                   <button
                     onClick={() => {
-                      const url = `${window.location.origin}/view/${tenantId}`;
+                      const url = shareUrl(`/view?t=${tenantId}`);
                       navigator.clipboard.writeText(url).then(() => {
                         const el = document.getElementById('copy-link-btn');
                         if (el) { el.textContent = 'Copied!'; setTimeout(() => { if (el) el.textContent = 'Copy View Link'; }, 2000); }
@@ -2427,18 +2428,18 @@ export default function DueBookPage() {
                         <div className="rounded-xl bg-white dark:bg-slate-700 p-4 flex flex-col items-center gap-2 border border-gray-100 dark:border-slate-600">
                           <div className="bg-white p-2 rounded-lg">
                             <QRCodeSVG
-                              value={`${typeof window !== 'undefined' ? window.location.origin : ''}/register/${tenantId}`}
+                              value={shareUrl(`/register?t=${tenantId}`)}
                               size={168}
                               level="M"
                             />
                           </div>
                           <p className="text-[10px] text-center text-gray-500 dark:text-slate-400 break-all px-2">
-                            {typeof window !== 'undefined' ? window.location.origin : ''}/register/{tenantId}
+                            {shareUrl(`/register?t=${tenantId}`)}
                           </p>
                           <button
                             id="copy-reg-btn"
                             onClick={() => {
-                              const url = `${window.location.origin}/register/${tenantId}`;
+                              const url = shareUrl(`/register?t=${tenantId}`);
                               navigator.clipboard.writeText(url).then(() => {
                                 const el = document.getElementById('copy-reg-btn');
                                 if (el) { el.textContent = 'Copied!'; setTimeout(() => { if (el) el.textContent = 'Copy Registration Link'; }, 2000); }

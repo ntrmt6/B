@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect, use } from 'react';
+import { useState, useEffect } from 'react';
 import { Gift, CheckCircle2, Store, Loader2, Package } from 'lucide-react';
+import { apiUrl } from '@/lib/config';
 
 interface RegInfo {
   shopName: string;
@@ -23,8 +24,10 @@ interface RegResult {
 
 const fmtTk = (n: number) => 'Tk ' + Math.abs(n).toLocaleString('en-IN');
 
-export default function RegisterPage({ params }: { params: Promise<{ tenantId: string }> }) {
-  const { tenantId } = use(params);
+export default function RegisterPage() {
+  // Tenant comes from the ?t= query param (e.g. /register?t=<tenantId>) so the
+  // page works as a static export (no server-rendered dynamic segment).
+  const [tenantId, setTenantId] = useState<string | null>(null);
 
   const [info, setInfo] = useState<RegInfo | null>(null);
   const [infoErr, setInfoErr] = useState('');
@@ -37,10 +40,17 @@ export default function RegisterPage({ params }: { params: Promise<{ tenantId: s
   const [result, setResult] = useState<RegResult | null>(null);
 
   useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('t');
+    if (!t) { setInfoErr('Invalid registration link'); setInfoLoading(false); return; }
+    setTenantId(t);
+  }, []);
+
+  useEffect(() => {
+    if (!tenantId) return;
     let cancelled = false;
     (async () => {
       try {
-        const r = await fetch(`/api/public/register-info?tid=${tenantId}`);
+        const r = await fetch(apiUrl(`/api/public/register-info?tid=${tenantId}`));
         if (!r.ok) throw new Error((await r.json())?.error || 'Not available');
         const data: RegInfo = await r.json();
         if (!cancelled) setInfo(data);
@@ -59,7 +69,7 @@ export default function RegisterPage({ params }: { params: Promise<{ tenantId: s
     if (phone.replace(/\D/g, '').length < 7) return setSubmitErr('Please enter a valid phone');
     setSubmitting(true);
     try {
-      const r = await fetch('/api/public/register', {
+      const r = await fetch(apiUrl('/api/public/register'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tid: tenantId, name: name.trim(), phone: phone.trim() }),

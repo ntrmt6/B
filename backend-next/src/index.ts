@@ -103,6 +103,8 @@ const io = new SocketIOServer(httpServer, {
       const localhostPattern = /^https?:\/\/([a-z0-9-]+\.)?localhost(:\d+)?$/i;
       // Support Vercel deployments (production + preview URLs): *.vercel.app
       const vercelPattern = /^https?:\/\/([a-z0-9-]+\.)?vercel\.app$/i;
+      // Support GitHub Pages: <user>.github.io
+      const githubPagesPattern = /^https?:\/\/([a-z0-9-]+\.)?github\.io$/i;
       const origins = Array.isArray(origin) ? origin : [origin];
       const isAllowed = origins.some(o =>
         systemnextPattern.test(o) || systemnextWebsitePattern.test(o) ||
@@ -111,6 +113,7 @@ const io = new SocketIOServer(httpServer, {
         allinbanglaPattern.test(o) ||
         localhostPattern.test(o) ||
         vercelPattern.test(o) ||
+        githubPagesPattern.test(o) ||
         allowedOrigins.includes(o) ||
         allowedOrigins.some(allowed => allowed.includes('*') && new RegExp(allowed.replace(/\*/g, '.*')).test(o)) ||
         isAllowedCustomDomainOrigin(o) // Check custom domains from database
@@ -183,6 +186,8 @@ const corsOptions: cors.CorsOptions = {
     const localhostPattern = /^https?:\/\/([a-z0-9-]+\.)?localhost(:\d+)?$/i;
     // Support Vercel deployments (production + preview URLs): *.vercel.app
     const vercelPattern = /^https?:\/\/([a-z0-9-]+\.)?vercel\.app$/i;
+    // Support GitHub Pages: <user>.github.io
+    const githubPagesPattern = /^https?:\/\/([a-z0-9-]+\.)?github\.io$/i;
 
     // Check against allowed origin patterns
     const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
@@ -190,7 +195,7 @@ const corsOptions: cors.CorsOptions = {
       systemnextPattern.test(origin) || systemnextWebsitePattern.test(origin) ||
       cartngetPattern.test(origin) || shopbdPattern.test(origin) ||
       allinbanglaPattern.test(origin) || localhostPattern.test(origin) ||
-      vercelPattern.test(origin) ||
+      vercelPattern.test(origin) || githubPagesPattern.test(origin) ||
       allowedOrigins.includes(origin) ||
       isAllowedCustomDomainOrigin(origin) // Check custom domains from database
     ) {

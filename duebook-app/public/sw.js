@@ -1,5 +1,9 @@
-const CACHE = 'duebook-v4';
-const SHELL = ['/due-book', '/login', '/manifest.json'];
+// Base path this SW is registered under, derived from its own location so it
+// works both at the root ("/sw.js" -> "") and under a project subpath on
+// GitHub Pages ("/B/sw.js" -> "/B").
+const BP = self.location.pathname.replace(/\/sw\.js$/, '');
+const CACHE = 'duebook-v5';
+const SHELL = [`${BP}/due-book`, `${BP}/login`, `${BP}/manifest.json`];
 
 async function precacheShellAssets(cache) {
   // Fetch each shell HTML, store it, and mine its markup for `_next/static/*`
@@ -14,7 +18,7 @@ async function precacheShellAssets(cache) {
       await cache.put(url, res);
       if (url.endsWith('.json')) return;
       const html = await clone.text();
-      for (const m of html.matchAll(/(?:src|href)="(\/_next\/[^"]+)"/g)) {
+      for (const m of html.matchAll(/(?:src|href)="([^"]*\/_next\/[^"]+)"/g)) {
         chunkUrls.add(m[1]);
       }
     } catch {}
@@ -48,12 +52,13 @@ self.addEventListener('fetch', e => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
 
-  // Never intercept API calls or cross-origin requests
+  // Never intercept API calls or cross-origin requests. On a static host the
+  // backend is a different origin, so those are skipped here anyway.
   if (url.hostname !== self.location.hostname) return;
-  if (url.pathname.startsWith('/api/')) return;
+  if (url.pathname.startsWith(`${BP}/api/`)) return;
 
   // Cache-first for hashed static assets — they are immutable
-  if (url.pathname.startsWith('/_next/static/') ||
+  if (url.pathname.includes('/_next/static/') ||
       url.pathname.match(/\.(js|css|png|jpg|jpeg|ico|svg|woff2?)$/)) {
     e.respondWith((async () => {
       const cache = await caches.open(CACHE);
@@ -83,7 +88,7 @@ self.addEventListener('fetch', e => {
         if (res.ok) cache.put(req, res.clone());
         return res;
       } catch {
-        const cached = await cache.match(req) || await cache.match('/due-book');
+        const cached = await cache.match(req) || await cache.match(`${BP}/due-book`);
         if (cached) return cached;
         return new Response(
           '<!doctype html><meta charset=utf-8><title>Offline</title>' +

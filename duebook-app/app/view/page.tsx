@@ -1,8 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { use } from 'react';
 import { TrendingUp, TrendingDown, ChevronDown, ChevronUp, RefreshCw, Users } from 'lucide-react';
+import { apiUrl } from '@/lib/config';
 
 interface Entity {
   _id: string; name: string; phone?: string;
@@ -32,8 +32,10 @@ const timeAgo = (d: Date) => {
 
 const REFRESH_INTERVAL = 30_000;
 
-export default function ViewPage({ params }: { params: Promise<{ tenantId: string }> }) {
-  const { tenantId } = use(params);
+export default function ViewPage() {
+  // Tenant comes from the ?t= query param (e.g. /view?t=<tenantId>) so the page
+  // works as a static export (no server-rendered dynamic segment).
+  const [tenantId, setTenantId] = useState<string | null>(null);
 
   const [entities, setEntities] = useState<Entity[]>([]);
   const [loading, setLoading] = useState(true);
@@ -46,9 +48,16 @@ export default function ViewPage({ params }: { params: Promise<{ tenantId: strin
   const [shop, setShop] = useState<{ shopName: string; shopLogo: string }>({ shopName: '', shopLogo: '' });
 
   useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('t');
+    setTenantId(t || '');
+    if (!t) setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    if (!tenantId) return;
     (async () => {
       try {
-        const r = await fetch(`/api/public/duebook/shop?tid=${tenantId}`);
+        const r = await fetch(apiUrl(`/api/public/duebook/shop?tid=${tenantId}`));
         if (r.ok) setShop(await r.json());
       } catch { /* ignore */ }
     })();
@@ -60,10 +69,11 @@ export default function ViewPage({ params }: { params: Promise<{ tenantId: strin
   }, [shop.shopName]);
 
   const fetchEntities = useCallback(async (silent = false) => {
+    if (!tenantId) return;
     if (!silent) setLoading(true);
     else setRefreshing(true);
     try {
-      const r = await fetch(`/api/public/due-view?tid=${tenantId}`);
+      const r = await fetch(apiUrl(`/api/public/due-view?tid=${tenantId}`));
       if (!r.ok) throw new Error('Failed');
       const data: Entity[] = await r.json();
       // Sort: people with active dues first, then by amount desc
@@ -108,7 +118,7 @@ export default function ViewPage({ params }: { params: Promise<{ tenantId: strin
     if (txMap[entity._id]) return;
     setTxLoading(entity._id);
     try {
-      const r = await fetch(`/api/public/due-view/transactions?tid=${tenantId}&entityId=${entity._id}`);
+      const r = await fetch(apiUrl(`/api/public/due-view/transactions?tid=${tenantId}&entityId=${entity._id}`));
       if (r.ok) {
         const data = await r.json();
         setTxMap(prev => ({ ...prev, [entity._id]: data }));

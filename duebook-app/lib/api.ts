@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { apiUrl, BASE_PATH } from './config';
 
 const STORAGE_PREFIX = 'duebook';
 export const KEYS = {
@@ -8,7 +9,9 @@ export const KEYS = {
 } as const;
 
 const api = axios.create({
-  baseURL: '/api',
+  // Same-origin "/api" when no backend URL is configured (proxy mode),
+  // or the backend's absolute "…/api" for static hosting (CORS mode).
+  baseURL: apiUrl('/api'),
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -27,9 +30,9 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401 && typeof window !== 'undefined') {
       const url = error.config?.url ?? '';
-      if (!url.includes('/auth/login') && !window.location.pathname.startsWith('/login')) {
+      if (!url.includes('/auth/login') && !window.location.pathname.startsWith(`${BASE_PATH}/login`)) {
         Object.values(KEYS).forEach(k => localStorage.removeItem(k));
-        window.location.href = '/login';
+        window.location.href = `${BASE_PATH}/login`;
       }
     }
     return Promise.reject(error);
