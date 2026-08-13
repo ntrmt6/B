@@ -101,6 +101,8 @@ const io = new SocketIOServer(httpServer, {
       const allinbanglaPattern = /^https?:\/\/([a-z0-9-]+\.)?allinbangla\.com$/i;
       // Support localhost with subdomains: store.localhost:3000, admin.localhost:5173, etc.
       const localhostPattern = /^https?:\/\/([a-z0-9-]+\.)?localhost(:\d+)?$/i;
+      // Support Vercel deployments (production + preview URLs): *.vercel.app
+      const vercelPattern = /^https?:\/\/([a-z0-9-]+\.)?vercel\.app$/i;
       const origins = Array.isArray(origin) ? origin : [origin];
       const isAllowed = origins.some(o =>
         systemnextPattern.test(o) || systemnextWebsitePattern.test(o) ||
@@ -108,6 +110,7 @@ const io = new SocketIOServer(httpServer, {
         shopbdPattern.test(o) ||
         allinbanglaPattern.test(o) ||
         localhostPattern.test(o) ||
+        vercelPattern.test(o) ||
         allowedOrigins.includes(o) ||
         allowedOrigins.some(allowed => allowed.includes('*') && new RegExp(allowed.replace(/\*/g, '.*')).test(o)) ||
         isAllowedCustomDomainOrigin(o) // Check custom domains from database
@@ -178,6 +181,8 @@ const corsOptions: cors.CorsOptions = {
     const allinbanglaPattern = /^https?:\/\/([a-z0-9-]+\.)?allinbangla\.com$/i;
     // Support localhost with subdomains: store.localhost:3000, admin.localhost:5173, etc.
     const localhostPattern = /^https?:\/\/([a-z0-9-]+\.)?localhost(:\d+)?$/i;
+    // Support Vercel deployments (production + preview URLs): *.vercel.app
+    const vercelPattern = /^https?:\/\/([a-z0-9-]+\.)?vercel\.app$/i;
 
     // Check against allowed origin patterns
     const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
@@ -185,6 +190,7 @@ const corsOptions: cors.CorsOptions = {
       systemnextPattern.test(origin) || systemnextWebsitePattern.test(origin) ||
       cartngetPattern.test(origin) || shopbdPattern.test(origin) ||
       allinbanglaPattern.test(origin) || localhostPattern.test(origin) ||
+      vercelPattern.test(origin) ||
       allowedOrigins.includes(origin) ||
       isAllowedCustomDomainOrigin(origin) // Check custom domains from database
     ) {
