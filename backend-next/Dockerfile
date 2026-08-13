@@ -4,24 +4,24 @@ FROM node:20-alpine
 # Set working directory
 WORKDIR /app
 
-# Copy package files
+# Install ALL dependencies (including dev) — the TypeScript build needs
+# typescript and @types/* which live in devDependencies.
 COPY package*.json ./
+RUN npm ci
 
-# Install dependencies
-RUN npm ci --only=production
-
-# Copy source code
+# Copy source code and build TypeScript -> dist/
 COPY . .
-
-# Build TypeScript
 RUN npm run build
 
-# Expose port
+# Drop dev dependencies now that the build is done, to shrink the image.
+RUN npm prune --omit=dev
+
+# Expose port (hosts like Render/Railway inject their own PORT, which the
+# app reads from process.env.PORT and overrides this default)
 EXPOSE 5001
 
-# Set environment
 ENV NODE_ENV=production
 ENV PORT=5001
 
-# Start the server
+# Start the compiled server
 CMD ["npm", "start"]

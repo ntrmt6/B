@@ -1,0 +1,37 @@
+# Render Blueprint for the DueBook backend (Express + Socket.IO + MongoDB).
+# Deploy: Render Dashboard -> New -> Blueprint -> pick the ntrmt6/B repo.
+# Render reads this file and creates the service; you fill in the secret
+# values (marked "sync: false") in the dashboard so they never touch git.
+services:
+  - type: web
+    name: duebook-backend
+    runtime: docker
+    repo: https://github.com/ntrmt6/B
+    rootDir: backend-next
+    dockerfilePath: ./Dockerfile
+    plan: free
+    region: singapore # closest Render region to South Asia
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # --- Secrets: set these in the Render dashboard (never commit them) ---
+      # MONGODB_URI = mongodb+srv://<user>:<password>@cluster0.jan2r4q.mongodb.net/?appName=Cluster0
+      - key: MONGODB_URI
+        sync: false
+      # --- Non-secret config ---
+      - key: MONGODB_DB_NAME
+        value: admin-mainbeta # change if your Atlas data lives in a different DB
+      - key: NODE_ENV
+        value: production
+      # JWT signing secret — Render generates a strong random value once.
+      # (Existing login tokens become invalid on first deploy; users re-login.)
+      - key: JWT_SECRET
+        generateValue: true
+      # Optional: extra CORS origins beyond the built-in *.vercel.app rule,
+      # e.g. a custom DueBook domain. Comma-separated. Leave blank otherwise.
+      - key: ALLOWED_ORIGINS
+        sync: false
+      # Optional: Upstash/managed Redis URL. Omit entirely to run without
+      # Redis — the backend degrades gracefully.
+      - key: REDIS_URL
+        sync: false
