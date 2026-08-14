@@ -2,7 +2,11 @@ import type { NextConfig } from 'next';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
 
-const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, '');
+// Accept either `https://host` or `https://host/api` — strip both a trailing
+// slash and a trailing `/api` so the rewrite below never doubles the prefix.
+const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL
+  ?.replace(/\/$/, '')
+  ?.replace(/\/api$/, '');
 
 const nextConfig: NextConfig = {
   output: 'standalone',
