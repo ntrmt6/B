@@ -16,7 +16,7 @@ import {
   TrendingUp, TrendingDown, UserPlus, Trash2, CheckCircle2, Circle, Download,
   Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon, CloudOff, Send, Bell,
   MessageSquare, Copy, Users, Upload, ClipboardPaste, Check, Pin, PinOff, ShieldCheck, Camera,
-  Lock, Unlock, Package,
+  Lock, Unlock, Package, Menu,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import SyncBar from './SyncBar';
@@ -456,6 +456,8 @@ export default function DueBookPage() {
   /* settings */
   const [showSettings, setShowSettings] = useState(false);
   const [showInventory, setShowInventory] = useState(false);
+  const [showMenu, setShowMenu] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [labels, setLabels] = useState<Labels>(() => {
     if (typeof window === 'undefined') return DEFAULT_LABELS;
     try {
@@ -726,6 +728,17 @@ export default function DueBookPage() {
     window.addEventListener('offline', off);
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off); };
   }, [tenantId, loadEntities]);
+
+  useEffect(() => {
+    if (!showMenu) return;
+    const onDoc = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) setShowMenu(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowMenu(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+  }, [showMenu]);
 
   useEffect(() => {
     const onPop = () => {
@@ -1728,33 +1741,7 @@ export default function DueBookPage() {
                 className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-700">
                 <Search size={15} />
               </button>
-              <button onClick={handleExportPDF} disabled={exporting}
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-700 disabled:opacity-50">
-                {exporting
-                  ? <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                  : <Download size={14} />}
-              </button>
               <ReminderInbox isDark={isDark} />
-              <button onClick={openBulk} title="Bulk send"
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-700">
-                <Users size={14} />
-              </button>
-              <button onClick={toggleDark}
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700">
-                {isDark ? <Sun size={14} /> : <Moon size={14} />}
-              </button>
-              <button onClick={lockOn} title="Lock screen"
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-700">
-                <Lock size={14} />
-              </button>
-              <button onClick={() => { setShowInventory(true); window.history.pushState({ duebook: 'modal' }, ''); }} title="Inventory"
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-700">
-                <Package size={14} />
-              </button>
-              <button onClick={openSettings}
-                className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-700">
-                <Settings size={14} />
-              </button>
               <button onClick={() => { setNewType(tab); setShowAddEntity(true); window.history.pushState({ duebook: 'modal' }, ''); }}
                 className="w-7 h-7 flex items-center justify-center rounded-lg bg-sky-500 text-white">
                 <UserPlus size={13} />
@@ -1773,10 +1760,53 @@ export default function DueBookPage() {
               </button>
             </>
           )}
-          <button onClick={() => { logout(); router.replace('/login'); }}
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-700">
-            <LogOut size={14} />
-          </button>
+          <div className="relative" ref={menuRef}>
+            <button onClick={() => setShowMenu(v => !v)} aria-label="Menu"
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700">
+              <Menu size={16} />
+            </button>
+            {showMenu && (
+              <div className="absolute right-0 top-8 z-50 w-52 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-lg py-1 text-[13px]">
+                {!selected && (
+                  <>
+                    <button onClick={() => { setShowMenu(false); setShowInventory(true); window.history.pushState({ duebook: 'modal' }, ''); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700">
+                      <Package size={14} className="text-gray-500 dark:text-slate-400" /> Inventory
+                    </button>
+                    <button onClick={() => { setShowMenu(false); handleExportPDF(); }} disabled={exporting}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700 disabled:opacity-50">
+                      {exporting
+                        ? <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                        : <Download size={14} className="text-gray-500 dark:text-slate-400" />}
+                      {exporting ? 'Exporting…' : 'Export PDF'}
+                    </button>
+                    <button onClick={() => { setShowMenu(false); openBulk(); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700">
+                      <Users size={14} className="text-gray-500 dark:text-slate-400" /> Bulk Send
+                    </button>
+                    <button onClick={() => { setShowMenu(false); lockOn(); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700">
+                      <Lock size={14} className="text-gray-500 dark:text-slate-400" /> Lock Screen
+                    </button>
+                    <button onClick={() => { toggleDark(); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700">
+                      {isDark ? <Sun size={14} className="text-gray-500 dark:text-slate-400" /> : <Moon size={14} className="text-gray-500 dark:text-slate-400" />}
+                      {isDark ? 'Light Mode' : 'Dark Mode'}
+                    </button>
+                    <button onClick={() => { setShowMenu(false); openSettings(); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700">
+                      <Settings size={14} className="text-gray-500 dark:text-slate-400" /> Settings
+                    </button>
+                    <div className="my-1 border-t border-gray-100 dark:border-slate-700" />
+                  </>
+                )}
+                <button onClick={() => { setShowMenu(false); logout(); router.replace('/login'); }}
+                  className="w-full flex items-center gap-2.5 px-3 py-2 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/30">
+                  <LogOut size={14} /> Logout
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
