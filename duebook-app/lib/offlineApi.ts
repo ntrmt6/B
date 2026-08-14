@@ -8,6 +8,7 @@ interface Entity {
   type: 'Customer' | 'Supplier' | 'Employee';
   totalOwedToMe: number;
   totalIOweThemNumber: number;
+  profilePicture?: string;
   _pending?: boolean;
 }
 
@@ -19,6 +20,7 @@ interface Transaction {
   notes?: string;
   status: 'Pending' | 'Paid' | 'Cancelled';
   entityId?: string;
+  photo?: string;
   _pending?: boolean;
   _qid?: string;
 }
@@ -96,7 +98,7 @@ export async function getTxOffline(tid: string, entityId: string): Promise<ReadR
 
 /* ─────────────── MUTATIONS ─────────────── */
 
-interface CreateEntityPayload { name: string; phone: string; type: Entity['type']; }
+interface CreateEntityPayload { name: string; phone: string; type: Entity['type']; profilePicture?: string; }
 export async function createEntityOffline(tid: string, payload: CreateEntityPayload): Promise<{ entity: Entity; queued: boolean }> {
   if (!isOffline()) {
     try {
@@ -110,7 +112,9 @@ export async function createEntityOffline(tid: string, payload: CreateEntityPayl
   const ref = tempId('ent');
   const optimistic: Entity = {
     _id: ref, name: payload.name, phone: payload.phone, type: payload.type,
-    totalOwedToMe: 0, totalIOweThemNumber: 0, _pending: true,
+    totalOwedToMe: 0, totalIOweThemNumber: 0,
+    profilePicture: payload.profilePicture || '',
+    _pending: true,
   };
   const pending = readCache<Entity[]>(ck.pendingEntities(tid), []);
   writeCache(ck.pendingEntities(tid), [...pending, optimistic]);
@@ -127,6 +131,7 @@ interface AddTxPayload {
   entityId: string; entityName?: string;
   amount: number; direction: 'INCOME' | 'EXPENSE';
   transactionDate: string; notes?: string;
+  photo?: string;
 }
 export async function addTxOffline(tid: string, payload: AddTxPayload): Promise<{ queued: boolean }> {
   if (!isOffline()) {
@@ -151,6 +156,7 @@ export async function addTxOffline(tid: string, payload: AddTxPayload): Promise<
     notes: payload.notes,
     status: 'Pending',
     entityId: payload.entityId,
+    photo: payload.photo,
     _pending: true,
     _qid: q.id,
   };
@@ -203,7 +209,7 @@ export async function patchTxStatusOffline(tid: string, txId: string, status: 'P
   return { queued: true };
 }
 
-export async function patchEntityOffline(tid: string, id: string, payload: { name: string; phone: string }): Promise<{ queued: boolean }> {
+export async function patchEntityOffline(tid: string, id: string, payload: { name: string; phone: string; profilePicture?: string }): Promise<{ queued: boolean }> {
   if (isTempId(id)) throw new Error('This contact has not synced yet — please wait for connection.');
   if (!isOffline()) {
     try {

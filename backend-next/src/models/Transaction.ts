@@ -12,6 +12,7 @@ export interface ITransaction extends Document {
   items?: string;
   transactionType?: string;
   status: 'Pending' | 'Paid' | 'Cancelled';
+  photo?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -68,6 +69,10 @@ const TransactionSchema = new Schema<ITransaction>(
       type: String,
       enum: ['Pending', 'Paid', 'Cancelled'],
       default: 'Pending',
+    },
+    photo: {
+      type: String,
+      default: '',
     },
   },
   {

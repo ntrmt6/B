@@ -10,6 +10,7 @@ export interface IEntity extends Document {
   totalOwedToMe: number;
   totalIOweThemNumber: number;
   rewardsClaimed: number;
+  profilePicture?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -62,6 +63,10 @@ const EntitySchema = new Schema<IEntity>(
       type: Number,
       default: 0,
       min: 0,
+    },
+    profilePicture: {
+      type: String,
+      default: '',
     },
   },
   {

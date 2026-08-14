@@ -70,7 +70,7 @@ router.post('/entities', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Tenant ID is required' });
     }
 
-    const { name, phone, email, address, type } = req.body;
+    const { name, phone, email, address, type, profilePicture } = req.body;
 
     // Validate required fields
     if (!name || !phone || !type) {
@@ -92,6 +92,7 @@ router.post('/entities', async (req: Request, res: Response) => {
       type,
       totalOwedToMe: 0,
       totalIOweThemNumber: 0,
+      profilePicture: typeof profilePicture === 'string' && profilePicture.length <= 300000 ? profilePicture : '',
     });
 
     await entity.save();
@@ -110,11 +111,19 @@ router.put('/entities/:id', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Tenant ID is required' });
     }
 
-    const { name, phone, email, address, type } = req.body;
-    
+    const { name, phone, email, address, type, profilePicture } = req.body;
+
+    const update: any = {};
+    if (typeof name === 'string') update.name = name;
+    if (typeof phone === 'string') update.phone = phone;
+    if (email !== undefined) update.email = email;
+    if (address !== undefined) update.address = address;
+    if (typeof type === 'string') update.type = type;
+    if (typeof profilePicture === 'string' && profilePicture.length <= 300000) update.profilePicture = profilePicture;
+
     const entity = await Entity.findOneAndUpdate(
       { _id: req.params.id, tenantId },
-      { name, phone, email, address, type },
+      update,
       { new: true, runValidators: true }
     );
 
@@ -317,7 +326,7 @@ router.post('/transactions', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Tenant ID is required' });
     }
 
-    const { entityId, entityName, amount, direction, transactionDate, dueDate, notes, items, transactionType } = req.body;
+    const { entityId, entityName, amount, direction, transactionDate, dueDate, notes, items, transactionType, photo } = req.body;
 
     // Validate required fields
     if (!entityId || !amount || !direction || !transactionDate) {
@@ -342,6 +351,7 @@ router.post('/transactions', async (req: Request, res: Response) => {
       items,
       transactionType,
       status: 'Pending',
+      photo: typeof photo === 'string' && photo.length <= 300000 ? photo : '',
     });
 
     await transaction.save();

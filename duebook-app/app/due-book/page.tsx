@@ -15,7 +15,7 @@ import {
   Plus, Search, X, ChevronLeft, LogOut,
   TrendingUp, TrendingDown, UserPlus, Trash2, CheckCircle2, Circle, Download,
   Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon, CloudOff, Send, Bell,
-  MessageSquare, Copy, Users, Upload, ClipboardPaste, Check, Pin, PinOff, ShieldCheck,
+  MessageSquare, Copy, Users, Upload, ClipboardPaste, Check, Pin, PinOff, ShieldCheck, Camera,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import SyncBar from './SyncBar';
@@ -27,6 +27,7 @@ interface Entity {
   type: 'Customer' | 'Supplier' | 'Employee';
   totalOwedToMe: number; totalIOweThemNumber: number;
   rewardsClaimed?: number;
+  profilePicture?: string;
   updatedAt?: string; createdAt?: string;
   _pending?: boolean;
 }
@@ -36,6 +37,7 @@ interface Transaction {
   direction: 'INCOME' | 'EXPENSE';
   transactionDate: string; notes?: string;
   status: 'Pending' | 'Paid' | 'Cancelled';
+  photo?: string;
   _pending?: boolean;
 }
 
@@ -219,6 +221,15 @@ const applyFieldValues = (body: string, fields: TemplateField[] | undefined, val
 
 const avatarColor = (name: string) => AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
 const initial = (name: string) => (name || '?')[0].toUpperCase();
+
+async function fileToDataUrl(f: File): Promise<string> {
+  return await new Promise<string>((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = () => resolve(String(r.result));
+    r.onerror = () => reject(r.error);
+    r.readAsDataURL(f);
+  });
+}
 const fmt = (n: number) => 'Tk ' + Math.abs(n).toLocaleString('en-IN');
 const fmtDate = (s: string) => new Date(s).toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
 const fmtDateTime = (s: string) => new Date(s).toLocaleString('en-GB', {
@@ -414,13 +425,19 @@ export default function DueBookPage() {
   const [newName, setNewName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newType, setNewType] = useState<Entity['type']>('Customer');
+  const [newProfilePic, setNewProfilePic] = useState('');
   const [entitySaving, setEntitySaving] = useState(false);
 
   /* edit entity */
   const [showEditEntity, setShowEditEntity] = useState(false);
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
+  const [editProfilePic, setEditProfilePic] = useState('');
   const [editSaving, setEditSaving] = useState(false);
+
+  /* add transaction extra */
+  const [addPhoto, setAddPhoto] = useState('');
+  const [showPhotoViewer, setShowPhotoViewer] = useState<string | null>(null);
 
   /* registration settings (self-registration + welcome bonus) */
   const DEFAULT_REG: RegSettings = { shopName: '', registrationEnabled: false, bonusAmount: 0, rewardItemName: '', rewardItemPrice: 0, paymentRewardThreshold: 0, welcomeMessage: '', shopLogo: '' };
@@ -866,6 +883,7 @@ export default function DueBookPage() {
     if (!selected) return;
     setEditName(selected.name);
     setEditPhone(selected.phone || '');
+    setEditProfilePic(selected.profilePicture || '');
     setShowEditEntity(true);
     window.history.pushState({ duebook: 'modal' }, '');
   };
@@ -875,12 +893,12 @@ export default function DueBookPage() {
     if (!editName.trim()) { toast.error('Name required'); return; }
     setEditSaving(true);
     try {
-      const res = await patchEntityOffline(tenantId, selected._id, { name: editName.trim(), phone: editPhone.trim() });
+      const res = await patchEntityOffline(tenantId, selected._id, { name: editName.trim(), phone: editPhone.trim(), profilePicture: editProfilePic });
       toast.success(res.queued ? 'Saved offline — will sync' : 'Updated');
       setShowEditEntity(false);
       // Optimistic local update
-      setEntities(prev => prev.map(e => e._id === selected._id ? { ...e, name: editName.trim(), phone: editPhone.trim() } : e));
-      setSelected(prev => prev ? { ...prev, name: editName.trim(), phone: editPhone.trim() } : prev);
+      setEntities(prev => prev.map(e => e._id === selected._id ? { ...e, name: editName.trim(), phone: editPhone.trim(), profilePicture: editProfilePic } : e));
+      setSelected(prev => prev ? { ...prev, name: editName.trim(), phone: editPhone.trim(), profilePicture: editProfilePic } : prev);
       if (!res.queued) {
         const updated = await getEntities(tenantId);
         setEntities(updated);
@@ -1219,6 +1237,7 @@ export default function DueBookPage() {
         entityId: selected._id, entityName: selected.name,
         amount: amt, direction: addDir,
         transactionDate: addDate, notes: autoNote,
+        photo: addPhoto || undefined,
       });
       const savedForShare = {
         amount: amt, direction: addDir,
@@ -1241,7 +1260,7 @@ export default function DueBookPage() {
         </div>
       ), { duration: 5000 });
       setShowAdd(false);
-      setAddAmount(''); setAddNote(''); setCart([]);
+      setAddAmount(''); setAddNote(''); setCart([]); setAddPhoto('');
       setAddDate(new Date().toISOString().split('T')[0]);
       const updated = await getEntities(tenantId);
       setEntities(updated);
@@ -1259,9 +1278,9 @@ export default function DueBookPage() {
     if (!tenantId || !newName || !newPhone) { toast.error('Name and phone required'); return; }
     setEntitySaving(true);
     try {
-      const res = await createEntityOffline(tenantId, { name: newName, phone: newPhone, type: newType });
+      const res = await createEntityOffline(tenantId, { name: newName, phone: newPhone, type: newType, profilePicture: newProfilePic || undefined });
       toast.success(res.queued ? 'Saved offline — will sync' : 'Added');
-      setShowAddEntity(false); setNewName(''); setNewPhone('');
+      setShowAddEntity(false); setNewName(''); setNewPhone(''); setNewProfilePic('');
       await loadEntities();
     } catch (e) {
       const err = e as { message?: string };
@@ -1664,10 +1683,16 @@ export default function DueBookPage() {
         return (
         <div className="flex-shrink-0 px-3 py-2 bg-white dark:bg-slate-800 border-b border-gray-100 dark:border-slate-700">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[13px] shrink-0"
-              style={{ background: avatarColor(selected.name) }}>
-              {initial(selected.name)}
-            </div>
+            {selected.profilePicture ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
+              <img src={selected.profilePicture} alt={selected.name}
+                className="w-8 h-8 rounded-full object-cover shrink-0" />
+            ) : (
+              <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[13px] shrink-0"
+                style={{ background: avatarColor(selected.name) }}>
+                {initial(selected.name)}
+              </div>
+            )}
             <div className="flex-1 min-w-0">
               <p className="text-[13px] font-bold text-gray-900 dark:text-slate-100 truncate">{selected.name}</p>
               <p className="text-[11px] text-gray-400 dark:text-slate-500">{selected.phone || labels[selected.type]}</p>
@@ -1805,10 +1830,16 @@ export default function DueBookPage() {
                     role="button"
                     className="w-full flex items-center gap-2.5 bg-white dark:bg-slate-800 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.05)] active:bg-gray-50 dark:active:bg-slate-700 transition cursor-pointer">
                     <div className="relative shrink-0">
-                      <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[12px]"
-                        style={{ background: avatarColor(entity.name) }}>
-                        {initial(entity.name)}
-                      </div>
+                      {entity.profilePicture ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img src={entity.profilePicture} alt={entity.name}
+                          className="w-8 h-8 rounded-full object-cover" />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[12px]"
+                          style={{ background: avatarColor(entity.name) }}>
+                          {initial(entity.name)}
+                        </div>
+                      )}
                       {pinned.has(entity._id) && (
                         <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-400 border-2 border-white dark:border-slate-800 flex items-center justify-center">
                           <Pin size={8} className="text-white" strokeWidth={3} />
@@ -1890,6 +1921,12 @@ export default function DueBookPage() {
                     style={{ background: isPaid ? (isDark ? '#1e293b' : '#f9fafb') : undefined }}>
                     <div className={`w-1 shrink-0 ${isPaid ? 'bg-gray-300 dark:bg-slate-600' : tx.direction === 'INCOME' ? 'bg-green-500' : 'bg-red-500'}`} />
                     <div className="flex-1 flex items-center gap-2 px-2.5 py-2">
+                      {tx.photo && (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img src={tx.photo} alt="tx"
+                          onClick={(e) => { e.stopPropagation(); setShowPhotoViewer(tx.photo!); }}
+                          className="w-9 h-9 rounded-lg object-cover cursor-pointer shrink-0 border border-gray-200 dark:border-slate-600" />
+                      )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
                           <p className={`text-[11px] ${isPaid ? 'text-gray-400 dark:text-slate-500' : 'text-gray-500 dark:text-slate-400'}`}>{fmtDate(tx.transactionDate)}</p>
@@ -2107,6 +2144,40 @@ export default function DueBookPage() {
                   />
                 </div>
               )}
+
+              {/* ── Photo capture (optional) ── */}
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 block mb-1">Photo (optional)</label>
+                <div className="flex items-center gap-2">
+                  <div className="w-14 h-14 rounded-xl bg-gray-100 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 flex items-center justify-center overflow-hidden shrink-0">
+                    {addPhoto ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img src={addPhoto} alt="Item" className="w-full h-full object-cover" />
+                    ) : (
+                      <Camera size={18} className="text-gray-400" />
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-1">
+                    <label className="w-full py-1.5 rounded-lg border-2 border-dashed border-sky-300 dark:border-sky-700 text-sky-500 dark:text-sky-400 text-[11px] font-bold flex items-center justify-center cursor-pointer active:scale-[0.98] transition">
+                      <input type="file" accept="image/*" capture="environment" className="hidden"
+                        onChange={async e => {
+                          const f = e.target.files?.[0]; if (!f) return;
+                          if (f.size > 300 * 1024) { toast.error('Max 300 KB — please resize'); return; }
+                          setAddPhoto(await fileToDataUrl(f));
+                        }}
+                      />
+                      {addPhoto ? 'Change Photo' : 'Capture / Attach Photo'}
+                    </label>
+                    {addPhoto && (
+                      <button onClick={() => setAddPhoto('')}
+                        className="w-full py-1 rounded-lg text-[10px] font-semibold text-red-500 border border-red-200 dark:border-red-800">
+                        Remove Photo
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-1">Snap the item or receipt for future proof.</p>
+              </div>
             </div>
 
             {/* Sticky save button */}
@@ -2214,6 +2285,34 @@ export default function DueBookPage() {
                     }`}>{labels[t]}</button>
                 ))}
               </div>
+              <div className="flex items-center gap-2.5">
+                <div className="w-14 h-14 rounded-full bg-gray-100 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 flex items-center justify-center overflow-hidden shrink-0">
+                  {newProfilePic ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img src={newProfilePic} alt="Profile" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-[10px] text-gray-400">No photo</span>
+                  )}
+                </div>
+                <div className="flex-1 space-y-1">
+                  <label className="w-full py-1.5 rounded-lg border-2 border-dashed border-sky-300 dark:border-sky-700 text-sky-500 dark:text-sky-400 text-[11px] font-bold flex items-center justify-center cursor-pointer active:scale-[0.98] transition">
+                    <input type="file" accept="image/*" capture="environment" className="hidden"
+                      onChange={async e => {
+                        const f = e.target.files?.[0]; if (!f) return;
+                        if (f.size > 300 * 1024) { toast.error('Max 300 KB — please resize'); return; }
+                        setNewProfilePic(await fileToDataUrl(f));
+                      }}
+                    />
+                    {newProfilePic ? 'Change Photo' : 'Add Profile Photo (≤300 KB)'}
+                  </label>
+                  {newProfilePic && (
+                    <button onClick={() => setNewProfilePic('')}
+                      className="w-full py-1 rounded-lg text-[10px] font-semibold text-red-500 border border-red-200 dark:border-red-800">
+                      Remove Photo
+                    </button>
+                  )}
+                </div>
+              </div>
               <input type="text" value={newName} onChange={e => setNewName(e.target.value)}
                 placeholder="Full name *" autoFocus
                 className="w-full border border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2 text-[13px] text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400"
@@ -2250,6 +2349,34 @@ export default function DueBookPage() {
               </button>
             </div>
             <div className="px-4 pb-5 space-y-2.5">
+              <div className="flex items-center gap-2.5">
+                <div className="w-14 h-14 rounded-full bg-gray-100 dark:bg-slate-700 border border-gray-200 dark:border-slate-600 flex items-center justify-center overflow-hidden shrink-0">
+                  {editProfilePic ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img src={editProfilePic} alt="Profile" className="w-full h-full object-cover" />
+                  ) : (
+                    <span className="text-[10px] text-gray-400">No photo</span>
+                  )}
+                </div>
+                <div className="flex-1 space-y-1">
+                  <label className="w-full py-1.5 rounded-lg border-2 border-dashed border-sky-300 dark:border-sky-700 text-sky-500 dark:text-sky-400 text-[11px] font-bold flex items-center justify-center cursor-pointer active:scale-[0.98] transition">
+                    <input type="file" accept="image/*" capture="environment" className="hidden"
+                      onChange={async e => {
+                        const f = e.target.files?.[0]; if (!f) return;
+                        if (f.size > 300 * 1024) { toast.error('Max 300 KB — please resize'); return; }
+                        setEditProfilePic(await fileToDataUrl(f));
+                      }}
+                    />
+                    {editProfilePic ? 'Change Photo' : 'Add Profile Photo (≤300 KB)'}
+                  </label>
+                  {editProfilePic && (
+                    <button onClick={() => setEditProfilePic('')}
+                      className="w-full py-1 rounded-lg text-[10px] font-semibold text-red-500 border border-red-200 dark:border-red-800">
+                      Remove Photo
+                    </button>
+                  )}
+                </div>
+              </div>
               <input type="text" value={editName} onChange={e => setEditName(e.target.value)}
                 placeholder="Full name *" autoFocus
                 className="w-full border border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2 text-[13px] text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400"
@@ -3210,6 +3337,21 @@ export default function DueBookPage() {
               </p>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════
+          PHOTO VIEWER (transaction photo full-screen)
+          ══════════════════════════════════════ */}
+      {showPhotoViewer && (
+        <div className="absolute inset-0 z-[70] bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setShowPhotoViewer(null)}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={showPhotoViewer} alt="Photo" className="max-w-full max-h-full rounded-lg" />
+          <button onClick={() => setShowPhotoViewer(null)}
+            className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-white">
+            <X size={18} />
+          </button>
         </div>
       )}
     </div>
