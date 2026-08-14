@@ -1,5 +1,5 @@
 import api from './api';
-import { enqueue, realId } from './offlineQueue';
+import { enqueue, list as listQueue, realId } from './offlineQueue';
 
 interface Entity {
   _id: string;
@@ -20,6 +20,7 @@ interface Transaction {
   status: 'Pending' | 'Paid' | 'Cancelled';
   entityId?: string;
   _pending?: boolean;
+  _qid?: string;
 }
 
 const CACHE_PREFIX = 'duebook_cache_';
@@ -78,7 +79,12 @@ export async function getTxOffline(tid: string, entityId: string): Promise<ReadR
     const r = await api.get('/transactions', { params: { entityId }, headers: { 'X-Tenant-Id': tid } });
     const list: Transaction[] = r.data?.transactions || r.data || [];
     writeCache(ck.tx(tid, entityId), list);
-    return { data: [...list, ...pending], offline: false };
+    // Drop pending tx whose queue item has drained (server list now holds the real record).
+    // Legacy pending items without _qid are also dropped — server fetch succeeded, so they're stale.
+    const queueIds = new Set(listQueue().map(q => q.id));
+    const stillPending = pending.filter(p => p._qid && queueIds.has(p._qid));
+    if (stillPending.length !== pending.length) writeCache(ck.pendingTx(tid, entityId), stillPending);
+    return { data: [...list, ...stillPending], offline: false };
   } catch (err) {
     if (isNetworkErr(err)) {
       const cached = readCache<Transaction[]>(ck.tx(tid, entityId), []);
@@ -132,6 +138,11 @@ export async function addTxOffline(tid: string, payload: AddTxPayload): Promise<
     }
   }
   // Optimistic local tx
+  const q = enqueue({
+    type: 'add-tx', method: 'POST', url: '/transactions',
+    body: payload, tenantId: tid,
+    label: `${payload.direction === 'INCOME' ? 'They owe' : 'I owe'} Tk ${payload.amount}${payload.entityName ? ' — ' + payload.entityName : ''}`,
+  });
   const optimistic: Transaction = {
     _id: tempId('tx'),
     amount: payload.amount,
@@ -141,16 +152,12 @@ export async function addTxOffline(tid: string, payload: AddTxPayload): Promise<
     status: 'Pending',
     entityId: payload.entityId,
     _pending: true,
+    _qid: q.id,
   };
   const pKey = ck.pendingTx(tid, payload.entityId);
   writeCache(pKey, [...readCache<Transaction[]>(pKey, []), optimistic]);
   // Bump cached entity totals so summary reflects pending changes
   bumpEntityTotals(tid, payload.entityId, payload.direction, payload.amount);
-  enqueue({
-    type: 'add-tx', method: 'POST', url: '/transactions',
-    body: payload, tenantId: tid,
-    label: `${payload.direction === 'INCOME' ? 'They owe' : 'I owe'} Tk ${payload.amount}${payload.entityName ? ' — ' + payload.entityName : ''}`,
-  });
   return { queued: true };
 }
 
