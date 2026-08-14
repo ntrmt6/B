@@ -7,7 +7,7 @@ import api from '@/lib/api';
 import {
   getEntitiesOffline, getTxOffline,
   createEntityOffline, addTxOffline, patchTxStatusOffline,
-  patchEntityOffline, deleteEntityOffline, isTempId,
+  patchEntityOffline, deleteEntityOffline, deleteTxOffline, isTempId,
 } from '@/lib/offlineApi';
 import { drain as drainQueue } from '@/lib/offlineQueue';
 import toast from 'react-hot-toast';
@@ -16,6 +16,7 @@ import {
   TrendingUp, TrendingDown, UserPlus, Trash2, CheckCircle2, Circle, Download,
   Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon, CloudOff, Send, Bell,
   MessageSquare, Copy, Users, Upload, ClipboardPaste, Check, Pin, PinOff, ShieldCheck, Camera,
+  Lock, Unlock,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import SyncBar from './SyncBar';
@@ -76,6 +77,7 @@ const TEMPLATES_KEY = 'duebook_templates';
 const LISTS_KEY = 'duebook_lists';
 const LAST_TPL_VALUES_KEY = 'duebook_tpl_last';
 const PINNED_KEY = 'duebook_pinned';
+const LOCK_KEY = 'duebook_locked';
 
 type SettingsTab = 'general' | 'business' | 'templates' | 'lists';
 const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
@@ -547,10 +549,54 @@ export default function DueBookPage() {
     });
   };
 
+  /* shadow lock — blocks all touches until user long-presses to unlock */
+  const [isLocked, setIsLocked] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return localStorage.getItem(LOCK_KEY) === '1';
+  });
+  const lockOn = () => {
+    localStorage.setItem(LOCK_KEY, '1');
+    setIsLocked(true);
+    toast('Screen locked — long-press to unlock', { icon: '🔒' });
+  };
+  const lockOff = () => {
+    localStorage.setItem(LOCK_KEY, '0');
+    setIsLocked(false);
+    toast('Unlocked', { icon: '🔓' });
+  };
+  const unlockHoldTimer = useRef<number | null>(null);
+  const [unlockHoldPct, setUnlockHoldPct] = useState(0);
+  const startUnlockHold = () => {
+    if (unlockHoldTimer.current) return;
+    const start = Date.now();
+    const HOLD_MS = 1500;
+    unlockHoldTimer.current = window.setInterval(() => {
+      const pct = Math.min(100, ((Date.now() - start) / HOLD_MS) * 100);
+      setUnlockHoldPct(pct);
+      if (pct >= 100) {
+        if (unlockHoldTimer.current) { clearInterval(unlockHoldTimer.current); unlockHoldTimer.current = null; }
+        setUnlockHoldPct(0);
+        lockOff();
+      }
+    }, 50) as unknown as number;
+  };
+  const cancelUnlockHold = () => {
+    if (unlockHoldTimer.current) { clearInterval(unlockHoldTimer.current); unlockHoldTimer.current = null; }
+    setUnlockHoldPct(0);
+  };
+
   const [showSearch, setShowSearch] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const [markingPaid, setMarkingPaid] = useState<string | null>(null);
   const [claimingReward, setClaimingReward] = useState(false);
+
+  /* multi-select for transactions (bulk delete / mark paid) */
+  const [selectedTxIds, setSelectedTxIds] = useState<Set<string>>(new Set());
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const longPressTimer = useRef<number | null>(null);
+  const longPressFired = useRef(false);
+  const isSelectMode = selectedTxIds.size > 0;
+  useEffect(() => { setSelectedTxIds(new Set()); }, [selected?._id]);
   const txListRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
 
@@ -1347,6 +1393,110 @@ export default function DueBookPage() {
     finally { setMarkingPaid(null); }
   };
 
+  const toggleTxSelected = (id: string) => {
+    setSelectedTxIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const clearSelection = () => setSelectedTxIds(new Set());
+
+  const handleDeleteTx = async (tx: Transaction & { bal: number }) => {
+    if (!tenantId) return;
+    if (!confirm('Delete this transaction? This cannot be undone.')) return;
+    try {
+      const res = await deleteTxOffline(tenantId, tx._id, selected?._id);
+      setTx(prev => prev.filter(t => t._id !== tx._id));
+      toast.success(res.queued ? 'Delete queued — will sync' : 'Deleted');
+      if (!res.queued && !isTempId(tx._id)) {
+        const updated = await getEntities(tenantId);
+        setEntities(updated);
+        const fresh = updated.find(e => e._id === selected?._id);
+        if (fresh) setSelected(fresh);
+      }
+    } catch (e) {
+      const err = e as { message?: string };
+      toast.error(err?.message || 'Failed to delete');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (!tenantId || bulkBusy || selectedTxIds.size === 0) return;
+    const n = selectedTxIds.size;
+    if (!confirm(`Delete ${n} transaction${n > 1 ? 's' : ''}? This cannot be undone.`)) return;
+    setBulkBusy(true);
+    const ids = Array.from(selectedTxIds);
+    let ok = 0, failed = 0, queued = 0;
+    for (const id of ids) {
+      const t = transactions.find(x => x._id === id);
+      if (!t) continue;
+      try {
+        const res = await deleteTxOffline(tenantId, id, selected?._id);
+        if (res.queued) queued++; else ok++;
+      } catch { failed++; }
+    }
+    setTx(prev => prev.filter(t => !selectedTxIds.has(t._id)));
+    clearSelection();
+    setBulkBusy(false);
+    const parts: string[] = [];
+    if (ok) parts.push(`${ok} deleted`);
+    if (queued) parts.push(`${queued} queued`);
+    if (failed) parts.push(`${failed} failed`);
+    (failed ? toast.error : toast.success)(parts.join(' · ') || 'Done');
+    if (ok > 0 && tenantId) {
+      const updated = await getEntities(tenantId);
+      setEntities(updated);
+      const fresh = updated.find(e => e._id === selected?._id);
+      if (fresh) setSelected(fresh);
+    }
+  };
+
+  const handleBulkStatus = async (target: 'Paid' | 'Pending') => {
+    if (!tenantId || bulkBusy || selectedTxIds.size === 0) return;
+    setBulkBusy(true);
+    const ids = Array.from(selectedTxIds);
+    let ok = 0, failed = 0, queued = 0, skipped = 0;
+    for (const id of ids) {
+      const t = transactions.find(x => x._id === id);
+      if (!t) continue;
+      if (t.status === target) { skipped++; continue; }
+      if (isTempId(id)) { skipped++; continue; }
+      try {
+        const res = await patchTxStatusOffline(tenantId, id, target);
+        if (res.queued) queued++; else ok++;
+      } catch { failed++; }
+    }
+    setTx(prev => prev.map(t => selectedTxIds.has(t._id) && !isTempId(t._id) ? { ...t, status: target } : t));
+    clearSelection();
+    setBulkBusy(false);
+    const parts: string[] = [];
+    if (ok) parts.push(`${ok} marked ${target.toLowerCase()}`);
+    if (queued) parts.push(`${queued} queued`);
+    if (skipped) parts.push(`${skipped} skipped`);
+    if (failed) parts.push(`${failed} failed`);
+    (failed ? toast.error : toast.success)(parts.join(' · ') || 'Done');
+    if (ok > 0 && tenantId) {
+      const updated = await getEntities(tenantId);
+      setEntities(updated);
+      const fresh = updated.find(e => e._id === selected?._id);
+      if (fresh) setSelected(fresh);
+    }
+  };
+
+  const startLongPress = (id: string) => {
+    longPressFired.current = false;
+    if (longPressTimer.current) window.clearTimeout(longPressTimer.current);
+    longPressTimer.current = window.setTimeout(() => {
+      longPressFired.current = true;
+      toggleTxSelected(id);
+    }, 450);
+  };
+  const cancelLongPress = () => {
+    if (longPressTimer.current) { window.clearTimeout(longPressTimer.current); longPressTimer.current = null; }
+  };
+
   const handleClaimReward = async () => {
     if (!selected || !tenantId || claimingReward) return;
     setClaimingReward(true);
@@ -1589,6 +1739,10 @@ export default function DueBookPage() {
               <button onClick={toggleDark}
                 className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-slate-400 hover:bg-gray-100 dark:hover:bg-slate-700">
                 {isDark ? <Sun size={14} /> : <Moon size={14} />}
+              </button>
+              <button onClick={lockOn} title="Lock screen"
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-700">
+                <Lock size={14} />
               </button>
               <button onClick={openSettings}
                 className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-700">
@@ -1920,12 +2074,30 @@ export default function DueBookPage() {
               {txWithBal.map((tx, i) => {
                 const isPaid = tx.status === 'Paid';
                 const isMarking = markingPaid === tx._id;
+                const isChecked = selectedTxIds.has(tx._id);
                 return (
-                  <div key={tx._id || i} className={`rounded-xl overflow-hidden flex shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition-opacity ${isPaid ? 'opacity-60' : 'bg-white dark:bg-slate-800'}`}
-                    style={{ background: isPaid ? (isDark ? '#1e293b' : '#f9fafb') : undefined }}>
+                  <div
+                    key={tx._id || i}
+                    onPointerDown={() => startLongPress(tx._id)}
+                    onPointerUp={cancelLongPress}
+                    onPointerLeave={cancelLongPress}
+                    onPointerCancel={cancelLongPress}
+                    onClick={(e) => {
+                      if (longPressFired.current) { longPressFired.current = false; e.preventDefault(); return; }
+                      if (isSelectMode) { e.preventDefault(); toggleTxSelected(tx._id); }
+                    }}
+                    className={`rounded-xl overflow-hidden flex shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition-opacity ${isChecked ? 'ring-2 ring-sky-500' : ''} ${isPaid ? 'opacity-60' : 'bg-white dark:bg-slate-800'} select-none`}
+                    style={{ background: isChecked ? (isDark ? '#0c2740' : '#e0f2fe') : isPaid ? (isDark ? '#1e293b' : '#f9fafb') : undefined }}>
                     <div className={`w-1 shrink-0 ${isPaid ? 'bg-gray-300 dark:bg-slate-600' : tx.direction === 'INCOME' ? 'bg-green-500' : 'bg-red-500'}`} />
                     <div className="flex-1 flex items-center gap-2 px-2.5 py-2">
-                      {tx.photo && (
+                      {isSelectMode && (
+                        <div className="shrink-0 w-6 h-6 flex items-center justify-center">
+                          {isChecked
+                            ? <CheckCircle2 size={20} className="text-sky-500" />
+                            : <Circle size={20} className="text-gray-300 dark:text-slate-600" />}
+                        </div>
+                      )}
+                      {tx.photo && !isSelectMode && (
                         /* eslint-disable-next-line @next/next/no-img-element */
                         <img src={tx.photo} alt="tx"
                           onClick={(e) => { e.stopPropagation(); setShowPhotoViewer(tx.photo!); }}
@@ -1945,25 +2117,36 @@ export default function DueBookPage() {
                         </p>
                         {!isPaid && <p className="text-[10px] text-gray-400 dark:text-slate-500 tabular-nums">bal: {fmt(tx.bal)}</p>}
                       </div>
-                      <button
-                        onClick={() => handleSendTx(tx)}
-                        title={selected?.phone ? 'Send receipt via WhatsApp' : 'Share receipt'}
-                        className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-sky-500 dark:text-sky-400 active:bg-sky-50 dark:active:bg-sky-900/30 transition"
-                      >
-                        <Send size={15} />
-                      </button>
-                      <button
-                        onClick={() => handleMarkPaid(tx)}
-                        disabled={!!markingPaid}
-                        className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg active:bg-gray-100 dark:active:bg-slate-700 transition"
-                      >
-                        {isMarking
-                          ? <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                          : isPaid
-                            ? <CheckCircle2 size={18} className="text-green-500" />
-                            : <Circle size={18} className="text-gray-300 dark:text-slate-600" />
-                        }
-                      </button>
+                      {!isSelectMode && (
+                        <>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleSendTx(tx); }}
+                            title={selected?.phone ? 'Send receipt via WhatsApp' : 'Share receipt'}
+                            className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-sky-500 dark:text-sky-400 active:bg-sky-50 dark:active:bg-sky-900/30 transition"
+                          >
+                            <Send size={15} />
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleMarkPaid(tx); }}
+                            disabled={!!markingPaid}
+                            className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg active:bg-gray-100 dark:active:bg-slate-700 transition"
+                          >
+                            {isMarking
+                              ? <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                              : isPaid
+                                ? <CheckCircle2 size={18} className="text-green-500" />
+                                : <Circle size={18} className="text-gray-300 dark:text-slate-600" />
+                            }
+                          </button>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDeleteTx(tx); }}
+                            title="Delete transaction"
+                            className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-red-400 dark:text-red-500 active:bg-red-50 dark:active:bg-red-900/30 transition"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 );
@@ -1974,7 +2157,7 @@ export default function DueBookPage() {
       </div>
 
       {/* ── BOTTOM ACTION BAR (entity selected) ── */}
-      {selected && (
+      {selected && !isSelectMode && (
         <div className="flex-shrink-0 grid grid-cols-2 gap-2 px-3 py-2 bg-white dark:bg-slate-800 border-t border-gray-100 dark:border-slate-700">
           <button onClick={() => openAdd('INCOME')}
             className="py-2.5 rounded-xl bg-gradient-to-r from-green-400 to-green-600 text-white text-[13px] font-bold shadow-sm active:scale-[0.98] transition flex items-center justify-center gap-1">
@@ -1983,6 +2166,42 @@ export default function DueBookPage() {
           <button onClick={() => openAdd('EXPENSE')}
             className="py-2.5 rounded-xl bg-gradient-to-r from-red-400 to-red-600 text-white text-[13px] font-bold shadow-sm active:scale-[0.98] transition flex items-center justify-center gap-1">
             <TrendingDown size={14} /> I Owe
+          </button>
+        </div>
+      )}
+
+      {/* ── BULK ACTION BAR (select mode) ── */}
+      {selected && isSelectMode && (
+        <div className="flex-shrink-0 flex items-center gap-2 px-2 py-2 bg-sky-50 dark:bg-sky-950/40 border-t border-sky-200 dark:border-sky-800">
+          <button onClick={clearSelection} disabled={bulkBusy}
+            className="shrink-0 w-9 h-9 flex items-center justify-center rounded-lg text-gray-600 dark:text-slate-300 active:bg-gray-200 dark:active:bg-slate-700"
+            title="Cancel">
+            <X size={18} />
+          </button>
+          <span className="shrink-0 text-[12px] font-bold text-sky-700 dark:text-sky-300 tabular-nums">
+            {selectedTxIds.size} selected
+          </span>
+          <div className="flex-1" />
+          <button onClick={() => {
+              const allIds = txWithBal.map(t => t._id);
+              const allSelected = allIds.every(id => selectedTxIds.has(id));
+              setSelectedTxIds(allSelected ? new Set() : new Set(allIds));
+            }}
+            disabled={bulkBusy || txWithBal.length === 0}
+            className="shrink-0 px-2 py-1.5 text-[11px] font-semibold rounded-lg text-sky-700 dark:text-sky-300 active:bg-sky-100 dark:active:bg-sky-900/40">
+            {txWithBal.length > 0 && txWithBal.every(t => selectedTxIds.has(t._id)) ? 'None' : 'All'}
+          </button>
+          <button onClick={() => handleBulkStatus('Paid')} disabled={bulkBusy}
+            className="shrink-0 px-2.5 py-2 rounded-lg bg-green-500 text-white text-[11px] font-bold flex items-center gap-1 active:scale-95 disabled:opacity-50">
+            <CheckCircle2 size={13} /> Paid
+          </button>
+          <button onClick={() => handleBulkStatus('Pending')} disabled={bulkBusy}
+            className="shrink-0 px-2.5 py-2 rounded-lg bg-amber-500 text-white text-[11px] font-bold flex items-center gap-1 active:scale-95 disabled:opacity-50">
+            <Circle size={13} /> Pending
+          </button>
+          <button onClick={handleBulkDelete} disabled={bulkBusy}
+            className="shrink-0 px-2.5 py-2 rounded-lg bg-red-500 text-white text-[11px] font-bold flex items-center gap-1 active:scale-95 disabled:opacity-50">
+            <Trash2 size={13} /> Delete
           </button>
         </div>
       )}
@@ -3356,6 +3575,31 @@ export default function DueBookPage() {
             className="absolute top-3 right-3 w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-white">
             <X size={18} />
           </button>
+        </div>
+      )}
+
+      {/* ── SHADOW LOCK OVERLAY ── */}
+      {isLocked && (
+        <div
+          className="fixed inset-0 z-[999] bg-transparent select-none"
+          style={{ touchAction: 'none' }}
+          onContextMenu={(e) => e.preventDefault()}
+          onPointerDown={startUnlockHold}
+          onPointerUp={cancelUnlockHold}
+          onPointerCancel={cancelUnlockHold}
+          onPointerLeave={cancelUnlockHold}
+        >
+          <div className="absolute inset-x-0 bottom-6 flex flex-col items-center gap-2 pointer-events-none">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-black/60 text-white text-[11px] font-medium shadow">
+              {unlockHoldPct > 0 ? <Unlock size={12} /> : <Lock size={12} />}
+              <span>{unlockHoldPct > 0 ? 'Keep holding…' : 'Locked — long-press to unlock'}</span>
+            </div>
+            {unlockHoldPct > 0 && (
+              <div className="w-32 h-1 bg-white/30 rounded-full overflow-hidden">
+                <div className="h-full bg-sky-400" style={{ width: `${unlockHoldPct}%` }} />
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>
