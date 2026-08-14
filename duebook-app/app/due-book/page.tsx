@@ -230,7 +230,11 @@ async function fileToDataUrl(f: File): Promise<string> {
     r.readAsDataURL(f);
   });
 }
-const fmt = (n: number) => 'Tk ' + Math.abs(n).toLocaleString('en-IN');
+const fmt = (n: number) => {
+  const abs = Math.abs(n);
+  if (abs < 1000) return 'Tk ' + abs.toLocaleString('en-IN');
+  return 'Tk ' + new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(abs).toLowerCase();
+};
 const fmtDate = (s: string) => new Date(s).toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
 const fmtDateTime = (s: string) => new Date(s).toLocaleString('en-GB', {
   day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true,

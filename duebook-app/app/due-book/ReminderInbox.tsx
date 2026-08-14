@@ -50,7 +50,11 @@ const waUrl = (phone: string, message: string) => {
   return `https://wa.me/${n}?text=${encodeURIComponent(message)}`;
 };
 
-const fmtMoney = (n: number) => 'Tk ' + Math.abs(n).toLocaleString('en-IN');
+const fmtMoney = (n: number) => {
+  const abs = Math.abs(n);
+  if (abs < 1000) return 'Tk ' + abs.toLocaleString('en-IN');
+  return 'Tk ' + new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(abs).toLowerCase();
+};
 
 interface Props {
   isDark: boolean;

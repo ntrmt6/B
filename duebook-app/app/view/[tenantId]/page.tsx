@@ -20,7 +20,11 @@ interface Transaction {
 const AVATAR_COLORS = ['#0ea5e9','#8b5cf6','#10b981','#f59e0b','#ec4899','#6366f1'];
 const avatarColor = (name: string) => AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
 const initial = (name: string) => (name || '?')[0].toUpperCase();
-const fmt = (n: number) => 'Tk ' + Math.abs(n).toLocaleString('en-IN');
+const fmt = (n: number) => {
+  const abs = Math.abs(n);
+  if (abs < 1000) return 'Tk ' + abs.toLocaleString('en-IN');
+  return 'Tk ' + new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(abs).toLowerCase();
+};
 const fmtDate = (s: string) => new Date(s).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
 const timeAgo = (d: Date) => {
   const s = Math.floor((Date.now() - d.getTime()) / 1000);
