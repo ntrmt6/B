@@ -16,11 +16,12 @@ import {
   TrendingUp, TrendingDown, UserPlus, Trash2, CheckCircle2, Circle, Download,
   Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon, CloudOff, Send, Bell,
   MessageSquare, Copy, Users, Upload, ClipboardPaste, Check, Pin, PinOff, ShieldCheck, Camera,
-  Lock, Unlock,
+  Lock, Unlock, Package,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import SyncBar from './SyncBar';
 import ReminderInbox from './ReminderInbox';
+import InventoryModal from './InventoryModal';
 
 /* ─── Types ─── */
 interface Entity {
@@ -454,6 +455,7 @@ export default function DueBookPage() {
 
   /* settings */
   const [showSettings, setShowSettings] = useState(false);
+  const [showInventory, setShowInventory] = useState(false);
   const [labels, setLabels] = useState<Labels>(() => {
     if (typeof window === 'undefined') return DEFAULT_LABELS;
     try {
@@ -734,6 +736,7 @@ export default function DueBookPage() {
       if (showTplPicker) { setShowTplPicker(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showCatalog) { setShowCatalog(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showSettings) { setShowSettings(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
+      if (showInventory) { setShowInventory(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showEditEntity) { setShowEditEntity(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showAdd) { setShowAdd(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showAddEntity) { setShowAddEntity(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
@@ -741,7 +744,7 @@ export default function DueBookPage() {
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, [showAdd, showAddEntity, showCatalog, showSettings, showEditEntity, selected, showTplPicker, showTplEditor, showTplPreview, showBulk, showImport]);
+  }, [showAdd, showAddEntity, showCatalog, showSettings, showInventory, showEditEntity, selected, showTplPicker, showTplEditor, showTplPreview, showBulk, showImport]);
 
   const loadTx = useCallback(async (entity: Entity) => {
     if (!tenantId) return;
@@ -1744,6 +1747,10 @@ export default function DueBookPage() {
                 className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-700">
                 <Lock size={14} />
               </button>
+              <button onClick={() => { setShowInventory(true); window.history.pushState({ duebook: 'modal' }, ''); }} title="Inventory"
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-700">
+                <Package size={14} />
+              </button>
               <button onClick={openSettings}
                 className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-700">
                 <Settings size={14} />
@@ -2618,6 +2625,17 @@ export default function DueBookPage() {
           </div>
         </div>
       )}
+
+      {/* ══════════════════════════════════════
+          INVENTORY SHEET
+          ══════════════════════════════════════ */}
+      <InventoryModal
+        open={showInventory}
+        onClose={() => setShowInventory(false)}
+        isDark={isDark}
+        entities={entities}
+        onSaleRecorded={() => { loadEntities(); if (selected) loadTx(selected); }}
+      />
 
       {/* ══════════════════════════════════════
           SETTINGS SHEET
