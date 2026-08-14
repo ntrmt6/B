@@ -1597,7 +1597,7 @@ export default function DueBookPage() {
       </div>
 
       {/* ── SYNC / OFFLINE BAR ── */}
-      <SyncBar isOnline={isOnline} onSynced={loadEntities} />
+      <SyncBar isOnline={isOnline} onSynced={() => { loadEntities(); if (selected) loadTx(selected); }} />
 
       {/* ── SUMMARY ROW ── */}
       {!selected && (
