@@ -238,9 +238,12 @@ const fmt = (n: number) => {
   if (abs < 1000) return 'Tk ' + abs.toLocaleString('en-IN');
   return 'Tk ' + new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 }).format(abs).toLowerCase();
 };
-const fmtDate = (s: string) => new Date(s).toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
+const fmtDate = (s: string) => new Date(s).toLocaleDateString('en-GB', { day:'2-digit', month:'short', timeZone: 'Asia/Dhaka' });
+const fmtDateTimeBDT = (s: string) => new Date(s).toLocaleString('en-GB', {
+  day: '2-digit', month: 'short', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Dhaka',
+});
 const fmtDateTime = (s: string) => new Date(s).toLocaleString('en-GB', {
-  day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true,
+  day: '2-digit', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit', hour12: true, timeZone: 'Asia/Dhaka',
 });
 
 const dueLineFor = (remainingDue?: number): string | null => {
@@ -1298,33 +1301,40 @@ export default function DueBookPage() {
       ? cart.map(c => `${c.item.name} x${c.qty}`).join(', ')
       : addNote || undefined;
     setAddSaving(true);
+    // If picking today, capture the exact moment; otherwise anchor to noon BDT of the picked day
+    // so the list shows a meaningful time instead of midnight UTC (6 AM BDT).
+    const effectiveDate = addDate === TODAY
+      ? new Date().toISOString()
+      : `${addDate}T12:00:00+06:00`;
     try {
       const res = await addTxOffline(tenantId, {
         entityId: selected._id, entityName: selected.name,
         amount: amt, direction: addDir,
-        transactionDate: addDate, notes: autoNote,
+        transactionDate: effectiveDate, notes: autoNote,
         photo: addPhoto || undefined,
       });
       const savedForShare = {
         amount: amt, direction: addDir,
-        transactionDate: addDate, notes: autoNote,
+        transactionDate: effectiveDate, notes: autoNote,
         status: 'Pending' as const,
       };
       const entityForShare = selected;
       const remainingAfterSave = netPending(transactions) + (addDir === 'INCOME' ? amt : -amt);
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) navigator.vibrate?.(30);
       toast.custom((t) => (
-        <div className="flex items-center gap-2 bg-white dark:bg-slate-800 shadow-lg rounded-xl px-3 py-2 border border-gray-200 dark:border-slate-700">
-          <span className="text-[13px] text-gray-800 dark:text-slate-200">
-            {res.queued ? 'Saved offline — will sync' : 'Saved'}
+        <div className="flex items-center gap-2 bg-green-500 dark:bg-green-600 shadow-xl rounded-xl px-3 py-2.5 border-2 border-green-600 dark:border-green-500">
+          <CheckCircle2 size={20} className="text-white shrink-0" />
+          <span className="text-[14px] font-bold text-white">
+            {res.queued ? 'Saved offline' : `Saved · Tk ${amt.toLocaleString('en-IN')}`}
           </span>
           <button
             onClick={() => { toast.dismiss(t.id); handleSendTx(savedForShare, entityForShare, remainingAfterSave); }}
-            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-sky-500 text-white text-[12px] font-semibold active:scale-95 transition"
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white text-green-700 text-[12px] font-bold active:scale-95 transition"
           >
-            <Send size={12} /> Send receipt
+            <Send size={12} /> Send
           </button>
         </div>
-      ), { duration: 5000 });
+      ), { duration: 4000 });
       setShowAdd(false);
       setAddAmount(''); setAddNote(''); setCart([]); setAddPhoto('');
       setAddDate(new Date().toISOString().split('T')[0]);
@@ -2142,7 +2152,7 @@ export default function DueBookPage() {
                       )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <p className={`text-[11px] ${isPaid ? 'text-gray-400 dark:text-slate-500' : 'text-gray-500 dark:text-slate-400'}`}>{fmtDate(tx.transactionDate)}</p>
+                          <p className={`text-[11px] tabular-nums ${isPaid ? 'text-gray-400 dark:text-slate-500' : 'text-gray-500 dark:text-slate-400'}`}>{fmtDateTimeBDT(tx.transactionDate)}</p>
                           {isPaid && <span className="text-[9px] font-bold text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400 px-1 rounded">PAID</span>}
                           {isTempId(tx._id) && <span className="text-[9px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/40 dark:text-amber-400 px-1 rounded inline-flex items-center gap-0.5"><CloudOff size={9} /> SYNC</span>}
                         </div>
