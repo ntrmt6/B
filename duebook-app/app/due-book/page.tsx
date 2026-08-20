@@ -2033,7 +2033,7 @@ export default function DueBookPage() {
                 return (
                   <div key={entity._id} onClick={() => selectEntity(entity)}
                     role="button"
-                    className="w-full flex items-center gap-2.5 bg-white dark:bg-slate-800 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.05)] active:bg-gray-50 dark:active:bg-slate-700 transition cursor-pointer">
+                    className="perf-row w-full flex items-center gap-2.5 bg-white dark:bg-slate-800 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.05)] active:bg-gray-50 dark:active:bg-slate-700 transition cursor-pointer">
                     <div className="relative shrink-0">
                       {entity.profilePicture ? (
                         /* eslint-disable-next-line @next/next/no-img-element */
@@ -2133,7 +2133,7 @@ export default function DueBookPage() {
                       if (longPressFired.current) { longPressFired.current = false; e.preventDefault(); return; }
                       if (isSelectMode) { e.preventDefault(); toggleTxSelected(tx._id); }
                     }}
-                    className={`rounded-xl overflow-hidden flex shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition-opacity ${isChecked ? 'ring-2 ring-sky-500' : ''} ${isPaid ? 'opacity-60' : 'bg-white dark:bg-slate-800'} select-none`}
+                    className={`perf-row rounded-xl overflow-hidden flex shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition-opacity ${isChecked ? 'ring-2 ring-sky-500' : ''} ${isPaid ? 'opacity-60' : 'bg-white dark:bg-slate-800'} select-none`}
                     style={{ background: isChecked ? (isDark ? '#0c2740' : '#e0f2fe') : isPaid ? (isDark ? '#1e293b' : '#f9fafb') : undefined }}>
                     <div className={`w-1 shrink-0 ${isPaid ? 'bg-gray-300 dark:bg-slate-600' : tx.direction === 'INCOME' ? 'bg-green-500' : 'bg-red-500'}`} />
                     <div className="flex-1 flex items-center gap-2 px-2.5 py-2">

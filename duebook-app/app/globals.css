@@ -82,6 +82,12 @@ input::placeholder, textarea::placeholder { color: #9ca3af; }
 .list-item-active { transition: background 0.1s; }
 .list-item-active:active { background: #f1f5f9 !important; }
 
+/* Skip layout/paint for off-screen rows — huge scroll win on long lists */
+.perf-row {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 56px;
+}
+
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
