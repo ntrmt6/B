@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/lib/api';
@@ -388,6 +388,197 @@ const waUrl = (phone: string, message: string) => {
 };
 
 /* ══════════════════════════════════════════ */
+type TxWithBal = Transaction & { bal: number };
+
+interface TxRowProps {
+  tx: TxWithBal;
+  isChecked: boolean;
+  isSelectMode: boolean;
+  isMarking: boolean;
+  markingBusy: boolean;
+  isDark: boolean;
+  hasPhone: boolean;
+  onLongPressStart: (id: string) => void;
+  onLongPressEnd: () => void;
+  onRowClick: (id: string, e: React.MouseEvent) => void;
+  onPhotoClick: (photo: string) => void;
+  onSend: (tx: TxWithBal) => void;
+  onMarkPaid: (tx: TxWithBal) => void;
+  onDelete: (tx: TxWithBal) => void;
+}
+
+const TxRow = memo(function TxRow({
+  tx, isChecked, isSelectMode, isMarking, markingBusy, isDark, hasPhone,
+  onLongPressStart, onLongPressEnd, onRowClick, onPhotoClick, onSend, onMarkPaid, onDelete,
+}: TxRowProps) {
+  const isPaid = tx.status === 'Paid';
+  return (
+    <div
+      onPointerDown={() => onLongPressStart(tx._id)}
+      onPointerUp={onLongPressEnd}
+      onPointerLeave={onLongPressEnd}
+      onPointerCancel={onLongPressEnd}
+      onClick={(e) => onRowClick(tx._id, e)}
+      className={`perf-row rounded-xl overflow-hidden flex shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition-opacity ${isChecked ? 'ring-2 ring-sky-500' : ''} ${isPaid ? 'opacity-60' : 'bg-white dark:bg-slate-800'} select-none`}
+      style={{ background: isChecked ? (isDark ? '#0c2740' : '#e0f2fe') : isPaid ? (isDark ? '#1e293b' : '#f9fafb') : undefined }}>
+      <div className={`w-1 shrink-0 ${isPaid ? 'bg-gray-300 dark:bg-slate-600' : tx.direction === 'INCOME' ? 'bg-green-500' : 'bg-red-500'}`} />
+      <div className="flex-1 flex items-center gap-2 px-2.5 py-2">
+        {isSelectMode && (
+          <div className="shrink-0 w-6 h-6 flex items-center justify-center">
+            {isChecked
+              ? <CheckCircle2 size={20} className="text-sky-500" />
+              : <Circle size={20} className="text-gray-300 dark:text-slate-600" />}
+          </div>
+        )}
+        {tx.photo && !isSelectMode && (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img src={tx.photo} alt="tx"
+            onClick={(e) => { e.stopPropagation(); onPhotoClick(tx.photo!); }}
+            className="w-9 h-9 rounded-lg object-cover cursor-pointer shrink-0 border border-gray-200 dark:border-slate-600" />
+        )}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-1.5">
+            <p className={`text-[11px] tabular-nums ${isPaid ? 'text-gray-400 dark:text-slate-500' : 'text-gray-500 dark:text-slate-400'}`}>{fmtDateTimeBDT(tx.transactionDate)}</p>
+            {isPaid && <span className="text-[9px] font-bold text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400 px-1 rounded">PAID</span>}
+            {isTempId(tx._id) && <span className="text-[9px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/40 dark:text-amber-400 px-1 rounded inline-flex items-center gap-0.5"><CloudOff size={9} /> SYNC</span>}
+          </div>
+          {tx.notes && <p className="text-[11px] text-gray-400 dark:text-slate-500 truncate mt-0.5">{tx.notes}</p>}
+        </div>
+        <div className="text-right shrink-0">
+          <p className={`text-[13px] font-bold tabular-nums ${isPaid ? 'text-gray-400 dark:text-slate-500 line-through' : tx.direction === 'INCOME' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+            {tx.direction === 'INCOME' ? '+' : '-'}{fmt(tx.amount)}
+          </p>
+          {!isPaid && <p className="text-[10px] text-gray-400 dark:text-slate-500 tabular-nums">bal: {fmt(tx.bal)}</p>}
+        </div>
+        {!isSelectMode && (
+          <>
+            <button
+              onClick={(e) => { e.stopPropagation(); onSend(tx); }}
+              title={hasPhone ? 'Send receipt via WhatsApp' : 'Share receipt'}
+              className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-sky-500 dark:text-sky-400 active:bg-sky-50 dark:active:bg-sky-900/30 transition"
+            >
+              <Send size={15} />
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onMarkPaid(tx); }}
+              disabled={markingBusy}
+              className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg active:bg-gray-100 dark:active:bg-slate-700 transition"
+            >
+              {isMarking
+                ? <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
+                : isPaid
+                  ? <CheckCircle2 size={18} className="text-green-500" />
+                  : <Circle size={18} className="text-gray-300 dark:text-slate-600" />
+              }
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onDelete(tx); }}
+              title="Delete transaction"
+              className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-red-400 dark:text-red-500 active:bg-red-50 dark:active:bg-red-900/30 transition"
+            >
+              <Trash2 size={14} />
+            </button>
+          </>
+        )}
+      </div>
+    </div>
+  );
+});
+
+interface EntityRowProps {
+  entity: Entity;
+  isPinned: boolean;
+  labelFor: string;
+  shopName: string;
+  onSelect: (e: Entity) => void;
+  onTogglePin: (id: string) => void;
+}
+
+const EntityRow = memo(function EntityRow({
+  entity, isPinned, labelFor, shopName, onSelect, onTogglePin,
+}: EntityRowProps) {
+  const net = (entity.totalOwedToMe || 0) - (entity.totalIOweThemNumber || 0);
+  const total = (entity.totalOwedToMe || 0) + (entity.totalIOweThemNumber || 0);
+  const waHref = entity.phone
+    ? waUrl(
+        entity.phone,
+        net > 0
+          ? buildDueReminder(entity.name, net, shopName)
+          : `Hi ${entity.name}, we miss you at our shop! Come by soon for a special offer.`
+      )
+    : '';
+  return (
+    <div onClick={() => onSelect(entity)}
+      role="button"
+      className="perf-row w-full flex items-center gap-2.5 bg-white dark:bg-slate-800 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.05)] active:bg-gray-50 dark:active:bg-slate-700 transition cursor-pointer">
+      <div className="relative shrink-0">
+        {entity.profilePicture ? (
+          /* eslint-disable-next-line @next/next/no-img-element */
+          <img src={entity.profilePicture} alt={entity.name}
+            className="w-8 h-8 rounded-full object-cover" />
+        ) : (
+          <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[12px]"
+            style={{ background: avatarColor(entity.name) }}>
+            {initial(entity.name)}
+          </div>
+        )}
+        {isPinned && (
+          <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-400 border-2 border-white dark:border-slate-800 flex items-center justify-center">
+            <Pin size={8} className="text-white" strokeWidth={3} />
+          </span>
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-1">
+          <p className="text-[13px] font-semibold text-gray-900 dark:text-slate-100 truncate">{entity.name}</p>
+          {isTempId(entity._id) && (
+            <span title="Waiting to sync" className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/40 px-1 rounded">
+              <CloudOff size={9} /> SYNC
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] text-gray-400 dark:text-slate-500 truncate">{entity.phone || labelFor}</p>
+      </div>
+      <button
+        onClick={e => { e.stopPropagation(); onTogglePin(entity._id); }}
+        title={isPinned ? 'Unpin' : 'Pin to top'}
+        className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-lg transition ${
+          isPinned
+            ? 'text-amber-500 active:bg-amber-50 dark:active:bg-amber-900/30'
+            : 'text-gray-300 dark:text-slate-600 active:bg-gray-100 dark:active:bg-slate-700'
+        }`}
+      >
+        {isPinned ? <PinOff size={14} /> : <Pin size={14} />}
+      </button>
+      <div className="text-right shrink-0">
+        {total > 0 ? (
+          <>
+            <p className={`text-[13px] font-bold tabular-nums ${net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+              {net >= 0 ? '+' : '-'}{fmt(net)}
+            </p>
+            <p className={`text-[10px] font-medium ${net >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              {net >= 0 ? 'to get' : 'to pay'}
+            </p>
+          </>
+        ) : (
+          <p className="text-[12px] text-gray-300 dark:text-slate-600 font-medium">Clear</p>
+        )}
+      </div>
+      {waHref && (
+        <a
+          href={waHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={e => e.stopPropagation()}
+          title={net > 0 ? 'Send WhatsApp reminder' : 'Send WhatsApp offer'}
+          className="ml-1 w-8 h-8 flex items-center justify-center rounded-lg bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50 shrink-0">
+          <MessageCircle size={15} />
+        </a>
+      )}
+    </div>
+  );
+});
+
 export default function DueBookPage() {
   const { user, tenantId, loading: authLoading, logout } = useAuth();
   const router = useRouter();
@@ -1523,6 +1714,33 @@ export default function DueBookPage() {
     if (longPressTimer.current) { window.clearTimeout(longPressTimer.current); longPressTimer.current = null; }
   };
 
+  /* Stable callbacks so memoized rows don't re-render on every parent update */
+  const handlersRef = useRef({
+    handleSendTx, handleMarkPaid, handleDeleteTx,
+    startLongPress, cancelLongPress, toggleTxSelected,
+    setShowPhotoViewer, selectEntity, togglePin,
+  });
+  handlersRef.current = {
+    handleSendTx, handleMarkPaid, handleDeleteTx,
+    startLongPress, cancelLongPress, toggleTxSelected,
+    setShowPhotoViewer, selectEntity, togglePin,
+  };
+  const isSelectModeRef = useRef(isSelectMode);
+  isSelectModeRef.current = isSelectMode;
+
+  const stableStartLongPress = useCallback((id: string) => handlersRef.current.startLongPress(id), []);
+  const stableCancelLongPress = useCallback(() => handlersRef.current.cancelLongPress(), []);
+  const stableTxRowClick = useCallback((id: string, e: React.MouseEvent) => {
+    if (longPressFired.current) { longPressFired.current = false; e.preventDefault(); return; }
+    if (isSelectModeRef.current) { e.preventDefault(); handlersRef.current.toggleTxSelected(id); }
+  }, []);
+  const stableOnPhotoClick = useCallback((photo: string) => handlersRef.current.setShowPhotoViewer(photo), []);
+  const stableOnSend = useCallback((tx: TxWithBal) => handlersRef.current.handleSendTx(tx), []);
+  const stableOnMarkPaid = useCallback((tx: TxWithBal) => handlersRef.current.handleMarkPaid(tx), []);
+  const stableOnDelete = useCallback((tx: TxWithBal) => handlersRef.current.handleDeleteTx(tx), []);
+  const stableSelectEntity = useCallback((e: Entity) => handlersRef.current.selectEntity(e), []);
+  const stableTogglePin = useCallback((id: string) => handlersRef.current.togglePin(id), []);
+
   const handleClaimReward = async () => {
     if (!selected || !tenantId || claimingReward) return;
     setClaimingReward(true);
@@ -2019,88 +2237,17 @@ export default function DueBookPage() {
             </div>
           ) : (
             <div className="p-2 space-y-1">
-              {filtered.map(entity => {
-                const net = (entity.totalOwedToMe || 0) - (entity.totalIOweThemNumber || 0);
-                const total = (entity.totalOwedToMe || 0) + (entity.totalIOweThemNumber || 0);
-                const waHref = entity.phone
-                  ? waUrl(
-                      entity.phone,
-                      net > 0
-                        ? buildDueReminder(entity.name, net, regSettings.shopName || '')
-                        : `Hi ${entity.name}, we miss you at our shop! Come by soon for a special offer.`
-                    )
-                  : '';
-                return (
-                  <div key={entity._id} onClick={() => selectEntity(entity)}
-                    role="button"
-                    className="perf-row w-full flex items-center gap-2.5 bg-white dark:bg-slate-800 rounded-xl px-3 py-2.5 text-left shadow-[0_1px_2px_rgba(0,0,0,0.05)] active:bg-gray-50 dark:active:bg-slate-700 transition cursor-pointer">
-                    <div className="relative shrink-0">
-                      {entity.profilePicture ? (
-                        /* eslint-disable-next-line @next/next/no-img-element */
-                        <img src={entity.profilePicture} alt={entity.name}
-                          className="w-8 h-8 rounded-full object-cover" />
-                      ) : (
-                        <div className="w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-[12px]"
-                          style={{ background: avatarColor(entity.name) }}>
-                          {initial(entity.name)}
-                        </div>
-                      )}
-                      {pinned.has(entity._id) && (
-                        <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-amber-400 border-2 border-white dark:border-slate-800 flex items-center justify-center">
-                          <Pin size={8} className="text-white" strokeWidth={3} />
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-1">
-                        <p className="text-[13px] font-semibold text-gray-900 dark:text-slate-100 truncate">{entity.name}</p>
-                        {isTempId(entity._id) && (
-                          <span title="Waiting to sync" className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/40 px-1 rounded">
-                            <CloudOff size={9} /> SYNC
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-[11px] text-gray-400 dark:text-slate-500 truncate">{entity.phone || labels[entity.type]}</p>
-                    </div>
-                    <button
-                      onClick={e => { e.stopPropagation(); togglePin(entity._id); }}
-                      title={pinned.has(entity._id) ? 'Unpin' : 'Pin to top'}
-                      className={`shrink-0 w-7 h-7 flex items-center justify-center rounded-lg transition ${
-                        pinned.has(entity._id)
-                          ? 'text-amber-500 active:bg-amber-50 dark:active:bg-amber-900/30'
-                          : 'text-gray-300 dark:text-slate-600 active:bg-gray-100 dark:active:bg-slate-700'
-                      }`}
-                    >
-                      {pinned.has(entity._id) ? <PinOff size={14} /> : <Pin size={14} />}
-                    </button>
-                    <div className="text-right shrink-0">
-                      {total > 0 ? (
-                        <>
-                          <p className={`text-[13px] font-bold tabular-nums ${net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                            {net >= 0 ? '+' : '-'}{fmt(net)}
-                          </p>
-                          <p className={`text-[10px] font-medium ${net >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                            {net >= 0 ? 'to get' : 'to pay'}
-                          </p>
-                        </>
-                      ) : (
-                        <p className="text-[12px] text-gray-300 dark:text-slate-600 font-medium">Clear</p>
-                      )}
-                    </div>
-                    {waHref && (
-                      <a
-                        href={waHref}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        onClick={e => e.stopPropagation()}
-                        title={net > 0 ? 'Send WhatsApp reminder' : 'Send WhatsApp offer'}
-                        className="ml-1 w-8 h-8 flex items-center justify-center rounded-lg bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-900/50 shrink-0">
-                        <MessageCircle size={15} />
-                      </a>
-                    )}
-                  </div>
-                );
-              })}
+              {filtered.map(entity => (
+                <EntityRow
+                  key={entity._id}
+                  entity={entity}
+                  isPinned={pinned.has(entity._id)}
+                  labelFor={labels[entity.type]}
+                  shopName={regSettings.shopName || ''}
+                  onSelect={stableSelectEntity}
+                  onTogglePin={stableTogglePin}
+                />
+              ))}
             </div>
           )
         )}
@@ -2118,86 +2265,25 @@ export default function DueBookPage() {
             </div>
           ) : (
             <div className="p-2 space-y-1">
-              {txWithBal.map((tx, i) => {
-                const isPaid = tx.status === 'Paid';
-                const isMarking = markingPaid === tx._id;
-                const isChecked = selectedTxIds.has(tx._id);
-                return (
-                  <div
-                    key={tx._id || i}
-                    onPointerDown={() => startLongPress(tx._id)}
-                    onPointerUp={cancelLongPress}
-                    onPointerLeave={cancelLongPress}
-                    onPointerCancel={cancelLongPress}
-                    onClick={(e) => {
-                      if (longPressFired.current) { longPressFired.current = false; e.preventDefault(); return; }
-                      if (isSelectMode) { e.preventDefault(); toggleTxSelected(tx._id); }
-                    }}
-                    className={`perf-row rounded-xl overflow-hidden flex shadow-[0_1px_2px_rgba(0,0,0,0.05)] transition-opacity ${isChecked ? 'ring-2 ring-sky-500' : ''} ${isPaid ? 'opacity-60' : 'bg-white dark:bg-slate-800'} select-none`}
-                    style={{ background: isChecked ? (isDark ? '#0c2740' : '#e0f2fe') : isPaid ? (isDark ? '#1e293b' : '#f9fafb') : undefined }}>
-                    <div className={`w-1 shrink-0 ${isPaid ? 'bg-gray-300 dark:bg-slate-600' : tx.direction === 'INCOME' ? 'bg-green-500' : 'bg-red-500'}`} />
-                    <div className="flex-1 flex items-center gap-2 px-2.5 py-2">
-                      {isSelectMode && (
-                        <div className="shrink-0 w-6 h-6 flex items-center justify-center">
-                          {isChecked
-                            ? <CheckCircle2 size={20} className="text-sky-500" />
-                            : <Circle size={20} className="text-gray-300 dark:text-slate-600" />}
-                        </div>
-                      )}
-                      {tx.photo && !isSelectMode && (
-                        /* eslint-disable-next-line @next/next/no-img-element */
-                        <img src={tx.photo} alt="tx"
-                          onClick={(e) => { e.stopPropagation(); setShowPhotoViewer(tx.photo!); }}
-                          className="w-9 h-9 rounded-lg object-cover cursor-pointer shrink-0 border border-gray-200 dark:border-slate-600" />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <p className={`text-[11px] tabular-nums ${isPaid ? 'text-gray-400 dark:text-slate-500' : 'text-gray-500 dark:text-slate-400'}`}>{fmtDateTimeBDT(tx.transactionDate)}</p>
-                          {isPaid && <span className="text-[9px] font-bold text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400 px-1 rounded">PAID</span>}
-                          {isTempId(tx._id) && <span className="text-[9px] font-bold text-amber-600 bg-amber-100 dark:bg-amber-900/40 dark:text-amber-400 px-1 rounded inline-flex items-center gap-0.5"><CloudOff size={9} /> SYNC</span>}
-                        </div>
-                        {tx.notes && <p className="text-[11px] text-gray-400 dark:text-slate-500 truncate mt-0.5">{tx.notes}</p>}
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className={`text-[13px] font-bold tabular-nums ${isPaid ? 'text-gray-400 dark:text-slate-500 line-through' : tx.direction === 'INCOME' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                          {tx.direction === 'INCOME' ? '+' : '-'}{fmt(tx.amount)}
-                        </p>
-                        {!isPaid && <p className="text-[10px] text-gray-400 dark:text-slate-500 tabular-nums">bal: {fmt(tx.bal)}</p>}
-                      </div>
-                      {!isSelectMode && (
-                        <>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleSendTx(tx); }}
-                            title={selected?.phone ? 'Send receipt via WhatsApp' : 'Share receipt'}
-                            className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-sky-500 dark:text-sky-400 active:bg-sky-50 dark:active:bg-sky-900/30 transition"
-                          >
-                            <Send size={15} />
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleMarkPaid(tx); }}
-                            disabled={!!markingPaid}
-                            className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg active:bg-gray-100 dark:active:bg-slate-700 transition"
-                          >
-                            {isMarking
-                              ? <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
-                              : isPaid
-                                ? <CheckCircle2 size={18} className="text-green-500" />
-                                : <Circle size={18} className="text-gray-300 dark:text-slate-600" />
-                            }
-                          </button>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleDeleteTx(tx); }}
-                            title="Delete transaction"
-                            className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-red-400 dark:text-red-500 active:bg-red-50 dark:active:bg-red-900/30 transition"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+              {txWithBal.map((tx, i) => (
+                <TxRow
+                  key={tx._id || i}
+                  tx={tx}
+                  isChecked={selectedTxIds.has(tx._id)}
+                  isSelectMode={isSelectMode}
+                  isMarking={markingPaid === tx._id}
+                  markingBusy={!!markingPaid}
+                  isDark={isDark}
+                  hasPhone={!!selected?.phone}
+                  onLongPressStart={stableStartLongPress}
+                  onLongPressEnd={stableCancelLongPress}
+                  onRowClick={stableTxRowClick}
+                  onPhotoClick={stableOnPhotoClick}
+                  onSend={stableOnSend}
+                  onMarkPaid={stableOnMarkPaid}
+                  onDelete={stableOnDelete}
+                />
+              ))}
             </div>
           )
         )}
