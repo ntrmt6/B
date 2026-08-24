@@ -758,6 +758,28 @@ export default function DueBookPage() {
   });
   const [showSortMenu, setShowSortMenu] = useState(false);
   const sortMenuRef = useRef<HTMLDivElement>(null);
+
+  /* swipe-right-to-go-back gesture */
+  const swipeRef = useRef<{ x: number; y: number; t: number } | null>(null);
+  const onSwipeStart = useCallback((e: React.TouchEvent) => {
+    const t = e.touches[0];
+    if (!t || t.clientX > 40) { swipeRef.current = null; return; }
+    swipeRef.current = { x: t.clientX, y: t.clientY, t: Date.now() };
+  }, []);
+  const onSwipeEnd = useCallback((e: React.TouchEvent) => {
+    const s = swipeRef.current;
+    swipeRef.current = null;
+    if (!s) return;
+    const t = e.changedTouches[0];
+    if (!t) return;
+    const dx = t.clientX - s.x;
+    const dy = Math.abs(t.clientY - s.y);
+    const dt = Date.now() - s.t;
+    if (dx > 80 && dy < 60 && dt < 500) {
+      const st = typeof window !== 'undefined' ? window.history.state : null;
+      if (st && st.duebook) window.history.back();
+    }
+  }, []);
   const changeSort = (m: EntitySort) => {
     setSortMode(m);
     try { localStorage.setItem(SORT_KEY, m); } catch {/* ignore */}
@@ -2012,7 +2034,8 @@ export default function DueBookPage() {
     : addAmount ? `Save  Tk ${parseFloat(addAmount).toLocaleString('en-IN')}` : 'Save';
 
   return (
-    <div className={`h-screen flex flex-col bg-gray-50 dark:bg-slate-900 max-w-sm mx-auto relative overflow-hidden${isDark ? ' dark' : ''}`}>
+    <div className={`h-screen flex flex-col bg-gray-50 dark:bg-slate-900 max-w-sm mx-auto relative overflow-hidden${isDark ? ' dark' : ''}`}
+      onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd}>
 
       {/* ── TOP BAR ── */}
       <div className="flex-shrink-0 bg-white dark:bg-slate-800 border-b border-gray-100 dark:border-slate-700 px-3 h-10 flex items-center justify-between">
@@ -2467,6 +2490,16 @@ export default function DueBookPage() {
         <button onClick={() => openAdd('INCOME')}
           className="absolute bottom-4 right-3 w-12 h-12 rounded-full bg-sky-500 shadow-lg shadow-sky-200 flex items-center justify-center active:scale-95 transition z-30">
           <Plus size={22} className="text-white" />
+        </button>
+      )}
+
+      {/* ── Floating back FAB (entity detail) ── */}
+      {selected && !isSelectMode && (
+        <button
+          onClick={() => window.history.back()}
+          aria-label="Back to list"
+          className="absolute bottom-16 left-3 w-12 h-12 rounded-full bg-white dark:bg-slate-800 shadow-lg border border-gray-200 dark:border-slate-700 flex items-center justify-center active:scale-95 transition z-30">
+          <ChevronLeft size={22} className="text-sky-500" />
         </button>
       )}
 
