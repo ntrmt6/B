@@ -16,7 +16,7 @@ import {
   TrendingUp, TrendingDown, UserPlus, Trash2, CheckCircle2, Circle, Download,
   Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon, CloudOff, Send, Bell,
   MessageSquare, Copy, Users, Upload, ClipboardPaste, Check, Pin, PinOff, ShieldCheck, Camera,
-  Lock, Unlock, Package, Menu,
+  Lock, Unlock, Package, Menu, ArrowUpDown, Clock,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import SyncBar from './SyncBar';
@@ -69,7 +69,7 @@ interface MessageTemplate { id: string; name: string; body: string; fields?: Tem
 interface NamedList { id: string; name: string; items: string[]; }
 
 const TYPES: Entity['type'][] = ['Customer', 'Supplier', 'Employee'];
-const AVATAR_COLORS = ['#0ea5e9','#8b5cf6','#10b981','#f59e0b','#ec4899','#6366f1'];
+const AVATAR_COLORS = ['#0ea5e9','#8b5cf6','#10b981','#f59e0b','#ec4899','#6366f1','#ef4444','#14b8a6','#f97316','#a855f7','#84cc16','#06b6d4'];
 const CATALOG_KEY = 'duebook_catalog';
 const LABELS_KEY = 'duebook_labels';
 const DARK_KEY = 'duebook_dark';
@@ -79,6 +79,12 @@ const LISTS_KEY = 'duebook_lists';
 const LAST_TPL_VALUES_KEY = 'duebook_tpl_last';
 const PINNED_KEY = 'duebook_pinned';
 const LOCK_KEY = 'duebook_locked';
+const RECENT_KEY = 'duebook_recent_entities';
+const SORT_KEY = 'duebook_entity_sort';
+const RECENT_MAX = 20;
+const RECENT_SHOW = 5;
+
+type EntitySort = 'recent' | 'name' | 'due';
 
 type SettingsTab = 'general' | 'business' | 'templates' | 'lists';
 const SETTINGS_TABS: { id: SettingsTab; label: string }[] = [
@@ -222,7 +228,12 @@ const applyFieldValues = (body: string, fields: TemplateField[] | undefined, val
   return out;
 };
 
-const avatarColor = (name: string) => AVATAR_COLORS[name.charCodeAt(0) % AVATAR_COLORS.length];
+const avatarColor = (name: string) => {
+  const s = name || '';
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return AVATAR_COLORS[h % AVATAR_COLORS.length];
+};
 const initial = (name: string) => (name || '?')[0].toUpperCase();
 
 async function fileToDataUrl(f: File): Promise<string> {
@@ -721,6 +732,38 @@ export default function DueBookPage() {
     });
   };
 
+  /* recently-opened entities (top strip) */
+  const [recentIds, setRecentIds] = useState<string[]>(() => {
+    if (typeof window === 'undefined') return [];
+    try {
+      const s = localStorage.getItem(RECENT_KEY);
+      return s ? JSON.parse(s) as string[] : [];
+    } catch { return []; }
+  });
+  const pushRecent = useCallback((id: string) => {
+    setRecentIds(prev => {
+      const next = [id, ...prev.filter(x => x !== id)].slice(0, RECENT_MAX);
+      try { localStorage.setItem(RECENT_KEY, JSON.stringify(next)); } catch {/* ignore */}
+      return next;
+    });
+  }, []);
+
+  /* entity list sort mode */
+  const [sortMode, setSortMode] = useState<EntitySort>(() => {
+    if (typeof window === 'undefined') return 'recent';
+    try {
+      const s = localStorage.getItem(SORT_KEY);
+      return (s === 'name' || s === 'due') ? s : 'recent';
+    } catch { return 'recent'; }
+  });
+  const [showSortMenu, setShowSortMenu] = useState(false);
+  const sortMenuRef = useRef<HTMLDivElement>(null);
+  const changeSort = (m: EntitySort) => {
+    setSortMode(m);
+    try { localStorage.setItem(SORT_KEY, m); } catch {/* ignore */}
+    setShowSortMenu(false);
+  };
+
   /* import / export */
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState('');
@@ -935,6 +978,17 @@ export default function DueBookPage() {
   }, [showMenu]);
 
   useEffect(() => {
+    if (!showSortMenu) return;
+    const onDoc = (e: MouseEvent) => {
+      if (sortMenuRef.current && !sortMenuRef.current.contains(e.target as Node)) setShowSortMenu(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowSortMenu(false); };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', onDoc); document.removeEventListener('keydown', onKey); };
+  }, [showSortMenu]);
+
+  useEffect(() => {
     const onPop = () => {
       if (showImport) { setShowImport(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showBulk) { setShowBulk(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
@@ -964,6 +1018,7 @@ export default function DueBookPage() {
   const selectEntity = (entity: Entity) => {
     setSelected(entity);
     loadTx(entity);
+    pushRecent(entity._id);
     window.history.pushState({ duebook: 'detail' }, '');
   };
 
@@ -977,13 +1032,32 @@ export default function DueBookPage() {
       );
     });
     const ts = (e: Entity) => new Date(e.updatedAt || e.createdAt || 0).getTime();
+    const dueAbs = (e: Entity) => Math.abs((e.totalOwedToMe || 0) - (e.totalIOweThemNumber || 0));
     return matched.sort((a, b) => {
       const pa = pinned.has(a._id) ? 1 : 0;
       const pb = pinned.has(b._id) ? 1 : 0;
       if (pa !== pb) return pb - pa;
+      if (sortMode === 'name') return (a.name || '').localeCompare(b.name || '');
+      if (sortMode === 'due') return dueAbs(b) - dueAbs(a);
       return ts(b) - ts(a);
     });
-  }, [entities, tab, search, pinned]);
+  }, [entities, tab, search, pinned, sortMode]);
+
+  /* recents strip: last-opened entities matching current tab, excluding pinned */
+  const recentEntities = useMemo(() => {
+    if (search) return [];
+    const byId = new Map(entities.map(e => [e._id, e]));
+    const out: Entity[] = [];
+    for (const id of recentIds) {
+      const e = byId.get(id);
+      if (!e) continue;
+      if (e.type?.toLowerCase() !== tab.toLowerCase()) continue;
+      if (pinned.has(id)) continue;
+      out.push(e);
+      if (out.length >= RECENT_SHOW) break;
+    }
+    return out;
+  }, [entities, recentIds, tab, search, pinned]);
 
   const totalGet = entities.reduce((s, e) => s + (e.totalOwedToMe || 0), 0);
   const totalGive = entities.reduce((s, e) => s + (e.totalIOweThemNumber || 0), 0);
@@ -1969,6 +2043,28 @@ export default function DueBookPage() {
                 className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-700">
                 <Search size={15} />
               </button>
+              <div className="relative" ref={sortMenuRef}>
+                <button onClick={() => setShowSortMenu(v => !v)} aria-label="Sort"
+                  title={`Sort: ${sortMode === 'name' ? 'Name' : sortMode === 'due' ? 'Biggest due' : 'Recent'}`}
+                  className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-400 dark:text-slate-500 hover:bg-gray-100 dark:hover:bg-slate-700">
+                  <ArrowUpDown size={14} />
+                </button>
+                {showSortMenu && (
+                  <div className="absolute right-0 top-8 z-50 w-44 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-lg py-1 text-[13px]">
+                    {([
+                      { id: 'recent', label: 'Recent activity' },
+                      { id: 'name', label: 'Name (A–Z)' },
+                      { id: 'due', label: 'Biggest due' },
+                    ] as { id: EntitySort; label: string }[]).map(o => (
+                      <button key={o.id} onClick={() => changeSort(o.id)}
+                        className={`w-full flex items-center justify-between gap-2 px-3 py-2 hover:bg-gray-50 dark:hover:bg-slate-700 ${sortMode === o.id ? 'text-sky-600 dark:text-sky-400 font-semibold' : 'text-gray-700 dark:text-slate-200'}`}>
+                        <span>{o.label}</span>
+                        {sortMode === o.id && <Check size={14} />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <ReminderInbox isDark={isDark} />
               <button onClick={() => { setNewType(tab); setShowAddEntity(true); window.history.pushState({ duebook: 'modal' }, ''); }}
                 className="w-7 h-7 flex items-center justify-center rounded-lg bg-sky-500 text-white">
@@ -2237,6 +2333,33 @@ export default function DueBookPage() {
             </div>
           ) : (
             <div className="p-2 space-y-1">
+              {recentEntities.length > 0 && (
+                <div className="mb-1.5">
+                  <div className="flex items-center gap-1 px-1 mb-1">
+                    <Clock size={10} className="text-gray-400 dark:text-slate-500" />
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 dark:text-slate-500">Recent</span>
+                  </div>
+                  <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 no-scrollbar">
+                    {recentEntities.map(e => (
+                      <button key={e._id} onClick={() => stableSelectEntity(e)}
+                        className="shrink-0 flex flex-col items-center gap-1 w-14 active:scale-95 transition">
+                        {e.profilePicture ? (
+                          /* eslint-disable-next-line @next/next/no-img-element */
+                          <img src={e.profilePicture} alt={e.name} className="w-11 h-11 rounded-full object-cover" />
+                        ) : (
+                          <div className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold text-[14px]"
+                            style={{ background: avatarColor(e.name) }}>
+                            {initial(e.name)}
+                          </div>
+                        )}
+                        <span className="text-[10px] text-gray-600 dark:text-slate-300 truncate w-full text-center leading-tight">
+                          {e.name?.split(' ')[0] || e.name}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
               {filtered.map(entity => (
                 <EntityRow
                   key={entity._id}
