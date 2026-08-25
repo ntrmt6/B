@@ -1,10 +1,42 @@
 import { Router, Request, Response, NextFunction } from 'express';
+import { spawn } from 'child_process';
+import path from 'path';
 import { Entity, IEntity } from '../models/Entity';
 import { Transaction, ITransaction } from '../models/Transaction';
 import { DueBookSettings } from '../models/DueBookSettings';
 import { authenticateToken, requireAdmin } from '../middleware/auth';
 
 const router = Router();
+
+const PARSER_SCRIPT = path.resolve(__dirname, '../../scripts/parse_duebook_intent.py');
+
+function runParser(payload: unknown, timeoutMs = 4000): Promise<any> {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('python3', [PARSER_SCRIPT], { stdio: ['pipe', 'pipe', 'pipe'] });
+    let out = '';
+    let err = '';
+    const timer = setTimeout(() => {
+      proc.kill('SIGKILL');
+      reject(new Error('parser timeout'));
+    }, timeoutMs);
+    proc.stdout.on('data', (d) => { out += d.toString(); });
+    proc.stderr.on('data', (d) => { err += d.toString(); });
+    proc.on('error', (e) => { clearTimeout(timer); reject(e); });
+    proc.on('close', (code) => {
+      clearTimeout(timer);
+      if (code !== 0 && !out) return reject(new Error(err || `parser exited ${code}`));
+      try { resolve(JSON.parse(out)); }
+      catch (e) { reject(new Error('parser bad output')); }
+    });
+    try {
+      proc.stdin.write(JSON.stringify(payload));
+      proc.stdin.end();
+    } catch (e) {
+      clearTimeout(timer);
+      reject(e as Error);
+    }
+  });
+}
 
 // All due list routes require authentication
 router.use(authenticateToken);
@@ -427,6 +459,48 @@ router.delete('/transactions/:id', async (req: Request, res: Response) => {
     res.json({ success: true, message: 'Transaction deleted' });
   } catch (error) {
     res.status(500).json({ error: 'Error deleting transaction' });
+  }
+});
+
+// ============ AI INTENT PARSE ============
+
+// POST parse a natural-language message into { entityId, amount, direction }.
+// Uses a small Python script (regex + fuzzy match). No LLM cost, works offline.
+router.post('/ai/parse-intent', async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantId(req);
+    if (!tenantId) return res.status(400).json({ ok: false, error: 'Tenant ID is required' });
+
+    const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+    if (!text) return res.status(400).json({ ok: false, error: 'Empty message', hint: "Try: 'Rahim 500 taka add to due'" });
+    if (text.length > 500) return res.status(400).json({ ok: false, error: 'Message too long' });
+
+    // Load a compact entity list (name + phone) so the parser can match.
+    // Limit to a sane page size to keep the spawn payload small.
+    const entities = await Entity.find({ tenantId })
+      .select('_id name phone')
+      .sort({ updatedAt: -1 })
+      .limit(2000)
+      .lean();
+
+    const compact = entities.map((e: any) => ({
+      id: String(e._id),
+      name: e.name,
+      phone: e.phone || '',
+    }));
+
+    let result: any;
+    try {
+      result = await runParser({ text, entities: compact });
+    } catch (e: any) {
+      console.error('parse-intent parser failed', e?.message);
+      return res.status(500).json({ ok: false, error: 'Parser unavailable', hint: 'Try again in a moment' });
+    }
+
+    return res.json(result);
+  } catch (error) {
+    console.error('parse-intent error:', error);
+    res.status(500).json({ ok: false, error: 'Internal error' });
   }
 });
 

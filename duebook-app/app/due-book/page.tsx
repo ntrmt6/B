@@ -16,7 +16,7 @@ import {
   TrendingUp, TrendingDown, UserPlus, Trash2, CheckCircle2, Circle, Download,
   Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon, CloudOff, Send, Bell,
   MessageSquare, Copy, Users, Upload, ClipboardPaste, Check, Pin, PinOff, ShieldCheck, Camera,
-  Lock, Unlock, Package, Menu, ArrowUpDown, Clock,
+  Lock, Unlock, Package, Menu, ArrowUpDown, Clock, Calculator as CalcIcon, Sparkles, Delete,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import SyncBar from './SyncBar';
@@ -651,6 +651,25 @@ export default function DueBookPage() {
   const [addPhoto, setAddPhoto] = useState('');
   const [showPhotoViewer, setShowPhotoViewer] = useState<string | null>(null);
 
+  /* quick calc + AI chat drop-ups */
+  const [showFabMenu, setShowFabMenu] = useState(false);
+  const [showCalc, setShowCalc] = useState(false);
+  const [calcExpr, setCalcExpr] = useState('');
+  const [calcDir, setCalcDir] = useState<'INCOME' | 'EXPENSE'>('INCOME');
+  const [calcEntityQuery, setCalcEntityQuery] = useState('');
+  const [calcPickedEntityId, setCalcPickedEntityId] = useState<string | null>(null);
+  const [calcSaving, setCalcSaving] = useState(false);
+  const [showAiChat, setShowAiChat] = useState(false);
+  const [aiText, setAiText] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiParsed, setAiParsed] = useState<null | {
+    ok: boolean; entityId?: string; entityName?: string;
+    amount?: number; direction?: 'INCOME' | 'EXPENSE';
+    note?: string | null; confidence?: number;
+    error?: string; hint?: string;
+  }>(null);
+  const [aiSaving, setAiSaving] = useState(false);
+
   /* registration settings (self-registration + welcome bonus) */
   const DEFAULT_REG: RegSettings = { shopName: '', registrationEnabled: false, bonusAmount: 0, rewardItemName: '', rewardItemPrice: 0, paymentRewardThreshold: 0, welcomeMessage: '', shopLogo: '' };
   const [regSettings, setRegSettings] = useState<RegSettings>(DEFAULT_REG);
@@ -1021,13 +1040,15 @@ export default function DueBookPage() {
       if (showSettings) { setShowSettings(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showInventory) { setShowInventory(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showEditEntity) { setShowEditEntity(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
+      if (showAiChat) { setShowAiChat(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
+      if (showCalc) { setShowCalc(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showAdd) { setShowAdd(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showAddEntity) { setShowAddEntity(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (selected) { setSelected(null); setTx([]); window.history.pushState({ duebook: 'list' }, ''); return; }
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, [showAdd, showAddEntity, showCatalog, showSettings, showInventory, showEditEntity, selected, showTplPicker, showTplEditor, showTplPreview, showBulk, showImport]);
+  }, [showAdd, showAddEntity, showCatalog, showSettings, showInventory, showEditEntity, showCalc, showAiChat, selected, showTplPicker, showTplEditor, showTplPreview, showBulk, showImport]);
 
   const loadTx = useCallback(async (entity: Entity) => {
     if (!tenantId) return;
@@ -2017,6 +2038,141 @@ export default function DueBookPage() {
     window.history.pushState({ duebook: 'modal' }, '');
   };
 
+  /* ── Calculator helpers ── */
+  // Evaluate a safe arithmetic expression: digits, . + - * / ( ) and %.
+  const evalCalc = (raw: string): number | null => {
+    const s = raw.replace(/×/g, '*').replace(/÷/g, '/').replace(/\s+/g, '');
+    if (!s) return null;
+    if (!/^[-+*/().%\d]+$/.test(s)) return null;
+    // Reject leading operator except minus, no double operators except unary
+    if (/[+*/%]{2,}|\.[.]/.test(s)) return null;
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-implied-eval, no-new-func
+      const v = Function(`"use strict";return (${s})`)();
+      if (typeof v !== 'number' || !isFinite(v)) return null;
+      return Math.round(v * 100) / 100;
+    } catch { return null; }
+  };
+  const calcValue = useMemo(() => evalCalc(calcExpr), [calcExpr]);
+
+  const openCalc = () => {
+    setShowFabMenu(false);
+    setCalcExpr('');
+    setCalcDir('INCOME');
+    setCalcEntityQuery(selected?.name || '');
+    setCalcPickedEntityId(selected?._id || null);
+    setShowCalc(true);
+    window.history.pushState({ duebook: 'modal' }, '');
+  };
+
+  const calcTapKey = (k: string) => {
+    if (k === 'C') { setCalcExpr(''); return; }
+    if (k === '⌫') { setCalcExpr(v => v.slice(0, -1)); return; }
+    if (k === '=') {
+      const v = evalCalc(calcExpr);
+      if (v !== null) setCalcExpr(String(v));
+      return;
+    }
+    // Prevent stacking two operators back to back (except allow leading -)
+    if (/^[+\-*/×÷.]$/.test(k)) {
+      setCalcExpr(v => (v && /[+\-*/×÷.]$/.test(v) ? v.slice(0, -1) + k : v + k));
+      return;
+    }
+    setCalcExpr(v => v + k);
+  };
+
+  const submitCalc = async () => {
+    if (!tenantId) { toast.error('Not signed in'); return; }
+    const v = evalCalc(calcExpr);
+    if (v === null || v <= 0) { toast.error('Enter a valid amount'); return; }
+
+    let ent: Entity | null = null;
+    if (calcPickedEntityId) ent = entities.find(e => e._id === calcPickedEntityId) || null;
+    if (!ent) {
+      const q = calcEntityQuery.trim().toLowerCase();
+      if (!q) { toast.error('Pick or type a customer name'); return; }
+      const exact = entities.find(e => e.name.toLowerCase() === q);
+      const starts = entities.find(e => e.name.toLowerCase().startsWith(q));
+      const contains = entities.find(e => e.name.toLowerCase().includes(q));
+      ent = exact || starts || contains || null;
+      if (!ent) { toast.error(`No customer matches "${calcEntityQuery.trim()}"`); return; }
+    }
+
+    setCalcSaving(true);
+    try {
+      const res = await addTxOffline(tenantId, {
+        entityId: ent._id, entityName: ent.name,
+        amount: v, direction: calcDir,
+        transactionDate: new Date().toISOString(),
+        notes: `Calc: ${calcExpr} = ${v}`,
+      });
+      toast.success(res.queued ? `Saved offline · ${ent.name} · Tk ${v}` : `Saved · ${ent.name} · Tk ${v}`);
+      setShowCalc(false);
+      const updated = await getEntities(tenantId);
+      setEntities(updated);
+      if (selected?._id === ent._id) {
+        const fresh = updated.find(x => x._id === ent!._id);
+        if (fresh) { setSelected(fresh); await loadTx(fresh); }
+      }
+    } catch (e) {
+      const err = e as { message?: string };
+      toast.error(err?.message || 'Failed to save');
+    } finally { setCalcSaving(false); }
+  };
+
+  /* ── AI chat helpers ── */
+  const openAiChat = () => {
+    setShowFabMenu(false);
+    setAiText('');
+    setAiParsed(null);
+    setShowAiChat(true);
+    window.history.pushState({ duebook: 'modal' }, '');
+  };
+
+  const parseAi = async () => {
+    const text = aiText.trim();
+    if (!text) { toast.error('Type a message first'); return; }
+    if (!tenantId) { toast.error('Not signed in'); return; }
+    setAiLoading(true);
+    setAiParsed(null);
+    try {
+      const r = await api.post('/ai/parse-intent', { text }, { headers: { 'X-Tenant-Id': tenantId } });
+      setAiParsed(r.data);
+      if (!r.data?.ok) toast.error(r.data?.error || 'Could not understand');
+    } catch (e) {
+      const err = e as { response?: { data?: { error?: string } }; message?: string };
+      const msg = err?.response?.data?.error || err?.message || 'Network error';
+      setAiParsed({ ok: false, error: msg, hint: 'Check connection and try again' });
+      toast.error(msg);
+    } finally { setAiLoading(false); }
+  };
+
+  const confirmAi = async () => {
+    if (!aiParsed?.ok || !tenantId) return;
+    const { entityId, entityName, amount, direction, note } = aiParsed;
+    if (!entityId || !amount || !direction) { toast.error('Missing fields'); return; }
+    setAiSaving(true);
+    try {
+      const res = await addTxOffline(tenantId, {
+        entityId, entityName,
+        amount, direction,
+        transactionDate: new Date().toISOString(),
+        notes: note || `AI: ${aiText.trim().slice(0, 100)}`,
+      });
+      toast.success(res.queued ? `Saved offline · ${entityName} · Tk ${amount}` : `Saved · ${entityName} · Tk ${amount}`);
+      setShowAiChat(false);
+      const updated = await getEntities(tenantId);
+      setEntities(updated);
+      if (selected?._id === entityId) {
+        const fresh = updated.find(x => x._id === entityId);
+        if (fresh) { setSelected(fresh); await loadTx(fresh); }
+      }
+    } catch (e) {
+      const err = e as { message?: string };
+      toast.error(err?.message || 'Failed to save');
+    } finally { setAiSaving(false); }
+  };
+
   if (authLoading) return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: isDark ? '#0f172a' : '#f8fafc', gap: 16 }}>
       <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg,#00900a,#1e90ff)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -2485,12 +2641,45 @@ export default function DueBookPage() {
         </div>
       )}
 
-      {/* ── FAB (entity list) ── */}
+      {/* ── FAB (entity list) — speed-dial with Calc + AI ── */}
       {!selected && (
-        <button onClick={() => openAdd('INCOME')}
-          className="absolute bottom-4 right-3 w-12 h-12 rounded-full bg-sky-500 shadow-lg shadow-sky-200 flex items-center justify-center active:scale-95 transition z-30">
-          <Plus size={22} className="text-white" />
-        </button>
+        <>
+          {showFabMenu && (
+            <div className="absolute inset-0 z-20" onClick={() => setShowFabMenu(false)} />
+          )}
+          {showFabMenu && (
+            <div className="absolute bottom-20 right-3 z-30 flex flex-col items-end gap-2">
+              <button onClick={openAiChat}
+                className="flex items-center gap-2 pl-3 pr-3 py-2 rounded-full bg-white dark:bg-slate-800 shadow-lg border border-gray-200 dark:border-slate-700 active:scale-95 transition">
+                <span className="text-[12px] font-bold text-gray-800 dark:text-slate-100">AI Chat</span>
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-fuchsia-500 to-indigo-500 flex items-center justify-center">
+                  <Sparkles size={16} className="text-white" />
+                </div>
+              </button>
+              <button onClick={openCalc}
+                className="flex items-center gap-2 pl-3 pr-3 py-2 rounded-full bg-white dark:bg-slate-800 shadow-lg border border-gray-200 dark:border-slate-700 active:scale-95 transition">
+                <span className="text-[12px] font-bold text-gray-800 dark:text-slate-100">Calc</span>
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center">
+                  <CalcIcon size={16} className="text-white" />
+                </div>
+              </button>
+              <button onClick={() => { setShowFabMenu(false); openAdd('INCOME'); }}
+                className="flex items-center gap-2 pl-3 pr-3 py-2 rounded-full bg-white dark:bg-slate-800 shadow-lg border border-gray-200 dark:border-slate-700 active:scale-95 transition">
+                <span className="text-[12px] font-bold text-gray-800 dark:text-slate-100">Add Tx</span>
+                <div className="w-8 h-8 rounded-full bg-sky-500 flex items-center justify-center">
+                  <Plus size={16} className="text-white" />
+                </div>
+              </button>
+            </div>
+          )}
+          <button onClick={() => setShowFabMenu(v => !v)}
+            aria-label={showFabMenu ? 'Close menu' : 'Open quick actions'}
+            className={`absolute bottom-4 right-3 w-12 h-12 rounded-full shadow-lg flex items-center justify-center active:scale-95 transition z-30 ${
+              showFabMenu ? 'bg-gray-700 dark:bg-slate-600 rotate-45' : 'bg-sky-500 shadow-sky-200'
+            }`}>
+            <Plus size={22} className="text-white transition-transform" />
+          </button>
+        </>
       )}
 
       {/* ── Floating back FAB (entity detail) ── */}
@@ -2767,6 +2956,232 @@ export default function DueBookPage() {
                   </button>
                 </div>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════
+          QUICK CALCULATOR SHEET
+          ══════════════════════════════════════ */}
+      {showCalc && (
+        <div className="absolute inset-0 z-50 flex flex-col justify-end" onClick={() => setShowCalc(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative bg-white dark:bg-slate-800 rounded-t-2xl shadow-2xl z-10 sheet-slide-up" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-2 pb-1">
+              <div className="w-9 h-1 bg-gray-300 dark:bg-slate-600 rounded-full" />
+            </div>
+            <div className="flex items-center justify-between px-4 pb-2 pt-1">
+              <div className="flex items-center gap-1.5">
+                <CalcIcon size={14} className="text-amber-500" />
+                <h3 className="text-[14px] font-bold text-gray-900 dark:text-slate-100">Quick Calculator</h3>
+              </div>
+              <button onClick={() => setShowCalc(false)} className="w-6 h-6 flex items-center justify-center rounded-lg">
+                <X size={15} className="text-gray-400" />
+              </button>
+            </div>
+
+            <div className="px-4 pb-5 space-y-3">
+              {/* Display */}
+              <div className="bg-gray-50 dark:bg-slate-900 border border-gray-200 dark:border-slate-700 rounded-xl px-3 py-2.5 text-right">
+                <div className="text-[13px] text-gray-500 dark:text-slate-400 tabular-nums truncate min-h-[16px]">{calcExpr || '0'}</div>
+                <div className="text-[24px] font-bold text-gray-900 dark:text-slate-100 tabular-nums">
+                  {calcValue !== null ? `Tk ${calcValue.toLocaleString('en-IN')}` : (calcExpr ? '…' : 'Tk 0')}
+                </div>
+              </div>
+
+              {/* Direction */}
+              <div className="flex gap-1.5">
+                <button onClick={() => setCalcDir('INCOME')}
+                  className={`flex-1 py-2 rounded-xl text-[12px] font-bold border-2 transition ${
+                    calcDir === 'INCOME' ? 'bg-green-50 dark:bg-green-900/30 border-green-500 text-green-700 dark:text-green-400' : 'border-gray-200 dark:border-slate-600 text-gray-400'
+                  }`}>
+                  <TrendingUp size={12} className="inline mr-1 -mt-0.5" />They Owe
+                </button>
+                <button onClick={() => setCalcDir('EXPENSE')}
+                  className={`flex-1 py-2 rounded-xl text-[12px] font-bold border-2 transition ${
+                    calcDir === 'EXPENSE' ? 'bg-red-50 dark:bg-red-900/30 border-red-500 text-red-700 dark:text-red-400' : 'border-gray-200 dark:border-slate-600 text-gray-400'
+                  }`}>
+                  <TrendingDown size={12} className="inline mr-1 -mt-0.5" />I Owe
+                </button>
+              </div>
+
+              {/* Entity picker */}
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 block mb-1">Customer</label>
+                <input type="text" value={calcEntityQuery}
+                  onChange={e => { setCalcEntityQuery(e.target.value); setCalcPickedEntityId(null); }}
+                  placeholder="Type customer name…"
+                  className="w-full border border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2 text-[13px] outline-none focus:border-sky-400 bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100"
+                />
+                {calcEntityQuery && !calcPickedEntityId && (
+                  <div className="mt-1 max-h-24 overflow-y-auto flex flex-wrap gap-1">
+                    {entities
+                      .filter(e => e.name.toLowerCase().includes(calcEntityQuery.trim().toLowerCase()))
+                      .slice(0, 6)
+                      .map(e => (
+                        <button key={e._id} onClick={() => { setCalcEntityQuery(e.name); setCalcPickedEntityId(e._id); }}
+                          className="px-2 py-1 rounded-full bg-sky-50 dark:bg-sky-900/30 border border-sky-200 dark:border-sky-800 text-[11px] font-semibold text-sky-700 dark:text-sky-300">
+                          {e.name}
+                        </button>
+                      ))}
+                  </div>
+                )}
+                {calcPickedEntityId && (
+                  <div className="mt-1 text-[10px] text-green-600 dark:text-green-400 font-semibold flex items-center gap-1">
+                    <Check size={10} /> {entities.find(e => e._id === calcPickedEntityId)?.name}
+                  </div>
+                )}
+              </div>
+
+              {/* Number pad */}
+              <div className="grid grid-cols-4 gap-1.5">
+                {['C', '⌫', '%', '÷',
+                  '7', '8', '9', '×',
+                  '4', '5', '6', '-',
+                  '1', '2', '3', '+',
+                  '0', '.', '=', ''].map((k, i) => {
+                    if (k === '') return <div key={i} />;
+                    const isOp = /^[+\-×÷%]$/.test(k);
+                    const isEq = k === '=';
+                    const isClear = k === 'C' || k === '⌫';
+                    return (
+                      <button key={i} onClick={() => calcTapKey(k)}
+                        className={`h-11 rounded-xl text-[16px] font-bold active:scale-95 transition ${
+                          isEq ? 'bg-sky-500 text-white col-span-1' :
+                          isOp ? 'bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400' :
+                          isClear ? 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400' :
+                          'bg-gray-100 dark:bg-slate-700 text-gray-800 dark:text-slate-100'
+                        }`}>
+                        {k === '⌫' ? <Delete size={16} className="inline" /> : k}
+                      </button>
+                    );
+                  })}
+              </div>
+
+              {/* Save */}
+              <button onClick={submitCalc} disabled={calcSaving || calcValue === null || calcValue <= 0}
+                className={`w-full py-3 rounded-xl text-white text-[14px] font-bold disabled:opacity-40 active:scale-[0.98] transition ${
+                  calcDir === 'INCOME' ? 'bg-gradient-to-r from-green-500 to-green-600' : 'bg-gradient-to-r from-red-500 to-red-600'
+                }`}>
+                {calcSaving ? 'Saving…' : (
+                  calcValue !== null && calcValue > 0
+                    ? `Save · Tk ${calcValue.toLocaleString('en-IN')}`
+                    : 'Enter amount'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════
+          AI CHAT SHEET
+          ══════════════════════════════════════ */}
+      {showAiChat && (
+        <div className="absolute inset-0 z-50 flex flex-col justify-end" onClick={() => setShowAiChat(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative bg-white dark:bg-slate-800 rounded-t-2xl shadow-2xl z-10 sheet-slide-up" onClick={e => e.stopPropagation()}>
+            <div className="flex justify-center pt-2 pb-1">
+              <div className="w-9 h-1 bg-gray-300 dark:bg-slate-600 rounded-full" />
+            </div>
+            <div className="flex items-center justify-between px-4 pb-2 pt-1">
+              <div className="flex items-center gap-1.5">
+                <Sparkles size={14} className="text-fuchsia-500" />
+                <h3 className="text-[14px] font-bold text-gray-900 dark:text-slate-100">AI Chat — Add by Message</h3>
+              </div>
+              <button onClick={() => setShowAiChat(false)} className="w-6 h-6 flex items-center justify-center rounded-lg">
+                <X size={15} className="text-gray-400" />
+              </button>
+            </div>
+
+            <div className="px-4 pb-5 space-y-3">
+              <div>
+                <textarea value={aiText}
+                  onChange={e => { setAiText(e.target.value); if (aiParsed) setAiParsed(null); }}
+                  placeholder="e.g. Rahim 500 taka add to due&#10;or: supplier Karim ke 1200 tk dilam"
+                  rows={3}
+                  className="w-full border-2 border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2 text-[13px] outline-none focus:border-fuchsia-400 bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 resize-none"
+                />
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                  {['add 500 to Rahim due', 'Karim 1200 tk paba', 'supplier ke 800 dilam'].map(sug => (
+                    <button key={sug} onClick={() => setAiText(sug)}
+                      className="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-slate-700 text-[10px] text-gray-600 dark:text-slate-300 active:bg-gray-200">
+                      {sug}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {!aiParsed && (
+                <button onClick={parseAi} disabled={aiLoading || !aiText.trim()}
+                  className="w-full py-2.5 rounded-xl bg-gradient-to-r from-fuchsia-500 to-indigo-500 text-white text-[13px] font-bold disabled:opacity-40 flex items-center justify-center gap-1.5 active:scale-[0.98] transition">
+                  <Sparkles size={13} /> {aiLoading ? 'Understanding…' : 'Parse Message'}
+                </button>
+              )}
+
+              {aiParsed && aiParsed.ok && (
+                <div className="space-y-2">
+                  <div className="border-2 border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 rounded-xl px-3 py-2.5 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-green-700 dark:text-green-400 uppercase tracking-wide">Understood</span>
+                      {typeof aiParsed.confidence === 'number' && (
+                        <span className="text-[10px] text-green-600 dark:text-green-400">
+                          {Math.round(aiParsed.confidence * 100)}% sure
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[12px] text-gray-600 dark:text-slate-300">Customer</span>
+                      <span className="text-[13px] font-bold text-gray-900 dark:text-slate-100">{aiParsed.entityName}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[12px] text-gray-600 dark:text-slate-300">Amount</span>
+                      <span className="text-[15px] font-bold tabular-nums text-gray-900 dark:text-slate-100">Tk {aiParsed.amount?.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[12px] text-gray-600 dark:text-slate-300">Direction</span>
+                      <span className={`text-[12px] font-bold ${aiParsed.direction === 'INCOME' ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                        {aiParsed.direction === 'INCOME' ? 'They Owe Me' : 'I Owe Them'}
+                      </span>
+                    </div>
+                    {aiParsed.note && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-[12px] text-gray-600 dark:text-slate-300">Note</span>
+                        <span className="text-[11px] text-gray-700 dark:text-slate-300 italic truncate max-w-[180px]">{aiParsed.note}</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex gap-1.5">
+                    <button onClick={() => setAiParsed(null)}
+                      className="flex-1 py-2.5 rounded-xl bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-200 text-[13px] font-bold active:scale-[0.98] transition">
+                      Edit
+                    </button>
+                    <button onClick={confirmAi} disabled={aiSaving}
+                      className={`flex-1 py-2.5 rounded-xl text-white text-[13px] font-bold disabled:opacity-40 active:scale-[0.98] transition ${
+                        aiParsed.direction === 'INCOME' ? 'bg-gradient-to-r from-green-500 to-green-600' : 'bg-gradient-to-r from-red-500 to-red-600'
+                      }`}>
+                      {aiSaving ? 'Saving…' : 'Confirm & Add'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {aiParsed && !aiParsed.ok && (
+                <div className="space-y-2">
+                  <div className="border-2 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-900/20 rounded-xl px-3 py-2.5">
+                    <div className="text-[10px] font-bold text-red-700 dark:text-red-400 uppercase tracking-wide mb-1">Couldn&apos;t understand</div>
+                    <div className="text-[12px] font-semibold text-gray-800 dark:text-slate-100">{aiParsed.error}</div>
+                    {aiParsed.hint && (
+                      <div className="text-[11px] text-gray-600 dark:text-slate-400 mt-1">💡 {aiParsed.hint}</div>
+                    )}
+                  </div>
+                  <button onClick={parseAi} disabled={aiLoading || !aiText.trim()}
+                    className="w-full py-2 rounded-xl bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-200 text-[12px] font-bold active:scale-[0.98] transition">
+                    Try Again
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
