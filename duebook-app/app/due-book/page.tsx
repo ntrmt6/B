@@ -17,6 +17,7 @@ import {
   Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon, CloudOff, Send, Bell,
   MessageSquare, Copy, Users, Upload, ClipboardPaste, Check, Pin, PinOff, ShieldCheck, Camera,
   Lock, Unlock, Package, Menu, ArrowUpDown, Clock, Calculator as CalcIcon, Sparkles, Delete,
+  Wind, Zap, MessageSquareQuote, Compass,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import SyncBar from './SyncBar';
@@ -670,6 +671,19 @@ export default function DueBookPage() {
   }>(null);
   const [aiSaving, setAiSaving] = useState(false);
 
+  /* Situation Coach — real-time action guide */
+  const [showCoach, setShowCoach] = useState(false);
+  const [coachChips, setCoachChips] = useState<{ id: string; title: string; titleBn: string; tone: string }[]>([]);
+  const [coachCustom, setCoachCustom] = useState('');
+  const [coachLoading, setCoachLoading] = useState(false);
+  const [coachPlan, setCoachPlan] = useState<null | {
+    id: string; title: string; titleBn: string; tone: 'calm' | 'firm' | 'friendly' | 'focused';
+    immediate: { icon: string; text: string; textBn: string };
+    script: { icon: string; text: string; textBn: string };
+    action: { icon: string; text: string; textBn: string };
+  }>(null);
+  const [coachLang, setCoachLang] = useState<'bn' | 'en'>('bn');
+
   /* registration settings (self-registration + welcome bonus) */
   const DEFAULT_REG: RegSettings = { shopName: '', registrationEnabled: false, bonusAmount: 0, rewardItemName: '', rewardItemPrice: 0, paymentRewardThreshold: 0, welcomeMessage: '', shopLogo: '' };
   const [regSettings, setRegSettings] = useState<RegSettings>(DEFAULT_REG);
@@ -1040,6 +1054,7 @@ export default function DueBookPage() {
       if (showSettings) { setShowSettings(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showInventory) { setShowInventory(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showEditEntity) { setShowEditEntity(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
+      if (showCoach) { setShowCoach(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showAiChat) { setShowAiChat(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showCalc) { setShowCalc(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showAdd) { setShowAdd(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
@@ -1048,7 +1063,7 @@ export default function DueBookPage() {
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, [showAdd, showAddEntity, showCatalog, showSettings, showInventory, showEditEntity, showCalc, showAiChat, selected, showTplPicker, showTplEditor, showTplPreview, showBulk, showImport]);
+  }, [showAdd, showAddEntity, showCatalog, showSettings, showInventory, showEditEntity, showCalc, showAiChat, showCoach, selected, showTplPicker, showTplEditor, showTplPreview, showBulk, showImport]);
 
   const loadTx = useCallback(async (entity: Entity) => {
     if (!tenantId) return;
@@ -2173,6 +2188,43 @@ export default function DueBookPage() {
     } finally { setAiSaving(false); }
   };
 
+  /* ── Situation Coach helpers ── */
+  const openCoach = async () => {
+    setShowFabMenu(false);
+    setCoachPlan(null);
+    setCoachCustom('');
+    setShowCoach(true);
+    window.history.pushState({ duebook: 'modal' }, '');
+    if (coachChips.length === 0 && tenantId) {
+      try {
+        const r = await api.get('/ai/situation-coach/templates', { headers: { 'X-Tenant-Id': tenantId } });
+        if (r.data?.ok && Array.isArray(r.data.chips)) setCoachChips(r.data.chips);
+      } catch { /* fall back to no chips; custom input still works */ }
+    }
+  };
+
+  const runCoach = async (payload: { situationId?: string; text?: string }) => {
+    if (!tenantId) { toast.error('Not signed in'); return; }
+    setCoachLoading(true);
+    setCoachPlan(null);
+    try {
+      const r = await api.post('/ai/situation-coach', payload, { headers: { 'X-Tenant-Id': tenantId } });
+      if (r.data?.ok && r.data.plan) setCoachPlan(r.data.plan);
+      else toast.error(r.data?.error || 'Could not build a plan');
+    } catch (e) {
+      const err = e as { response?: { data?: { error?: string } }; message?: string };
+      toast.error(err?.response?.data?.error || err?.message || 'Network error');
+    } finally { setCoachLoading(false); }
+  };
+
+  const finishCoach = () => {
+    if (coachPlan) toast.success(`Handled · ${coachPlan.title}`);
+    setShowCoach(false);
+    setCoachPlan(null);
+    setCoachCustom('');
+    try { window.history.back(); } catch { /* noop */ }
+  };
+
   if (authLoading) return (
     <div style={{ height: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: isDark ? '#0f172a' : '#f8fafc', gap: 16 }}>
       <div style={{ width: 44, height: 44, borderRadius: '50%', background: 'linear-gradient(135deg,#00900a,#1e90ff)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -2649,6 +2701,13 @@ export default function DueBookPage() {
           )}
           {showFabMenu && (
             <div className="absolute bottom-20 right-3 z-30 flex flex-col items-end gap-2">
+              <button onClick={openCoach}
+                className="flex items-center gap-2 pl-3 pr-3 py-2 rounded-full bg-white dark:bg-slate-800 shadow-lg border border-gray-200 dark:border-slate-700 active:scale-95 transition">
+                <span className="text-[12px] font-bold text-gray-800 dark:text-slate-100">Situation Coach</span>
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-emerald-500 to-teal-500 flex items-center justify-center">
+                  <Compass size={16} className="text-white" />
+                </div>
+              </button>
               <button onClick={openAiChat}
                 className="flex items-center gap-2 pl-3 pr-3 py-2 rounded-full bg-white dark:bg-slate-800 shadow-lg border border-gray-200 dark:border-slate-700 active:scale-95 transition">
                 <span className="text-[12px] font-bold text-gray-800 dark:text-slate-100">AI Chat</span>
@@ -3180,6 +3239,170 @@ export default function DueBookPage() {
                     className="w-full py-2 rounded-xl bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-200 text-[12px] font-bold active:scale-[0.98] transition">
                     Try Again
                   </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════
+          SITUATION COACH SHEET
+          ══════════════════════════════════════ */}
+      {showCoach && (
+        <div className="absolute inset-0 z-50 flex flex-col justify-end" onClick={() => setShowCoach(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative bg-white dark:bg-slate-800 rounded-t-2xl shadow-2xl z-10 sheet-slide-up flex flex-col max-h-[92%]" onClick={e => e.stopPropagation()}>
+
+            <div className="flex-shrink-0">
+              <div className="flex justify-center pt-2 pb-1">
+                <div className="w-9 h-1 bg-gray-300 dark:bg-slate-600 rounded-full" />
+              </div>
+              <div className="flex items-center justify-between px-4 pb-2 pt-1">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Compass size={15} className="text-emerald-500 flex-shrink-0" />
+                  <h3 className="text-[14px] font-bold text-gray-900 dark:text-slate-100 truncate">
+                    Situation Coach · পরিস্থিতি গাইড
+                  </h3>
+                </div>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setCoachLang(coachLang === 'bn' ? 'en' : 'bn')}
+                    className="px-2 h-6 rounded-md bg-gray-100 dark:bg-slate-700 text-[10px] font-bold text-gray-600 dark:text-slate-300">
+                    {coachLang === 'bn' ? 'বাং' : 'EN'}
+                  </button>
+                  <button onClick={() => setShowCoach(false)} className="w-6 h-6 flex items-center justify-center rounded-lg">
+                    <X size={15} className="text-gray-400" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto scroll-view px-4 pb-5 space-y-3">
+              {!coachPlan && (
+                <>
+                  <div>
+                    <div className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 mb-1.5">
+                      {coachLang === 'bn' ? 'পরিস্থিতি বেছে নিন' : 'Pick a situation'}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {coachChips.map(c => (
+                        <button key={c.id} onClick={() => runCoach({ situationId: c.id })}
+                          disabled={coachLoading}
+                          className="px-3 py-1.5 rounded-full bg-gradient-to-br from-emerald-50 to-teal-50 dark:from-emerald-900/30 dark:to-teal-900/30 border border-emerald-200 dark:border-emerald-800 text-[11px] font-bold text-emerald-800 dark:text-emerald-200 active:scale-95 transition disabled:opacity-40">
+                          {coachLang === 'bn' ? c.titleBn : c.title}
+                        </button>
+                      ))}
+                      {coachChips.length === 0 && (
+                        <div className="text-[11px] text-gray-400 dark:text-slate-500 italic">
+                          {coachLang === 'bn' ? 'লোড হচ্ছে…' : 'Loading…'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 mb-1.5">
+                      {coachLang === 'bn' ? 'অথবা লিখুন' : 'Or type your own'}
+                    </div>
+                    <div className="flex gap-1.5">
+                      <input value={coachCustom}
+                        onChange={e => setCoachCustom(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter' && coachCustom.trim()) runCoach({ text: coachCustom.trim() }); }}
+                        placeholder={coachLang === 'bn' ? 'যেমন: কাস্টমার চিৎকার করছে…' : 'e.g. customer is shouting…'}
+                        className="flex-1 border-2 border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2 text-[13px] outline-none focus:border-emerald-400 bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100"
+                      />
+                      <button onClick={() => runCoach({ text: coachCustom.trim() })}
+                        disabled={coachLoading || !coachCustom.trim()}
+                        className="px-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[13px] font-bold disabled:opacity-40 active:scale-95 transition flex items-center gap-1">
+                        <Sparkles size={13} />
+                        {coachLang === 'bn' ? 'গাইড' : 'Guide'}
+                      </button>
+                    </div>
+                  </div>
+
+                  {coachLoading && (
+                    <div className="text-center text-[12px] text-gray-500 dark:text-slate-400 py-2">
+                      {coachLang === 'bn' ? 'পরিকল্পনা তৈরি হচ্ছে…' : 'Building your plan…'}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {coachPlan && (
+                <div className="space-y-2.5">
+                  <div className={`rounded-2xl px-3 py-2.5 border-2 ${
+                    coachPlan.tone === 'firm' ? 'bg-rose-50 dark:bg-rose-900/20 border-rose-200 dark:border-rose-800'
+                      : coachPlan.tone === 'focused' ? 'bg-sky-50 dark:bg-sky-900/20 border-sky-200 dark:border-sky-800'
+                      : coachPlan.tone === 'friendly' ? 'bg-amber-50 dark:bg-amber-900/20 border-amber-200 dark:border-amber-800'
+                      : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+                  }`}>
+                    <div className="text-[10px] font-bold uppercase tracking-wide text-gray-500 dark:text-slate-400">
+                      {coachLang === 'bn' ? 'পরিস্থিতি' : 'Situation'}
+                    </div>
+                    <div className="text-[14px] font-bold text-gray-900 dark:text-slate-100 mt-0.5">
+                      {coachLang === 'bn' ? coachPlan.titleBn : coachPlan.title}
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border-2 border-gray-100 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-3">
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-indigo-100 dark:bg-indigo-900/40 flex items-center justify-center flex-shrink-0">
+                        <Wind size={17} className="text-indigo-600 dark:text-indigo-300" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[10px] font-bold uppercase tracking-wide text-indigo-600 dark:text-indigo-300">
+                          {coachLang === 'bn' ? '৫ সেকেন্ড রুল' : '5-Second Rule'}
+                        </div>
+                        <div className="text-[13px] font-semibold text-gray-900 dark:text-slate-100 leading-snug mt-0.5">
+                          {coachLang === 'bn' ? coachPlan.immediate.textBn : coachPlan.immediate.text}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border-2 border-gray-100 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-3">
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-fuchsia-100 dark:bg-fuchsia-900/40 flex items-center justify-center flex-shrink-0">
+                        <MessageSquareQuote size={17} className="text-fuchsia-600 dark:text-fuchsia-300" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[10px] font-bold uppercase tracking-wide text-fuchsia-600 dark:text-fuchsia-300">
+                          {coachLang === 'bn' ? 'বলুন' : 'Say this'}
+                        </div>
+                        <div className="text-[14px] font-bold text-gray-900 dark:text-slate-100 leading-snug mt-0.5">
+                          &ldquo;{coachLang === 'bn' ? coachPlan.script.textBn : coachPlan.script.text}&rdquo;
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="rounded-2xl border-2 border-gray-100 dark:border-slate-700 bg-white dark:bg-slate-800 px-3 py-3">
+                    <div className="flex items-start gap-2.5">
+                      <div className="w-9 h-9 rounded-xl bg-amber-100 dark:bg-amber-900/40 flex items-center justify-center flex-shrink-0">
+                        <Zap size={17} className="text-amber-600 dark:text-amber-300" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[10px] font-bold uppercase tracking-wide text-amber-600 dark:text-amber-300">
+                          {coachLang === 'bn' ? 'পরের কাজ' : 'Next move'}
+                        </div>
+                        <div className="text-[13px] font-semibold text-gray-900 dark:text-slate-100 leading-snug mt-0.5">
+                          {coachLang === 'bn' ? coachPlan.action.textBn : coachPlan.action.text}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-1.5 pt-1">
+                    <button onClick={() => { setCoachPlan(null); setCoachCustom(''); }}
+                      className="flex-1 py-2.5 rounded-xl bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-200 text-[13px] font-bold active:scale-[0.98] transition">
+                      {coachLang === 'bn' ? 'আরেকটা' : 'Another'}
+                    </button>
+                    <button onClick={finishCoach}
+                      className="flex-[2] py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-white text-[13px] font-bold active:scale-[0.98] transition flex items-center justify-center gap-1.5">
+                      <CheckCircle2 size={14} />
+                      {coachLang === 'bn' ? 'ঠিক আছে, শেষ' : 'Done · Handled'}
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
