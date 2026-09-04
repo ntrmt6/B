@@ -26,6 +26,14 @@ const EXEMPT_ROUTES = [
   '/api/contact', // Allow public contact form submissions
   '/health',
   '/api/health',
+  // DueBook is a standalone app with self-tenancy (tenantId = userId).
+  // It does not participate in shop subscriptions, so exempt all its routes.
+  '/api/duebook',
+  '/api/entities',
+  '/api/transactions',
+  '/api/ai/situation-coach',
+  '/api/ai/parse-intent',
+  '/api/public/duebook',
 ];
 
 // Routes that should be exempt for storefront operations (customers can still browse)
