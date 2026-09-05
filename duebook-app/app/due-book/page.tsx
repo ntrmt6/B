@@ -2759,6 +2759,12 @@ export default function DueBookPage() {
             }`}>
             <Plus size={22} className="text-white transition-transform" />
           </button>
+          <button onClick={() => router.push('/social')}
+            aria-label="Social feed"
+            title="Social feed"
+            className="absolute bottom-4 right-[68px] w-12 h-12 rounded-full shadow-lg bg-gradient-to-br from-fuchsia-500 to-pink-500 flex items-center justify-center active:scale-95 transition z-30">
+            <Users size={20} className="text-white" />
+          </button>
         </>
       )}
 
