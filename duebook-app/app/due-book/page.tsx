@@ -920,6 +920,17 @@ export default function DueBookPage() {
   }, [authLoading, user]);
 
   useEffect(() => {
+    const setH = () => document.documentElement.style.setProperty('--app-h', `${window.innerHeight}px`);
+    setH();
+    window.addEventListener('resize', setH);
+    window.addEventListener('orientationchange', setH);
+    return () => {
+      window.removeEventListener('resize', setH);
+      window.removeEventListener('orientationchange', setH);
+    };
+  }, []);
+
+  useEffect(() => {
     const t = setTimeout(() => {
       if (!user) window.location.replace('/login');
     }, 3000);
@@ -2243,6 +2254,7 @@ export default function DueBookPage() {
 
   return (
     <div className={`h-screen flex flex-col bg-gray-50 dark:bg-slate-900 max-w-sm mx-auto relative overflow-hidden${isDark ? ' dark' : ''}`}
+      style={{ height: 'var(--app-h, 100dvh)' }}
       onTouchStart={onSwipeStart} onTouchEnd={onSwipeEnd}>
 
       {/* ── TOP BAR ── */}

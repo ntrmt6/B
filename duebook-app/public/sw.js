@@ -1,4 +1,4 @@
-const CACHE = 'duebook-v5';
+const CACHE = 'duebook-v7';
 const SHELL = ['/due-book', '/login', '/manifest.json'];
 
 async function precacheShellAssets(cache) {
