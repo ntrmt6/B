@@ -24,12 +24,23 @@ export default function PostComposer({ onCreated, authorName, authorImage, defau
   const imgRef = useRef<HTMLInputElement>(null);
   const vidRef = useRef<HTMLInputElement>(null);
 
+  function errMessage(err: any, fallback: string) {
+    const data = err?.response?.data;
+    if (typeof data?.error === 'string') return data.error;
+    if (Array.isArray(data?.error) && data.error[0]?.message) return String(data.error[0].message);
+    if (err?.message) return err.message;
+    return fallback;
+  }
+
   async function uploadImage(f: File) {
     setUploading(true);
     try {
       const r = await social.uploadMedia(f);
       setImages(prev => [...prev, r.url].slice(0, 6));
-    } catch { toast.error('Upload failed'); }
+    } catch (err) {
+      console.error('[social] upload image failed', err);
+      toast.error(errMessage(err, 'Upload failed'));
+    }
     finally { setUploading(false); }
   }
 
@@ -39,7 +50,10 @@ export default function PostComposer({ onCreated, authorName, authorImage, defau
       const r = await social.uploadMedia(f);
       setVideoUrl(r.url);
       if (kind !== 'short') setKind('short');
-    } catch { toast.error('Upload failed'); }
+    } catch (err) {
+      console.error('[social] upload video failed', err);
+      toast.error(errMessage(err, 'Upload failed'));
+    }
     finally { setUploading(false); }
   }
 
@@ -57,7 +71,10 @@ export default function PostComposer({ onCreated, authorName, authorImage, defau
       onCreated(p);
       setText(''); setImages([]); setVideoUrl('');
       toast.success('Posted');
-    } catch { toast.error('Failed'); }
+    } catch (err) {
+      console.error('[social] create post failed', err);
+      toast.error(errMessage(err, 'Failed to post'));
+    }
     finally { setPosting(false); }
   }
 

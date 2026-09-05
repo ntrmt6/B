@@ -2313,6 +2313,11 @@ export default function DueBookPage() {
                 className="w-7 h-7 flex items-center justify-center rounded-lg bg-sky-500 text-white">
                 <UserPlus size={13} />
               </button>
+              <button onClick={() => router.push('/social')} aria-label="Social"
+                title="Social feed"
+                className="w-7 h-7 flex items-center justify-center rounded-lg bg-gradient-to-br from-fuchsia-500 to-pink-500 text-white">
+                <Users size={13} />
+              </button>
             </>
           )}
           {selected && (
