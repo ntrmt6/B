@@ -18,6 +18,13 @@ export interface IUser extends Document {
   lastLogin?: Date;
   resetTokenHash?: string;
   resetTokenExpiresAt?: Date;
+  securityQuestion?: string;
+  securityAnswerHash?: string;
+  bio?: string;
+  coverImage?: string;
+  followerCount?: number;
+  followingCount?: number;
+  postCount?: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -42,7 +49,14 @@ const UserSchema = new Schema<IUser>({
   providerId: { type: String },
   lastLogin: { type: Date },
   resetTokenHash: { type: String, select: false },
-  resetTokenExpiresAt: { type: Date, select: false }
+  resetTokenExpiresAt: { type: Date, select: false },
+  securityQuestion: { type: String, trim: true, maxlength: 160 },
+  securityAnswerHash: { type: String, select: false },
+  bio: { type: String, trim: true, maxlength: 500 },
+  coverImage: { type: String },
+  followerCount: { type: Number, default: 0 },
+  followingCount: { type: Number, default: 0 },
+  postCount: { type: Number, default: 0 },
 }, {
   timestamps: true
 });
