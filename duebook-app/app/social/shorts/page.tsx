@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { social, SocialPost, socialTimeAgo } from '@/lib/socialApi';
-import { Heart, MessageCircle, Share2, ChevronLeft, Plus, Volume2, VolumeX, Home, Video as VideoIcon, User as UserIcon } from 'lucide-react';
+import { Heart, MessageCircle, Share2, ChevronLeft, Plus, Volume2, VolumeX, Home, Video as VideoIcon, User as UserIcon, Play } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Avatar } from '../SocialShell';
 import PostComposer from '../PostComposer';
@@ -15,6 +15,7 @@ export default function ShortsPage() {
   const [muted, setMuted] = useState(true);
   const [showComposer, setShowComposer] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [pausedIds, setPausedIds] = useState<Record<string, boolean>>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
 
@@ -40,10 +41,16 @@ export default function ShortsPage() {
           const idx = Number((ent.target as HTMLElement).dataset.idx || '0');
           const video = videoRefs.current[idx];
           if (!video) return;
-          if (ent.isIntersecting && ent.intersectionRatio > 0.6) {
+          if (ent.isIntersecting && ent.intersectionRatio > 0.5) {
             setActiveIndex(idx);
             video.currentTime = 0;
-            video.play().catch(() => {});
+            const p = video.play();
+            if (p && typeof p.then === 'function') {
+              p.catch(() => {
+                const id = (ent.target as HTMLElement).dataset.postid || '';
+                if (id) setPausedIds(prev => ({ ...prev, [id]: true }));
+              });
+            }
           } else {
             video.pause();
           }
@@ -108,7 +115,7 @@ export default function ShortsPage() {
       <div ref={containerRef}
         className="h-full overflow-y-scroll snap-y snap-mandatory">
         {posts.map((p, i) => (
-          <section key={p._id} data-idx={i}
+          <section key={p._id} data-idx={i} data-postid={p._id}
             className="relative h-[100dvh] w-full snap-start flex items-center justify-center bg-black">
             {p.videoUrl && (
               <video ref={el => { videoRefs.current[i] = el; }}
@@ -116,9 +123,26 @@ export default function ShortsPage() {
                 poster={p.thumbnailUrl}
                 muted={muted}
                 loop
+                preload="metadata"
                 playsInline
-                onClick={e => { const v = e.currentTarget; v.paused ? v.play() : v.pause(); }}
+                // eslint-disable-next-line react/no-unknown-property
+                webkit-playsinline="true"
+                onPlay={() => setPausedIds(prev => ({ ...prev, [p._id]: false }))}
+                onPause={() => setPausedIds(prev => ({ ...prev, [p._id]: true }))}
+                onClick={e => { const v = e.currentTarget; v.paused ? v.play().catch(() => {}) : v.pause(); }}
                 className="absolute inset-0 w-full h-full object-contain" />
+            )}
+            {pausedIds[p._id] && (
+              <button
+                onClick={() => {
+                  const v = videoRefs.current[i];
+                  if (v) { v.muted = true; setMuted(true); v.play().catch(() => {}); }
+                }}
+                className="absolute inset-0 z-10 flex items-center justify-center bg-black/20">
+                <div className="w-16 h-16 rounded-full bg-white/90 text-black flex items-center justify-center shadow-lg">
+                  <Play size={28} fill="currentColor" />
+                </div>
+              </button>
             )}
             <div className="absolute inset-x-0 bottom-0 z-10 p-3 pb-14 bg-gradient-to-t from-black/80 via-black/30 to-transparent">
               <Link href={`/social/profile/${p.authorId}`} className="flex items-center gap-2 mb-2">

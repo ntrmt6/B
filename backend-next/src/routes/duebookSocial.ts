@@ -38,10 +38,8 @@ const socialUpload = multer({
 
 duebookSocialRouter.post('/upload', authenticateToken, socialUpload.single('file'), (req: Request, res: Response) => {
   if (!req.file) return res.status(400).json({ error: 'No file' });
-  const relPath = `/uploads/social/${req.file.filename}`;
-  const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
-  const host = (req.headers['x-forwarded-host'] as string) || req.get('host') || '';
-  const url = host ? `${proto}://${host}${relPath}` : relPath;
+  // Return a same-origin relative URL. The DueBook app proxies /uploads/* to the backend.
+  const url = `/uploads/social/${req.file.filename}`;
   res.json({ url, mimeType: req.file.mimetype, size: req.file.size });
 });
 
@@ -49,6 +47,20 @@ duebookSocialRouter.use(authenticateToken);
 
 const toObjectId = (id: string) => new mongoose.Types.ObjectId(id);
 const isValidId = (id: string) => mongoose.isValidObjectId(id);
+
+// Strip absolute-URL prefix from any stored /uploads/social path so the client
+// can resolve it same-origin (the DueBook app proxies /uploads/* to backend).
+const normalizeMedia = (url?: string) => {
+  if (!url || typeof url !== 'string') return url;
+  const idx = url.indexOf('/uploads/');
+  return idx > 0 ? url.slice(idx) : url;
+};
+const normalizePost = <T extends { images?: string[]; videoUrl?: string; thumbnailUrl?: string }>(p: T): T => ({
+  ...p,
+  images: p.images ? p.images.map(s => normalizeMedia(s) || s) : p.images,
+  videoUrl: normalizeMedia(p.videoUrl),
+  thumbnailUrl: normalizeMedia(p.thumbnailUrl),
+});
 
 const projectAuthor = (u: any) => u ? ({
   _id: u._id,
@@ -79,7 +91,7 @@ duebookSocialRouter.get('/feed', async (req: Request, res: Response, next: NextF
     }).select('targetId').lean() : [];
     const likedSet = new Set(likedRows.map(r => String(r.targetId)));
     res.json(posts.map(p => ({
-      ...p,
+      ...normalizePost(p),
       author: projectAuthor(authorMap.get(String(p.authorId))),
       liked: likedSet.has(String(p._id)),
     })));
@@ -145,7 +157,7 @@ duebookSocialRouter.get('/posts/:id', async (req: Request, res: Response, next: 
     if (!post) return res.status(404).json({ error: 'Not found' });
     const author = await User.findById(post.authorId).select('name image bio followerCount followingCount postCount').lean();
     const liked = req.userId ? !!(await SocialLike.exists({ userId: toObjectId(req.userId), targetType: 'post', targetId: post._id })) : false;
-    res.json({ ...post, author: projectAuthor(author), liked });
+    res.json({ ...normalizePost(post), author: projectAuthor(author), liked });
   } catch (e) { next(e); }
 });
 
@@ -294,7 +306,7 @@ duebookSocialRouter.get('/profile/:id/posts', async (req: Request, res: Response
       userId: toObjectId(req.userId), targetType: 'post', targetId: { $in: posts.map(p => p._id) },
     }).select('targetId').lean() : [];
     const likedSet = new Set(likedRows.map(r => String(r.targetId)));
-    res.json(posts.map(p => ({ ...p, author: projectAuthor(author), liked: likedSet.has(String(p._id)) })));
+    res.json(posts.map(p => ({ ...normalizePost(p), author: projectAuthor(author), liked: likedSet.has(String(p._id)) })));
   } catch (e) { next(e); }
 });
 
@@ -392,7 +404,7 @@ duebookSocialRouter.get('/conversations/:id/messages', async (req: Request, res:
       return res.status(404).json({ error: 'Not found' });
     }
     const msgs = await SocialMessage.find({ conversationId: convo._id }).sort({ createdAt: 1 }).limit(300).lean();
-    res.json(msgs.map(m => ({ ...m, fromMe: String(m.senderId) === req.userId })));
+    res.json(msgs.map(m => ({ ...m, imageUrl: normalizeMedia(m.imageUrl), fromMe: String(m.senderId) === req.userId })));
   } catch (e) { next(e); }
 });
 
@@ -427,11 +439,17 @@ duebookSocialRouter.post('/invite', async (req: Request, res: Response, next: Ne
     const to = typeof req.body?.to === 'string' ? req.body.to.trim() : '';
     if (!to) return res.status(400).json({ error: 'Recipient required' });
     const me = await User.findById(req.userId).select('name');
-    const inviteUrl = `${req.protocol}://${req.get('host')?.replace(/^api\./, 'duebook.') || 'duebook.shopbdit.com'}/register?ref=${req.userId}`;
+    const originHeader = (req.headers['origin'] as string) || '';
+    const referer = (req.headers['referer'] as string) || '';
+    let base = '';
+    if (originHeader) base = originHeader.replace(/\/$/, '');
+    else if (referer) { try { const u = new URL(referer); base = `${u.protocol}//${u.host}`; } catch {} }
+    if (!base) base = 'https://duebook.shopbdit.com';
+    const inviteUrl = `${base}/login?ref=${req.userId}`;
     res.json({
       ok: true,
       inviteUrl,
-      message: `${me?.name || 'Your friend'} invited you to DueBook. Sign up here: ${inviteUrl}`,
+      message: `${me?.name || 'Your friend'} invited you to DueBook — the free Bengali baki khata + social app. Sign up here: ${inviteUrl}`,
     });
   } catch (e) { next(e); }
 });
