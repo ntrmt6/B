@@ -5,9 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff, BookOpen, ArrowLeft } from 'lucide-react';
-import GoogleAuthButton from './GoogleAuthButton';
-
-const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
+import GoogleAuthButton, { GooglePayload } from './GoogleAuthButton';
 
 type View = 'signin' | 'signup' | 'forgot' | 'reset';
 
@@ -113,16 +111,20 @@ export default function LoginPage() {
     } finally { setLoading(false); }
   };
 
-  const handleGoogle = useCallback(async (credential: string) => {
+  const handleGoogle = useCallback(async (payload: GooglePayload) => {
     clearError();
     setLoading(true);
     try {
-      await googleLogin(credential, shopName.trim() || undefined);
+      await googleLogin({ ...payload, shopName: shopName.trim() || undefined });
       toast.success('Signed in with Google');
       router.replace('/due-book');
     } catch (err: unknown) {
-      const e2 = err as { response?: { data?: { error?: string } } };
-      setError(typeof e2?.response?.data?.error === 'string' ? e2.response!.data!.error! : 'Google sign-in failed');
+      const e2 = err as { response?: { data?: { error?: string } }; message?: string };
+      setError(
+        typeof e2?.response?.data?.error === 'string'
+          ? e2.response!.data!.error!
+          : e2?.message || 'Google sign-in failed',
+      );
     } finally { setLoading(false); }
   }, [googleLogin, router, shopName]);
 
@@ -170,16 +172,12 @@ export default function LoginPage() {
 
         {view === 'signin' && (
           <form onSubmit={handleSignIn} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-3">
-            {GOOGLE_CLIENT_ID && (
-              <>
-                <GoogleAuthButton clientId={GOOGLE_CLIENT_ID} onCredential={handleGoogle} text="signin_with" disabled={loading} />
-                <div className="flex items-center gap-2 py-1">
-                  <div className="flex-1 h-px bg-gray-200" />
-                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">or</span>
-                  <div className="flex-1 h-px bg-gray-200" />
-                </div>
-              </>
-            )}
+            <GoogleAuthButton onCredential={handleGoogle} label="Sign in with Google" disabled={loading} />
+            <div className="flex items-center gap-2 py-1">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">or</span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
             <div>
               <label className="text-[11px] font-semibold text-gray-600 block mb-1">Email</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)}
@@ -220,19 +218,15 @@ export default function LoginPage() {
 
         {view === 'signup' && (
           <form onSubmit={handleSignUp} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-2.5">
-            {GOOGLE_CLIENT_ID && (
-              <>
-                <GoogleAuthButton clientId={GOOGLE_CLIENT_ID} onCredential={handleGoogle} text="signup_with" disabled={loading} />
-                <p className="text-[10px] text-center text-gray-400 -mt-1">
-                  Fastest way — no password needed
-                </p>
-                <div className="flex items-center gap-2 py-1">
-                  <div className="flex-1 h-px bg-gray-200" />
-                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">or sign up with email</span>
-                  <div className="flex-1 h-px bg-gray-200" />
-                </div>
-              </>
-            )}
+            <GoogleAuthButton onCredential={handleGoogle} label="Sign up with Google" disabled={loading} />
+            <p className="text-[10px] text-center text-gray-400 -mt-1">
+              Fastest way — no password needed
+            </p>
+            <div className="flex items-center gap-2 py-1">
+              <div className="flex-1 h-px bg-gray-200" />
+              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">or sign up with email</span>
+              <div className="flex-1 h-px bg-gray-200" />
+            </div>
             <div>
               <label className="text-[11px] font-semibold text-gray-600 block mb-1">Your Name *</label>
               <input type="text" value={name} onChange={e => setName(e.target.value)}

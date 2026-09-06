@@ -38,7 +38,10 @@ const setRecoverySchema = z.object({
 });
 
 const googleSchema = z.object({
-  credential: z.string().min(20),
+  idToken: z.string().min(20),
+  email: z.string().email(),
+  name: z.string().optional(),
+  photoURL: z.string().url().optional().or(z.literal('')),
   shopName: z.string().optional(),
 });
 
@@ -140,46 +143,74 @@ duebookAuthRouter.post('/signup', async (req: Request, res: Response, next: Next
 
 /**
  * POST /api/duebook/auth/google
- * One-tap / Google Sign-In. Verifies a Google ID token (credential from
- * Google Identity Services), then either logs in an existing account or
- * creates a new self-tenant DueBook account.
+ * Google Sign-In via Firebase Auth. Frontend runs signInWithPopup, then
+ * POSTs the Firebase ID token here. We verify the token via Firebase's
+ * getAccountInfo (falling back to Google's tokeninfo for raw Google
+ * tokens), then log in an existing account or create a new self-tenant
+ * DueBook account with role tenant_admin.
  */
 duebookAuthRouter.post('/google', async (req: Request, res: Response, next: NextFunction) => {
   try {
-    const { credential, shopName } = googleSchema.parse(req.body);
+    const { idToken, email, name, photoURL, shopName } = googleSchema.parse(req.body);
+    const emailLc = email.toLowerCase();
 
-    const verifyRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(credential)}`);
-    if (!verifyRes.ok) {
-      return res.status(401).json({ error: 'Invalid Google token', code: 'INVALID_TOKEN' });
-    }
-    const info = await verifyRes.json() as {
-      email?: string; email_verified?: string | boolean; name?: string;
-      picture?: string; sub?: string; aud?: string;
-    };
-    if (!info.email || !info.sub) {
-      return res.status(401).json({ error: 'Malformed Google token', code: 'INVALID_TOKEN' });
-    }
-    if (info.email_verified !== true && info.email_verified !== 'true') {
-      return res.status(401).json({ error: 'Google email not verified', code: 'EMAIL_UNVERIFIED' });
-    }
-    if (env.googleClientId && info.aud !== env.googleClientId) {
-      return res.status(401).json({ error: 'Token audience mismatch', code: 'AUD_MISMATCH' });
+    // Verify the ID token. Try Firebase first (matches admin-next/storefront
+    // flow), then fall back to Google's tokeninfo for raw-Google tokens.
+    let providerSub: string | undefined;
+    let verifiedEmail: string | undefined;
+    let verifiedPicture: string | undefined;
+
+    if (env.firebaseApiKey) {
+      const fbRes = await fetch(
+        `https://www.googleapis.com/identitytoolkit/v3/relyingparty/getAccountInfo?key=${env.firebaseApiKey}`,
+        { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ idToken }) },
+      );
+      if (fbRes.ok) {
+        const data = await fbRes.json() as { users?: Array<{ localId?: string; email?: string; photoUrl?: string; emailVerified?: boolean }> };
+        const u = data.users?.[0];
+        if (u?.email) {
+          providerSub = u.localId;
+          verifiedEmail = u.email.toLowerCase();
+          verifiedPicture = u.photoUrl;
+        }
+      }
     }
 
-    const email = info.email.toLowerCase();
-    let user = await User.findOne({ email });
+    if (!verifiedEmail) {
+      const gRes = await fetch(`https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(idToken)}`);
+      if (gRes.ok) {
+        const info = await gRes.json() as { email?: string; email_verified?: string | boolean; picture?: string; sub?: string; aud?: string };
+        if (info.email && (info.email_verified === true || info.email_verified === 'true')) {
+          if (!env.googleClientId || info.aud === env.googleClientId) {
+            verifiedEmail = info.email.toLowerCase();
+            providerSub = info.sub;
+            verifiedPicture = info.picture;
+          }
+        }
+      }
+    }
+
+    if (!verifiedEmail) {
+      return res.status(401).json({ error: 'Could not verify Google identity', code: 'INVALID_TOKEN' });
+    }
+    if (verifiedEmail !== emailLc) {
+      return res.status(401).json({ error: 'Email mismatch', code: 'EMAIL_MISMATCH' });
+    }
+
+    let user = await User.findOne({ email: emailLc });
+    const picture = photoURL || verifiedPicture;
 
     if (!user) {
       const randomPw = await bcrypt.hash(Math.random().toString(36).slice(2) + Date.now(), 10);
       user = new User({
-        name: info.name || email.split('@')[0],
-        email,
+        name: name || emailLc.split('@')[0],
+        email: emailLc,
         password: randomPw,
-        image: info.picture,
+        image: picture,
         role: 'tenant_admin',
         isActive: true,
         provider: 'google',
-        providerId: info.sub,
+        providerId: providerSub,
         lastLogin: new Date(),
       });
       await user.save();
@@ -199,10 +230,9 @@ duebookAuthRouter.post('/google', async (req: Request, res: Response, next: Next
       }
     } else {
       if (!user.tenantId) user.tenantId = user._id.toString();
-      if (info.picture && !user.image) user.image = info.picture;
-      if (user.provider === 'local' && !user.providerId) {
-        // link the Google identity without breaking the local password
-        user.providerId = info.sub;
+      if (picture && !user.image) user.image = picture;
+      if (user.provider === 'local' && !user.providerId && providerSub) {
+        user.providerId = providerSub;
       }
       user.lastLogin = new Date();
       await user.save();

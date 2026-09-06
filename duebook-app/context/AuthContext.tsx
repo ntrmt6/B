@@ -19,7 +19,7 @@ interface AuthCtx {
   }) => Promise<void>;
   forgotPassword: (email: string) => Promise<{ ok: boolean; question?: string; message: string }>;
   resetPassword: (email: string, securityAnswer: string, newPassword: string) => Promise<void>;
-  googleLogin: (credential: string, shopName?: string) => Promise<void>;
+  googleLogin: (payload: { idToken: string; email: string; name?: string; photoURL?: string; shopName?: string }) => Promise<void>;
   logout: () => void;
 }
 
@@ -83,8 +83,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (res.data?.token && res.data?.user) applyAuth(res.data.token, res.data.user);
   }, []);
 
-  const googleLogin = useCallback(async (credential: string, shopName?: string) => {
-    const res = await api.post('/duebook/auth/google', { credential, shopName });
+  const googleLogin = useCallback(async (payload: { idToken: string; email: string; name?: string; photoURL?: string; shopName?: string }) => {
+    const res = await api.post('/duebook/auth/google', payload);
     applyAuth(res.data.token, res.data.user);
   }, []);
 

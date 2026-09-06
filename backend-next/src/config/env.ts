@@ -18,6 +18,7 @@ const envSchema = z.object({
   STOREFRONT_URL: z.string().optional().default(''),
   REVALIDATION_SECRET: z.string().optional().default(''),
   GOOGLE_CLIENT_ID: z.string().optional().default(''),
+  FIREBASE_API_KEY: z.string().optional().default(''),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -44,4 +45,5 @@ export const env = {
   storefrontUrl: parsed.data.STOREFRONT_URL || '',
   revalidationSecret: parsed.data.REVALIDATION_SECRET || '',
   googleClientId: parsed.data.GOOGLE_CLIENT_ID || '',
+  firebaseApiKey: parsed.data.FIREBASE_API_KEY || '',
 };
