@@ -2,7 +2,7 @@ import api from './api';
 
 export interface QueueItem {
   id: string;
-  type: 'create-entity' | 'add-tx' | 'patch-tx' | 'patch-entity' | 'delete-entity';
+  type: 'create-entity' | 'add-tx' | 'patch-tx' | 'delete-tx' | 'patch-entity' | 'delete-entity';
   method: 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   url: string;
   body?: unknown;

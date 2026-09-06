@@ -209,6 +209,43 @@ export async function patchTxStatusOffline(tid: string, txId: string, status: 'P
   return { queued: true };
 }
 
+export async function deleteTxOffline(tid: string, txId: string, entityId?: string): Promise<{ queued: boolean }> {
+  if (isTempId(txId)) {
+    // Not yet synced — remove from local pending cache and drop the queued add-tx (if any)
+    if (entityId) {
+      const pKey = ck.pendingTx(tid, entityId);
+      const pending = readCache<Transaction[]>(pKey, []);
+      const target = pending.find(t => t._id === txId);
+      const next = pending.filter(t => t._id !== txId);
+      writeCache(pKey, next);
+      if (target?._qid) {
+        // Remove the queued create so it never hits the server
+        const { remove } = await import('./offlineQueue');
+        remove(target._qid);
+      }
+      // Reverse the optimistic entity total bump
+      if (target) {
+        bumpEntityTotals(tid, entityId, target.direction, -target.amount);
+      }
+    }
+    return { queued: false };
+  }
+  if (!isOffline()) {
+    try {
+      await api.delete(`/transactions/${txId}`, { headers: { 'X-Tenant-Id': tid } });
+      return { queued: false };
+    } catch (err) {
+      if (!isNetworkErr(err)) throw err;
+    }
+  }
+  enqueue({
+    type: 'delete-tx', method: 'DELETE', url: `/transactions/${txId}`,
+    tenantId: tid,
+    label: `Delete transaction`,
+  });
+  return { queued: true };
+}
+
 export async function patchEntityOffline(tid: string, id: string, payload: { name: string; phone: string; profilePicture?: string }): Promise<{ queued: boolean }> {
   if (isTempId(id)) throw new Error('This contact has not synced yet — please wait for connection.');
   if (!isOffline()) {
