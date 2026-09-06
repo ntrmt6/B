@@ -9,10 +9,22 @@
   html,body{height:100%}
   body{font-family:'Segoe UI',-apple-system,BlinkMacSystemFont,sans-serif;background:linear-gradient(180deg,#f0f4f8 0%,#e6eef5 100%);color:#1a202c;display:flex;justify-content:center;padding:16px}
   .app{display:flex;flex-direction:column;max-width:720px;width:100%;height:calc(100vh - 32px);background:#fff;border-radius:16px;box-shadow:0 8px 32px rgba(15,42,74,.08);overflow:hidden}
-  header{padding:18px 24px;border-bottom:1px solid #edf2f7;background:#fff}
+  header{padding:18px 24px;border-bottom:1px solid #edf2f7;background:#fff;display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+  header .titles{flex:1;min-width:0}
   .badge{display:inline-block;background:#ebf8ff;color:#2b6cb0;font-size:.7rem;letter-spacing:.5px;text-transform:uppercase;padding:3px 10px;border-radius:12px;font-weight:600}
   h1{font-size:1.15rem;color:#1a365d;margin-top:6px;font-weight:600}
   .sub{color:#718096;font-size:.78rem;margin-top:2px}
+  .gear{background:transparent;border:1px solid #e2e8f0;border-radius:8px;padding:6px 10px;color:#718096;font-size:.75rem;cursor:pointer;flex-shrink:0;transition:all .15s}
+  .gear:hover{background:#f7fafc;color:#2d3748}
+  .settings{display:none;padding:14px 24px;border-bottom:1px solid #edf2f7;background:#fafcfe;font-size:.85rem;color:#4a5568}
+  .settings.open{display:block}
+  .settings label{display:block;margin-bottom:6px;font-weight:600;color:#2d3748}
+  .settings input{width:100%;padding:8px 12px;border:1px solid #cbd5e0;border-radius:8px;font-size:.85rem;font-family:'SF Mono',Menlo,monospace;outline:none}
+  .settings input:focus{border-color:#4299e1}
+  .settings .hint{margin-top:6px;font-size:.72rem;color:#718096}
+  .settings .status{margin-top:8px;font-size:.75rem;font-weight:600}
+  .settings .status.ok{color:#276749}
+  .settings .status.off{color:#a0aec0}
   #chat{flex:1;overflow-y:auto;padding:20px 24px;display:flex;flex-direction:column;gap:14px;scroll-behavior:smooth}
   .msg{max-width:82%;padding:11px 16px;border-radius:16px;font-size:.95rem;line-height:1.55;white-space:pre-wrap;word-wrap:break-word;animation:fade .25s ease}
   @keyframes fade{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
@@ -20,6 +32,11 @@
   .msg.bot{align-self:flex-start;background:#f7fafc;color:#1a202c;border:1px solid #edf2f7;border-bottom-left-radius:4px}
   .msg.bot.crisis{background:#fff5f5;border-color:#feb2b2;color:#742a2a}
   .msg.bot .meta{display:block;font-size:.68rem;color:#a0aec0;margin-top:8px;letter-spacing:.4px;text-transform:uppercase}
+  .typing{align-self:flex-start;padding:11px 18px;background:#f7fafc;border:1px solid #edf2f7;border-radius:16px;display:flex;gap:4px}
+  .typing span{width:6px;height:6px;background:#cbd5e0;border-radius:50%;animation:bounce 1.2s infinite}
+  .typing span:nth-child(2){animation-delay:.15s}
+  .typing span:nth-child(3){animation-delay:.3s}
+  @keyframes bounce{0%,60%,100%{transform:translateY(0);opacity:.4}30%{transform:translateY(-6px);opacity:1}}
   form{display:flex;gap:10px;padding:14px 18px;border-top:1px solid #edf2f7;background:#fafcfe}
   textarea{flex:1;resize:none;padding:12px 14px;border:1px solid #cbd5e0;border-radius:10px;font-size:.95rem;font-family:inherit;color:#1a202c;outline:none;min-height:44px;max-height:140px;transition:border .15s}
   textarea:focus{border-color:#4299e1;box-shadow:0 0 0 3px rgba(66,153,225,.18)}
@@ -32,10 +49,19 @@
 <body>
 <div class="app">
   <header>
-    <span class="badge">Meta-Model · The Structure of Magic</span>
-    <h1>Therapeutic Conversation</h1>
-    <p class="sub">A private, in-browser reflection space. No account. No API. Nothing leaves this page.</p>
+    <div class="titles">
+      <span class="badge">Meta-Model · The Structure of Magic</span>
+      <h1>Therapeutic Conversation</h1>
+      <p class="sub">A private reflection space. Runs offline by default; add an Anthropic key for full LLM responses.</p>
+    </div>
+    <button class="gear" id="gear" type="button" title="Settings">⚙ Settings</button>
   </header>
+  <div class="settings" id="settings">
+    <label for="apikey">Anthropic API key (optional — enables live Claude responses)</label>
+    <input id="apikey" type="password" placeholder="sk-ant-..." autocomplete="off"/>
+    <div class="hint">Stored in this browser only (localStorage). Never sent anywhere except api.anthropic.com. Leave blank to use the offline rule-based engine.</div>
+    <div class="status off" id="mode">Mode: offline · rule-based Meta-Model</div>
+  </div>
   <div id="chat" role="log" aria-live="polite"></div>
   <form id="form">
     <textarea id="input" placeholder="Share what's on your mind..." rows="1" autocomplete="off" required></textarea>
@@ -46,79 +72,108 @@
 
 <script>
 (() => {
+  // =====================================================================
+  // DOM
+  // =====================================================================
   const chat = document.getElementById('chat');
   const form = document.getElementById('form');
   const input = document.getElementById('input');
   const send = document.getElementById('send');
+  const gear = document.getElementById('gear');
+  const settings = document.getElementById('settings');
+  const apiKeyInput = document.getElementById('apikey');
+  const modeLabel = document.getElementById('mode');
 
-  // ---------------------------------------------------------------------
-  // Predicate detection: Visual / Auditory / Kinesthetic / Auditory-Digital
-  // ---------------------------------------------------------------------
-  const PREDICATES = {
-    visual: ['see','saw','look','looked','looking','clear','bright','dark','picture','perspective','view','watch','focus','vision','appear','show','notice','envision','blurry','foggy','glimpse'],
-    auditory: ['hear','heard','sound','sounds','loud','quiet','silent','tell','told','listen','listened','say','said','call','ring','echo','tone','voice','shout','yell','whisper'],
-    kinesthetic: ['feel','feels','felt','feeling','stuck','heavy','weight','grasp','touch','warm','cold','pressure','tight','tense','shaky','friction','slip','grip','sinking','crushing','numb','ache','hurt','hurts','burn','burning','trapped','pinned','drowning','suffocating','drained','exhausted'],
-    ad: ['think','thought','thinking','understand','process','sense','logic','know','decide','consider','realize','learn','remember','conclude','wonder','question'],
+  // =====================================================================
+  // API key handling (optional LLM upgrade)
+  // =====================================================================
+  const LS_KEY = 'mm-therapist-anthropic-key';
+  function loadKey() { return localStorage.getItem(LS_KEY) || ''; }
+  function saveKey(v) { v ? localStorage.setItem(LS_KEY, v) : localStorage.removeItem(LS_KEY); updateModeLabel(); }
+  function updateModeLabel() {
+    if (loadKey()) {
+      modeLabel.textContent = 'Mode: live Claude · full LLM responses';
+      modeLabel.className = 'status ok';
+    } else {
+      modeLabel.textContent = 'Mode: offline · rule-based Meta-Model';
+      modeLabel.className = 'status off';
+    }
+  }
+  apiKeyInput.value = loadKey();
+  updateModeLabel();
+  apiKeyInput.addEventListener('change', () => saveKey(apiKeyInput.value.trim()));
+  gear.addEventListener('click', () => settings.classList.toggle('open'));
+
+  // =====================================================================
+  // Conversation state (memory across turns)
+  // =====================================================================
+  const state = {
+    turns: 0,
+    challengeHistory: new Map(),   // violation type -> last turn number used
+    emotionsHeard: [],             // e.g. ['stuck','angry']
+    topicsHeard: [],               // noun phrases user has surfaced
+    predicateHistory: [],          // recent predicate systems (V/A/K/AD)
+    lastBotSaid: '',
+    userTurns: [],                 // recent user messages
   };
 
+  // =====================================================================
+  // Predicate detection
+  // =====================================================================
+  const PREDICATES = {
+    visual:      ['see','saw','look','looked','looking','clear','bright','dark','picture','perspective','view','watch','focus','vision','appear','show','notice','envision','blurry','foggy','glimpse','shine','glow','shadow','fade','dim'],
+    auditory:    ['hear','heard','sound','sounds','loud','quiet','silent','tell','told','listen','listened','say','said','call','ring','echo','tone','voice','shout','yell','whisper','noise','deaf','muted'],
+    kinesthetic: ['feel','feels','felt','feeling','stuck','heavy','weight','grasp','touch','warm','cold','pressure','tight','tense','shaky','friction','slip','grip','sinking','crushing','numb','ache','hurt','hurts','burn','burning','trapped','pinned','drowning','suffocating','drained','exhausted','shaking','trembling','holding','carrying','pulled','pushed','squeeze','clench'],
+    ad:          ['think','thought','thinking','understand','process','sense','logic','know','decide','consider','realize','learn','remember','conclude','wonder','question','analyze','figure','believe','doubt','assume'],
+  };
   function detectPredicate(text) {
     const words = text.toLowerCase().match(/\b[a-z']+\b/g) || [];
-    const counts = { visual: 0, auditory: 0, kinesthetic: 0, ad: 0 };
+    const counts = { visual:0, auditory:0, kinesthetic:0, ad:0 };
     for (const w of words) {
       for (const [sys, list] of Object.entries(PREDICATES)) {
         if (list.includes(w)) counts[sys]++;
       }
     }
     let best = 'ad', bestCount = -1;
-    for (const [sys, c] of Object.entries(counts)) {
-      if (c > bestCount) { best = sys; bestCount = c; }
-    }
+    for (const [sys, c] of Object.entries(counts)) if (c > bestCount) { best = sys; bestCount = c; }
     return bestCount > 0 ? best : 'ad';
   }
 
-  // ---------------------------------------------------------------------
-  // Pacing sentences (rotated so it doesn't sound canned)
-  // ---------------------------------------------------------------------
-  const PACING = {
-    visual: [
-      "I can see how that would color everything you're looking at right now.",
-      "That's a heavy picture to be staring at day after day.",
-      "It sounds like the whole view feels darker when that comes up.",
-    ],
-    auditory: [
-      "I hear how loud that message has become for you.",
-      "That's the kind of thing that keeps echoing long after it's said.",
-      "It sounds like that keeps replaying — hard to quiet.",
-    ],
-    kinesthetic: [
-      "That heaviness of feeling pinned in place — I can sense how exhausting it is to carry.",
-      "It feels like an unbearable weight when that happens.",
-      "That kind of tension can grip you in a way that's hard to shake.",
-    ],
-    ad: [
-      "That's a difficult thing to sit with, and I appreciate you naming it.",
-      "There's a lot woven into that — thank you for putting it into words.",
-      "That sounds like something that has been sitting with you for a while.",
-    ],
-  };
+  // =====================================================================
+  // Emotion & topic extraction (for mirroring user's own words)
+  // =====================================================================
+  const EMOTION_WORDS = ['sad','angry','hurt','scared','afraid','anxious','lonely','stuck','overwhelmed','broken','numb','exhausted','drained','frustrated','helpless','hopeless','lost','empty','worthless','guilty','ashamed','resentful','bitter','jealous','betrayed','abandoned','trapped','suffocated','drowning','crushed','shattered','desperate','tired','done','defeated','disappointed','confused','conflicted','torn','disgusted','humiliated','ignored','rejected','misunderstood','unseen','invisible','weak','small','worthless','stupid','pathetic','ridiculous','miserable','hollow','depressed','panicked','terrified','furious','enraged','irritated','annoyed'];
 
-  // ---------------------------------------------------------------------
-  // Crisis keywords — immediate disengagement from Meta-Model work
-  // ---------------------------------------------------------------------
+  function extractEmotions(text) {
+    const words = text.toLowerCase().match(/\b[a-z']+\b/g) || [];
+    return [...new Set(words.filter(w => EMOTION_WORDS.includes(w)))];
+  }
+
+  function extractPeople(text) {
+    // possessive + role, or common role nouns
+    const roles = ['boss','partner','husband','wife','mom','mother','dad','father','brother','sister','son','daughter','friend','colleague','coworker','manager','teacher','doctor','therapist','ex','boyfriend','girlfriend','kids','children','parents','family'];
+    const found = [];
+    for (const r of roles) {
+      const re = new RegExp('\\b(my|his|her|their|our|the)\\s+' + r + '\\b', 'i');
+      const m = text.match(re);
+      if (m) found.push(m[0].toLowerCase());
+    }
+    return [...new Set(found)];
+  }
+
+  // =====================================================================
+  // Crisis guardrails
+  // =====================================================================
   const CRISIS_PATTERNS = [
     /\b(kill|hurt|harm|end|cut|hang)\s+(myself|me)\b/i,
     /\bsuicid(e|al)\b/i,
-    /\bi (don'?t|do not) want to (live|be here|exist)\b/i,
-    /\bi want to die\b/i,
-    /\bend (it|my life|things)\b/i,
-    /\btake my (own )?life\b/i,
+    /\bi\s+(don'?t|do not)\s+want\s+to\s+(live|be here|exist)\b/i,
+    /\bi\s+want\s+to\s+die\b/i,
+    /\bend\s+(it|my life|things|it all)\b/i,
+    /\btake\s+my\s+(own\s+)?life\b/i,
     /\bself[-\s]?harm\b/i,
+    /\bno\s+reason\s+to\s+(live|go on)\b/i,
   ];
-
-  function isCrisis(text) {
-    return CRISIS_PATTERNS.some((r) => r.test(text));
-  }
-
   const CRISIS_REPLY =
 `I'm really glad you told me that — what you're carrying sounds unbearable, and you shouldn't be alone with it right now.
 
@@ -128,118 +183,362 @@ Please reach out to a crisis line — they answer 24/7 and you don't need to hav
   • UK: Samaritans — 116 123
   • International list: https://findahelpline.com
 
-If you're in immediate danger, please call your local emergency number now. I'll stay here — but a human voice tonight will help more than I can.`;
+If you're in immediate danger, please call your local emergency number now. A human voice tonight will help more than I can.`;
 
-  // ---------------------------------------------------------------------
-  // Meta-Model detectors — ordered by therapeutic priority (universal
-  // quantifiers and modals collapse the entire model, so they win first)
-  // ---------------------------------------------------------------------
+  // =====================================================================
+  // Short-response handler (silence / yes / no / idk / one-word)
+  // =====================================================================
+  function handleShortResponse(text) {
+    const t = text.trim().toLowerCase().replace(/[.!?]+$/, '');
+    if (t.length === 0 || /^[.?!,\-\s]*$/.test(t)) {
+      return pick([
+        "Sometimes the question itself lands heavy, and the mind goes quiet. Take your time — whatever surfaces, even something small, is worth noticing.",
+        "The silence is welcome here. When something does come, share whatever's there — the fragment, the shape, the color of it.",
+      ]);
+    }
+    if (/^(yes|yeah|yup|yep|sure|correct|right|exactly|true|absolutely)$/.test(t)) {
+      return pick([
+        "Good. Then stay with that for a second — what specifically is coming up as you say yes?",
+        "You said that quickly. What was the first image or feeling that arrived with the yes?",
+      ]);
+    }
+    if (/^(no|nope|nah|not really|not at all|never)$/.test(t)) {
+      return pick([
+        "OK — the no was clear. What does the truer answer look like, if not that?",
+        "That's a firm no. What is it that the no is protecting?",
+      ]);
+    }
+    if (/^(i\s+don'?t\s+know|idk|dunno|no idea|not sure|maybe|kind of|kinda|sort of|sorta)$/.test(t)) {
+      return pick([
+        "That's an honest place to start. If you had to guess — even a wrong guess — what would you say?",
+        "'I don't know' is often where something true is waiting. What comes up if you finish the sentence: 'If I did know, I'd say…'?",
+        "Not knowing is welcome here. What part of it feels the most uncertain — the what, the why, or the who?",
+      ]);
+    }
+    // Single emotion word
+    if (EMOTION_WORDS.includes(t)) {
+      return `You landed on the word "${t}". Where in your body do you notice ${t} the most right now — and when did it first show up today?`;
+    }
+    return null;
+  }
+
+  // =====================================================================
+  // Meta-Model detectors (with priority for scoring)
+  // Priority: bigger = deeper / more foundational to address first
+  // =====================================================================
   function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
+  function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
   const DETECTORS = [
     {
-      type: 'universal_quantifier',
-      test: (t) => t.match(/\b(never|always|nothing|nobody|no one|everyone|everybody|everything|no ?body|all the time|constantly|forever|not once|not ever)\b/i),
-      challenge: (m) => {
-        const word = m[0].toLowerCase();
-        return `${cap(word)}? Has there been even one moment — however small, however brief — when it wasn't ${word}?`;
-      },
-    },
-    {
-      type: 'modal_impossibility',
-      test: (t) => t.match(/\b(can'?t|cannot|couldn'?t|impossible|unable|no way|won'?t be able)\b/i),
-      challenge: () => "What specifically stops you? If that obstacle weren't there, what would you do first?",
-    },
-    {
-      type: 'modal_necessity',
-      test: (t) => t.match(/\b(have to|has to|had to|must|need to|needs to|got to|should|shouldn'?t|ought to|supposed to)\b/i),
-      challenge: () => "What would happen if you didn't?",
-    },
-    {
-      type: 'mind_reading',
-      test: (t) => t.match(/\b(he|she|they|everyone|nobody|people|my (boss|partner|husband|wife|mom|dad|father|mother|friend)) (thinks?|knows?|feels?|believes?|hates?|likes?|wants?|expects?|assumes?)\b/i),
-      challenge: (m) => `How specifically do you know that? What did they say or do that told you?`,
-    },
-    {
-      type: 'cause_effect',
-      test: (t) => t.match(/\b(makes? me|made me|causes me to|because of (him|her|them|you|it) i)\b/i),
-      challenge: () => "How specifically does that generate that feeling inside you? Is there any moment when the same thing happens but you feel differently?",
-    },
-    {
-      type: 'lost_performative',
-      test: (t) => t.match(/\bit'?s (wrong|bad|right|good|stupid|selfish|weak|shameful|pathetic|ridiculous|foolish)\b/i),
-      challenge: (m) => `According to whom? Whose voice first told you it's ${m[1].toLowerCase()}?`,
-    },
-    {
-      type: 'comparative',
-      test: (t) => t.match(/\b(better|worse|best|worst|more|less|too much|too little|not enough|harder|easier)\b/i),
-      challenge: (m) => `${cap(m[0])} — compared to what, specifically? Measured against what standard?`,
-    },
-    {
-      type: 'unspecified_referent',
-      test: (t) => t.match(/\b(they|people|everyone|nobody|someone|things) (don'?t|do not|are|is|aren'?t|were|make|makes)\b/i),
-      challenge: (m) => `Who, specifically? Can you name one particular person, or one particular moment?`,
-    },
-    {
-      type: 'nominalization',
-      test: (t) => t.match(/\b(relationship|communication|confidence|respect|trust|love|freedom|attention|understanding|failure|success|depression|anxiety|decision|frustration|rejection|approval|control|responsibility|commitment)\b/i),
-      challenge: (m) => {
+      type: 'universal_quantifier', priority: 100,
+      test: (t) => t.match(/\b(never|always|nothing|nobody|no one|everyone|everybody|everything|no\s?body|all the time|constantly|forever|not once|not ever|every single)\b/i),
+      challenge: (m, ctx) => {
         const w = m[0].toLowerCase();
-        return `You named "${w}" — in what specific moments this week are you actually experiencing that? Who is doing what?`;
+        return pick([
+          `${cap(w)}? Has there been even one moment — however small, however brief — when it wasn't ${w}?`,
+          `You said "${w}" — I want to slow down there. Can you remember a single time, even years ago, when it was different?`,
+          `${cap(w)} is a big word. If we scanned the last month carefully, would we find one exception?`,
+        ]);
       },
     },
     {
-      type: 'unspecified_verb',
-      test: (t) => t.match(/\b(attacked|hurt|helped|rejected|ignored|criticized|dismissed|abandoned|betrayed|humiliated)\b/i),
-      challenge: (m) => `How specifically did that ${m[0].toLowerCase().replace(/ed$/,'')} happen — what did they actually say or do?`,
+      type: 'modal_impossibility', priority: 95,
+      test: (t) => t.match(/\b(can'?t|cannot|couldn'?t|impossible|unable|no way|won'?t be able)\b/i),
+      challenge: (m, ctx) => pick([
+        "What specifically stops you? If that obstacle weren't there, what would you do first?",
+        `You said you can't. What would need to be true for you to be able to?`,
+        "If a friend you loved was in your exact spot — what would you tell them was still possible?",
+      ]),
     },
     {
-      type: 'simple_deletion',
-      test: (t) => t.match(/^\s*i (feel|am|'m) (terrible|awful|bad|lost|broken|empty|numb|done)\b/i),
-      challenge: (m) => `About what, specifically? What triggered that in the last day or so?`,
+      type: 'cause_effect', priority: 90,
+      test: (t) => t.match(/\b(makes? me|made me|causes me to|because of (him|her|them|you|it) i)\b/i),
+      challenge: (m, ctx) => pick([
+        "How specifically does that produce that feeling inside you? Is there a moment when the same thing happens and you don't feel that way?",
+        "You linked those two tightly — the outside thing and the inside feeling. What's the step in between that we're skipping over?",
+        "If two people had that same thing happen, would they both feel exactly what you feel? What's the piece that's yours?",
+      ]),
+    },
+    {
+      type: 'mind_reading', priority: 85,
+      test: (t) => t.match(/\b(he|she|they|everyone|nobody|people|my\s+(boss|partner|husband|wife|mom|mother|dad|father|friend|kids?|children|colleague|coworker|manager))\s+(thinks?|knows?|feels?|believes?|hates?|likes?|wants?|expects?|assumes?|resents?)\b/i),
+      challenge: (m, ctx) => pick([
+        "How specifically do you know that? What did they actually say or do that told you?",
+        "That's a strong read on what's inside their head. What's the piece of evidence you'd point to if I asked to see it?",
+        "If they read that sentence back — would they agree, or would they say something different?",
+      ]),
+    },
+    {
+      type: 'modal_necessity', priority: 80,
+      test: (t) => t.match(/\b(have to|has to|had to|must|need to|needs to|got to|should|shouldn'?t|ought to|supposed to)\b/i),
+      challenge: (m, ctx) => pick([
+        "What would happen if you didn't?",
+        "You said you have to — who decided that? What's the consequence you're bracing for?",
+        `Where did the rule "${m[0].toLowerCase()}" come from originally?`,
+      ]),
+    },
+    {
+      type: 'lost_performative', priority: 75,
+      test: (t) => t.match(/\bit'?s (wrong|bad|right|good|stupid|selfish|weak|shameful|pathetic|ridiculous|foolish|childish|unacceptable)\b/i),
+      challenge: (m, ctx) => pick([
+        `According to whom? Whose voice first told you it's ${m[1].toLowerCase()}?`,
+        `Who taught you that? Whose face do you see when you hear "it's ${m[1].toLowerCase()}"?`,
+        `Is that your judgment, or someone else's living inside you?`,
+      ]),
+    },
+    {
+      type: 'unspecified_referent', priority: 65,
+      test: (t) => t.match(/\b(they|people|everyone|nobody|someone|things|folks)\s+(don'?t|do not|are|is|aren'?t|were|make|makes|treat|treats|say|says|think|thinks)\b/i),
+      challenge: (m, ctx) => pick([
+        "Who, specifically? Can you name one particular person, or one particular moment?",
+        `"They" is doing a lot of work in that sentence. Who's the one whose face comes up first?`,
+        "If we shrank that down to one specific incident, this week — who was there and what happened?",
+      ]),
+    },
+    {
+      type: 'nominalization', priority: 55,
+      test: (t) => t.match(/\b(relationship|communication|confidence|respect|trust|love|freedom|attention|understanding|failure|success|depression|anxiety|decision|frustration|rejection|approval|control|responsibility|commitment|connection|distance|closeness|intimacy|support)\b/i),
+      challenge: (m, ctx) => {
+        const w = m[0].toLowerCase();
+        return pick([
+          `You named "${w}" — in what specific moments this week are you actually experiencing that? Who is doing what?`,
+          `If I could watch "${w}" happening (or not happening) on video, what would I see?`,
+          `"${cap(w)}" sounds like a solid thing, but it's really a lot of small actions. Which specific action is missing right now?`,
+        ]);
+      },
+    },
+    {
+      type: 'unspecified_verb', priority: 60,
+      test: (t) => t.match(/\b(attacked|hurt|helped|rejected|ignored|criticized|dismissed|abandoned|betrayed|humiliated|disrespected|shamed|belittled|controlled|manipulated)\b/i),
+      challenge: (m, ctx) => {
+        const v = m[0].toLowerCase();
+        return pick([
+          `How specifically did that ${v.replace(/ed$/, '')} happen — what did they actually say or do?`,
+          `"${cap(v)}" is the label. Underneath it, what were the actual words or actions?`,
+          `If we replayed the moment slowly — the exact sentence, the exact tone — what would we see?`,
+        ]);
+      },
+    },
+    {
+      type: 'comparative', priority: 45,
+      test: (t) => t.match(/\b(better|worse|best|worst|more|less|too much|too little|not enough|harder|easier)\b/i),
+      challenge: (m, ctx) => pick([
+        `${cap(m[0])} — compared to what, specifically? Measured against what standard?`,
+        `You used "${m[0].toLowerCase()}" — that implies a comparison. Compared to what?`,
+      ]),
+    },
+    {
+      type: 'simple_deletion', priority: 40,
+      test: (t) => t.match(/^\s*i\s+(feel|am|'m)\s+(terrible|awful|bad|lost|broken|empty|numb|done|off|weird|strange)\b/i),
+      challenge: (m, ctx) => pick([
+        "About what, specifically? What triggered that in the last day or so?",
+        `You said you feel ${m[2].toLowerCase()}. About what? When did that start?`,
+      ]),
     },
   ];
 
-  function analyze(text) {
+  // Score all detected violations, prefer highest-priority NOT recently used
+  function selectChallenge(text) {
+    const detected = [];
     for (const d of DETECTORS) {
       const m = d.test(text);
-      if (m) return { type: d.type, question: d.challenge(m) };
+      if (m) detected.push({ ...d, match: m });
     }
-    // Fallback: open, non-directive probe if no violation detected
-    return {
-      type: 'open',
-      question: "What part of that feels the most alive for you right now?",
-    };
+    if (detected.length === 0) return null;
+
+    detected.sort((a, b) => {
+      const aLast = state.challengeHistory.get(a.type) ?? -100;
+      const bLast = state.challengeHistory.get(b.type) ?? -100;
+      const aStale = state.turns - aLast;
+      const bStale = state.turns - bLast;
+      // Strongly avoid re-using a challenge from the last 2 turns
+      const aFresh = aStale >= 3 ? 1 : 0;
+      const bFresh = bStale >= 3 ? 1 : 0;
+      if (aFresh !== bFresh) return bFresh - aFresh;
+      return b.priority - a.priority;
+    });
+
+    const chosen = detected[0];
+    return { type: chosen.type, question: chosen.challenge(chosen.match, state) };
   }
 
-  // ---------------------------------------------------------------------
-  // Rotation state so pacing lines don't repeat back-to-back
-  // ---------------------------------------------------------------------
-  const paceCursor = { visual: 0, auditory: 0, kinesthetic: 0, ad: 0 };
-  function pace(system) {
-    const options = PACING[system];
-    const line = options[paceCursor[system] % options.length];
-    paceCursor[system]++;
-    return line;
+  // =====================================================================
+  // Pacing library (rich, rotated per system)
+  // =====================================================================
+  const PACING = {
+    visual: [
+      "I can see how that would color everything you're looking at right now.",
+      "That's a heavy picture to be staring at day after day.",
+      "It sounds like the whole view feels darker when that comes up.",
+      "I can imagine how blurry things become when you're looking at it from inside.",
+      "That kind of picture doesn't fade quickly.",
+      "It makes sense that everything in front of you looks tinted by that.",
+    ],
+    auditory: [
+      "I hear how loud that message has become for you.",
+      "That's the kind of thing that keeps echoing long after it's said.",
+      "It sounds like that keeps replaying — hard to quiet.",
+      "There's real weight in how you just said that.",
+      "That tone in what you're describing — I hear it.",
+      "It's the kind of thing that keeps calling for your attention, isn't it.",
+    ],
+    kinesthetic: [
+      "That heaviness of feeling pinned in place — I can sense how exhausting it is to carry.",
+      "It feels like an unbearable weight when that happens.",
+      "That kind of tension can grip you in a way that's hard to shake.",
+      "The way you're carrying that — I can feel how tight the hold is.",
+      "That sounds like it's sitting deep, not just on the surface.",
+      "There's a physical shape to that pain, and it sounds like you feel every edge of it.",
+    ],
+    ad: [
+      "That's a difficult thing to sit with, and I appreciate you naming it.",
+      "There's a lot woven into that — thank you for putting it into words.",
+      "That sounds like something that has been sitting with you for a while.",
+      "I want to slow down here — that deserves attention.",
+      "You've clearly been turning that over for some time.",
+      "I hear how tangled that is.",
+    ],
+  };
+
+  // Mirroring: reference the user's own emotion word or person if available
+  function pacingLine(system, userText) {
+    const emotions = extractEmotions(userText);
+    const people = extractPeople(userText);
+    const base = pick(PACING[system]);
+
+    // 40% of the time, prepend an explicit mirror of user's language
+    if (Math.random() < 0.4) {
+      if (emotions.length > 0) {
+        const e = emotions[0];
+        return `The word "${e}" carries a lot. ${base}`;
+      }
+      if (people.length > 0) {
+        return `What you're carrying about ${people[0]} — ${base.charAt(0).toLowerCase()}${base.slice(1)}`;
+      }
+    }
+    return base;
   }
 
-  function respond(userText) {
-    if (isCrisis(userText)) {
+  // =====================================================================
+  // Occasional reflection turns (every ~4th turn) instead of a new challenge
+  // Helps the conversation feel less mechanical
+  // =====================================================================
+  function reflectionTurn() {
+    if (state.turns > 0 && state.turns % 4 === 0 && state.emotionsHeard.length >= 2) {
+      const uniq = [...new Set(state.emotionsHeard)];
+      const emotionList = uniq.slice(-3).join(', ');
+      return `Let me step back for a moment. Over these last few exchanges, the words that have come up are: ${emotionList}. If you had to pick just one of those as the deepest — the one underneath the others — which would it be?`;
+    }
+    return null;
+  }
+
+  // =====================================================================
+  // Main response pipeline (offline / rule-based)
+  // =====================================================================
+  function offlineRespond(userText) {
+    if (CRISIS_PATTERNS.some(r => r.test(userText))) {
       return { text: CRISIS_REPLY, crisis: true, tag: 'crisis-support' };
     }
+
+    // Update memory before deciding
+    state.turns++;
+    state.userTurns.push(userText);
+    state.emotionsHeard.push(...extractEmotions(userText));
+    state.topicsHeard.push(...extractPeople(userText));
+
+    // Short-response takes precedence
+    const shortReply = handleShortResponse(userText);
+    if (shortReply) {
+      return { text: shortReply, crisis: false, tag: 'brief-response' };
+    }
+
+    // Occasional reflection instead of a fresh challenge
+    const reflection = reflectionTurn();
+    if (reflection) {
+      return { text: reflection, crisis: false, tag: 'reflection · summary' };
+    }
+
     const system = detectPredicate(userText);
-    const { type, question } = analyze(userText);
-    const pacing = pace(system);
+    state.predicateHistory.push(system);
+    const challenge = selectChallenge(userText);
+
+    if (!challenge) {
+      // Nothing patterned — open exploration probe
+      const pacing = pacingLine(system, userText);
+      const probes = [
+        "What part of that feels the most alive for you right now?",
+        "If you had to point at the sorest spot in what you just said, where would your finger land?",
+        "What's the piece of this you almost didn't say?",
+      ];
+      return { text: `${pacing}\n\n${pick(probes)}`, crisis: false, tag: `${system} · open-probe` };
+    }
+
+    state.challengeHistory.set(challenge.type, state.turns);
+    const pacing = pacingLine(system, userText);
     return {
-      text: `${pacing}\n\n${question}`,
+      text: `${pacing}\n\n${challenge.question}`,
       crisis: false,
-      tag: `${system} · ${type.replace(/_/g, ' ')}`,
+      tag: `${system} · ${challenge.type.replace(/_/g, ' ')}`,
     };
   }
 
-  // ---------------------------------------------------------------------
+  // =====================================================================
+  // Live LLM path (only when user has pasted an API key)
+  // =====================================================================
+  const SYSTEM_PROMPT = `You are an expert therapeutic conversational agent rooted strictly in Bandler & Grinder's Meta-Model (Structure of Magic, Vols. I & II).
+
+For every user turn:
+1. Detect the client's dominant sensory predicate (visual, auditory, kinesthetic, or auditory-digital) from their verbs and metaphors.
+2. FIRST SENTENCE: pace their emotional reality in one warm, human sentence, matching their predicate. Mirror one specific word or phrase they used.
+3. SECOND SENTENCE: ask exactly ONE surgical Meta-Model question targeting the deepest structural violation (universal quantifier > modal of impossibility > cause-effect > mind-reading > modal of necessity > lost performative > nominalization > unspecified verb > unspecified referent > comparative > simple deletion).
+
+Strict rules:
+- Never chain multiple questions.
+- Never offer advice, interpretation, diagnosis, or solutions.
+- Never re-ask a challenge you just asked in the previous turn.
+- Keep the total response under 3 sentences.
+- If the client shows signs of self-harm, suicide, or acute crisis, immediately drop the Meta-Model frame and offer crisis-line resources (US: 988; UK: Samaritans 116 123; international: findahelpline.com).`;
+
+  const conversation = []; // {role, content}
+
+  async function liveRespond(userText) {
+    const key = loadKey();
+    conversation.push({ role: 'user', content: userText });
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': key,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 400,
+          system: SYSTEM_PROMPT,
+          messages: conversation.slice(-30),
+        }),
+      });
+      if (!res.ok) {
+        const t = await res.text();
+        conversation.pop();
+        return { text: `[live-mode error — falling back to offline]\n\n${t.slice(0, 200)}`, crisis: false, tag: 'llm-error' };
+      }
+      const data = await res.json();
+      const reply = (data.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n').trim();
+      conversation.push({ role: 'assistant', content: reply });
+      return { text: reply, crisis: false, tag: 'live · claude' };
+    } catch (err) {
+      conversation.pop();
+      return { text: `[network error] ${err.message}`, crisis: false, tag: 'llm-error' };
+    }
+  }
+
+  // =====================================================================
   // UI plumbing
-  // ---------------------------------------------------------------------
+  // =====================================================================
   function addMessage(role, text, extra) {
     const el = document.createElement('div');
     el.className = 'msg ' + role + (extra && extra.crisis ? ' crisis' : '');
@@ -252,6 +551,20 @@ If you're in immediate danger, please call your local emergency number now. I'll
     }
     chat.appendChild(el);
     chat.scrollTop = chat.scrollHeight;
+    if (role === 'bot') state.lastBotSaid = text;
+  }
+
+  function showTyping() {
+    const el = document.createElement('div');
+    el.className = 'typing';
+    el.id = '__typing';
+    el.innerHTML = '<span></span><span></span><span></span>';
+    chat.appendChild(el);
+    chat.scrollTop = chat.scrollHeight;
+  }
+  function hideTyping() {
+    const el = document.getElementById('__typing');
+    if (el) el.remove();
   }
 
   function autosize() {
@@ -266,7 +579,7 @@ If you're in immediate danger, please call your local emergency number now. I'll
     }
   });
 
-  form.addEventListener('submit', (e) => {
+  form.addEventListener('submit', async (e) => {
     e.preventDefault();
     const text = input.value.trim();
     if (!text) return;
@@ -274,15 +587,25 @@ If you're in immediate danger, please call your local emergency number now. I'll
     input.value = '';
     autosize();
     send.disabled = true;
-    setTimeout(() => {
-      const reply = respond(text);
-      addMessage('bot', reply.text, { crisis: reply.crisis, tag: reply.tag });
-      send.disabled = false;
-      input.focus();
-    }, 420);
+
+    const useLive = !!loadKey();
+    showTyping();
+
+    let reply;
+    if (useLive) {
+      reply = await liveRespond(text);
+    } else {
+      await new Promise(r => setTimeout(r, 420 + Math.random() * 260));
+      reply = offlineRespond(text);
+    }
+
+    hideTyping();
+    addMessage('bot', reply.text, { crisis: reply.crisis, tag: reply.tag });
+    send.disabled = false;
+    input.focus();
   });
 
-  // Opening message
+  // Opening
   addMessage(
     'bot',
     "Welcome — this is a private space where you can slow down and put words to whatever is weighing on you.\n\nWhenever you're ready, tell me what's been on your mind.",
