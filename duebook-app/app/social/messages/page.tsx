@@ -51,6 +51,7 @@ export default function MessagesPage() {
       title="Messages"
       right={
         <button onClick={() => setShowNew(true)}
+          title="Start a new chat / নতুন চ্যাট শুরু করুন" aria-label="Start a new chat"
           className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800">
           <MessageSquarePlus size={17} />
         </button>
@@ -58,11 +59,18 @@ export default function MessagesPage() {
     >
       {loading && <div className="py-10 flex justify-center"><Loader2 className="animate-spin text-sky-500" size={22} /></div>}
       {!loading && convos.length === 0 && (
-        <div className="py-16 text-center text-[13px] text-gray-500 dark:text-slate-400">
-          No conversations yet
-          <div className="mt-3">
-            <button onClick={() => setShowNew(true)} className="text-sky-500 font-medium">Start a new chat</button>
+        <div className="py-14 px-6 text-center">
+          <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-sky-100 dark:bg-sky-900/40 flex items-center justify-center">
+            <MessageSquarePlus size={22} className="text-sky-500" />
           </div>
+          <div className="text-[14px] font-semibold text-gray-700 dark:text-slate-200">এখনো কোনো চ্যাট নেই</div>
+          <div className="text-[12px] text-gray-500 dark:text-slate-400 mt-1 mb-4">
+            No conversations yet — কাস্টমার বা বিক্রেতার সাথে সরাসরি কথা বলুন।
+          </div>
+          <button onClick={() => setShowNew(true)}
+            className="inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-sky-500 hover:bg-sky-600 text-white text-[13px] font-semibold">
+            <MessageSquarePlus size={14} /> নতুন চ্যাট শুরু করুন
+          </button>
         </div>
       )}
       <ul className="divide-y divide-gray-100 dark:divide-slate-800">

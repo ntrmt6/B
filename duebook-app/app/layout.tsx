@@ -79,6 +79,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="geo.region" content="BD" />
         <meta name="geo.placename" content="Bangladesh" />
         <script dangerouslySetInnerHTML={{ __html: `if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(()=>{}))}` }} />
+        <script src="https://accounts.google.com/gsi/client" async defer />
       </head>
       <body>
         <AuthProvider>

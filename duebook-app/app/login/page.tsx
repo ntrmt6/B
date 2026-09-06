@@ -1,15 +1,27 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import toast from 'react-hot-toast';
 import { Eye, EyeOff, BookOpen, ArrowLeft } from 'lucide-react';
+import GoogleAuthButton from './GoogleAuthButton';
+
+const GOOGLE_CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '';
 
 type View = 'signin' | 'signup' | 'forgot' | 'reset';
 
+const SECURITY_QUESTIONS = [
+  "What is your mother's maiden name?",
+  "What was the name of your first pet?",
+  'What city were you born in?',
+  'What was your first school name?',
+  'What is your favourite food?',
+  'Custom question…',
+];
+
 export default function LoginPage() {
-  const { login, signup, forgotPassword, resetPassword, user, loading: authLoading } = useAuth();
+  const { login, signup, forgotPassword, resetPassword, googleLogin, user, loading: authLoading } = useAuth();
   const router = useRouter();
 
   const [view, setView] = useState<View>('signin');
@@ -17,7 +29,7 @@ export default function LoginPage() {
   const [error, setError] = useState('');
   const [showPw, setShowPw] = useState(false);
 
-  // shared fields
+  // shared
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
@@ -25,17 +37,23 @@ export default function LoginPage() {
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [shopName, setShopName] = useState('');
+  const [questionPreset, setQuestionPreset] = useState(SECURITY_QUESTIONS[0]);
+  const [customQuestion, setCustomQuestion] = useState('');
+  const [securityAnswer, setSecurityAnswer] = useState('');
 
   // reset
-  const [resetCode, setResetCode] = useState('');
+  const [resetQuestion, setResetQuestion] = useState('');
+  const [resetAnswer, setResetAnswer] = useState('');
   const [newPassword, setNewPassword] = useState('');
-  const [issuedCode, setIssuedCode] = useState<string | null>(null);
 
   useEffect(() => {
     if (!authLoading && user) router.replace('/due-book');
   }, [user, authLoading, router]);
 
   const clearError = () => setError('');
+  const switchTo = (v: View) => { clearError(); setView(v); };
+
+  const currentQuestion = questionPreset === 'Custom question…' ? customQuestion.trim() : questionPreset;
 
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -56,9 +74,15 @@ export default function LoginPage() {
     clearError();
     if (!name.trim() || !email.trim() || !password) { setError('Fill name, email, password'); return; }
     if (password.length < 6) { setError('Password must be at least 6 characters'); return; }
+    if (!currentQuestion || currentQuestion.length < 4) { setError('Pick or type a security question'); return; }
+    if (!securityAnswer.trim() || securityAnswer.trim().length < 2) { setError('Enter a security answer'); return; }
     setLoading(true);
     try {
-      await signup({ name: name.trim(), email: email.trim(), password, phone: phone.trim() || undefined, shopName: shopName.trim() || undefined });
+      await signup({
+        name: name.trim(), email: email.trim(), password,
+        phone: phone.trim() || undefined, shopName: shopName.trim() || undefined,
+        securityQuestion: currentQuestion, securityAnswer: securityAnswer.trim(),
+      });
       toast.success('Account created — welcome!');
       router.replace('/due-book');
     } catch (err: unknown) {
@@ -75,23 +99,41 @@ export default function LoginPage() {
     setLoading(true);
     try {
       const res = await forgotPassword(email.trim());
-      setIssuedCode(res.code || null);
+      if (!res.ok || !res.question) {
+        setError(res.message || 'No recovery configured for this account');
+        return;
+      }
+      setResetQuestion(res.question);
+      setResetAnswer('');
+      setNewPassword('');
       setView('reset');
-      toast.success(res.message);
     } catch (err: unknown) {
       const e2 = err as { response?: { data?: { error?: string } } };
-      setError(typeof e2?.response?.data?.error === 'string' ? e2.response!.data!.error! : 'Failed to send reset code');
+      setError(typeof e2?.response?.data?.error === 'string' ? e2.response!.data!.error! : 'Failed to look up account');
     } finally { setLoading(false); }
   };
+
+  const handleGoogle = useCallback(async (credential: string) => {
+    clearError();
+    setLoading(true);
+    try {
+      await googleLogin(credential, shopName.trim() || undefined);
+      toast.success('Signed in with Google');
+      router.replace('/due-book');
+    } catch (err: unknown) {
+      const e2 = err as { response?: { data?: { error?: string } } };
+      setError(typeof e2?.response?.data?.error === 'string' ? e2.response!.data!.error! : 'Google sign-in failed');
+    } finally { setLoading(false); }
+  }, [googleLogin, router, shopName]);
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
     clearError();
-    if (!resetCode.trim() || !newPassword) { setError('Enter code and new password'); return; }
+    if (!resetAnswer.trim() || !newPassword) { setError('Answer and new password required'); return; }
     if (newPassword.length < 6) { setError('Password must be at least 6 characters'); return; }
     setLoading(true);
     try {
-      await resetPassword(email.trim(), resetCode.trim(), newPassword);
+      await resetPassword(email.trim(), resetAnswer.trim(), newPassword);
       toast.success('Password updated — signed in');
       router.replace('/due-book');
     } catch (err: unknown) {
@@ -100,10 +142,8 @@ export default function LoginPage() {
     } finally { setLoading(false); }
   };
 
-  const switchTo = (v: View) => { clearError(); setView(v); };
-
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 py-8">
       <div className="w-full max-w-[300px]">
         <div className="flex flex-col items-center mb-5">
           <div className="w-11 h-11 rounded-xl bg-sky-500 flex items-center justify-center shadow-md mb-2.5">
@@ -130,6 +170,16 @@ export default function LoginPage() {
 
         {view === 'signin' && (
           <form onSubmit={handleSignIn} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-3">
+            {GOOGLE_CLIENT_ID && (
+              <>
+                <GoogleAuthButton clientId={GOOGLE_CLIENT_ID} onCredential={handleGoogle} text="signin_with" disabled={loading} />
+                <div className="flex items-center gap-2 py-1">
+                  <div className="flex-1 h-px bg-gray-200" />
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">or</span>
+                  <div className="flex-1 h-px bg-gray-200" />
+                </div>
+              </>
+            )}
             <div>
               <label className="text-[11px] font-semibold text-gray-600 block mb-1">Email</label>
               <input type="email" value={email} onChange={e => setEmail(e.target.value)}
@@ -170,6 +220,19 @@ export default function LoginPage() {
 
         {view === 'signup' && (
           <form onSubmit={handleSignUp} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-4 space-y-2.5">
+            {GOOGLE_CLIENT_ID && (
+              <>
+                <GoogleAuthButton clientId={GOOGLE_CLIENT_ID} onCredential={handleGoogle} text="signup_with" disabled={loading} />
+                <p className="text-[10px] text-center text-gray-400 -mt-1">
+                  Fastest way — no password needed
+                </p>
+                <div className="flex items-center gap-2 py-1">
+                  <div className="flex-1 h-px bg-gray-200" />
+                  <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide">or sign up with email</span>
+                  <div className="flex-1 h-px bg-gray-200" />
+                </div>
+              </>
+            )}
             <div>
               <label className="text-[11px] font-semibold text-gray-600 block mb-1">Your Name *</label>
               <input type="text" value={name} onChange={e => setName(e.target.value)}
@@ -211,6 +274,30 @@ export default function LoginPage() {
                 </button>
               </div>
             </div>
+
+            <div className="rounded-xl bg-amber-50 border border-amber-200 p-2.5 space-y-2">
+              <p className="text-[11px] font-bold text-amber-800">Account recovery</p>
+              <p className="text-[10px] text-amber-700">
+                We&apos;ll ask this if you ever forget your password. Nobody can reset your password without answering it.
+              </p>
+              <select
+                value={questionPreset}
+                onChange={e => setQuestionPreset(e.target.value)}
+                className="w-full px-2 py-1.5 border border-amber-200 rounded-lg text-[12px] text-gray-900 bg-white outline-none focus:border-amber-400">
+                {SECURITY_QUESTIONS.map(q => <option key={q} value={q}>{q}</option>)}
+              </select>
+              {questionPreset === 'Custom question…' && (
+                <input type="text" value={customQuestion} onChange={e => setCustomQuestion(e.target.value)}
+                  placeholder="Type your question"
+                  className="w-full px-2 py-1.5 border border-amber-200 rounded-lg text-[12px] text-gray-900 bg-white outline-none focus:border-amber-400"
+                />
+              )}
+              <input type="text" value={securityAnswer} onChange={e => setSecurityAnswer(e.target.value)}
+                placeholder="Your answer"
+                className="w-full px-2 py-1.5 border border-amber-200 rounded-lg text-[12px] text-gray-900 bg-white outline-none focus:border-amber-400"
+              />
+            </div>
+
             {error && <div className="text-[12px] text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-center">{error}</div>}
             <button type="submit" disabled={loading}
               className="w-full py-2.5 rounded-xl bg-sky-500 text-white text-[13px] font-bold shadow-sm disabled:opacity-60 flex items-center justify-center gap-2 active:scale-[0.98] transition-all mt-1">
@@ -230,7 +317,7 @@ export default function LoginPage() {
             </button>
             <h3 className="text-[14px] font-bold text-gray-900">Forgot password</h3>
             <p className="text-[11px] text-gray-500">
-              Enter your account email. We&apos;ll generate a 6-digit reset code you can use on the next screen.
+              Enter your email. We&apos;ll show your security question — answer it correctly to set a new password.
             </p>
             <div>
               <label className="text-[11px] font-semibold text-gray-600 block mb-1">Email</label>
@@ -242,7 +329,7 @@ export default function LoginPage() {
             {error && <div className="text-[12px] text-red-600 bg-red-50 border border-red-200 rounded-lg px-3 py-2 text-center">{error}</div>}
             <button type="submit" disabled={loading}
               className="w-full py-2.5 rounded-xl bg-sky-500 text-white text-[13px] font-bold shadow-sm disabled:opacity-60 flex items-center justify-center gap-2 active:scale-[0.98] transition-all">
-              {loading ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'Send Reset Code'}
+              {loading ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : 'Continue'}
             </button>
           </form>
         )}
@@ -254,18 +341,15 @@ export default function LoginPage() {
               <ArrowLeft size={12} /> Back to sign in
             </button>
             <h3 className="text-[14px] font-bold text-gray-900">Reset password</h3>
-            {issuedCode && (
-              <div className="rounded-lg bg-sky-50 border border-sky-200 px-3 py-2 text-[12px] text-sky-800 space-y-0.5">
-                <p className="font-semibold">Your reset code:</p>
-                <p className="font-mono text-[16px] tracking-widest text-center">{issuedCode}</p>
-                <p className="text-[10px] text-sky-600">Copy it into the field below. Valid for 30 minutes.</p>
-              </div>
-            )}
+            <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 space-y-0.5">
+              <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wide">Your security question</p>
+              <p className="text-[12px] text-gray-900">{resetQuestion}</p>
+            </div>
             <div>
-              <label className="text-[11px] font-semibold text-gray-600 block mb-1">Reset code</label>
-              <input type="text" inputMode="numeric" value={resetCode} onChange={e => setResetCode(e.target.value)}
-                placeholder="6-digit code"
-                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-[13px] text-gray-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 bg-gray-50 focus:bg-white transition font-mono tracking-widest text-center"
+              <label className="text-[11px] font-semibold text-gray-600 block mb-1">Your answer</label>
+              <input type="text" value={resetAnswer} onChange={e => setResetAnswer(e.target.value)}
+                placeholder="Type your answer"
+                className="w-full px-3 py-2 border border-gray-200 rounded-xl text-[13px] text-gray-900 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100 bg-gray-50 focus:bg-white transition"
               />
             </div>
             <div>

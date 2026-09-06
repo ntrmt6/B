@@ -37,11 +37,13 @@ export default function SocialShell({ children, title = 'DueBook Social', back, 
         <div className="mx-auto max-w-xl px-3 py-2.5 flex items-center gap-2">
           {back ? (
             <button onClick={() => router.push(back)}
+              title="Back" aria-label="Back"
               className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800">
               <ChevronLeft size={18} />
             </button>
           ) : (
             <Link href="/due-book"
+              title="Back to DueBook / DueBook-এ ফিরুন" aria-label="Back to DueBook"
               className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-gray-100 dark:hover:bg-slate-800">
               <ChevronLeft size={18} />
             </Link>

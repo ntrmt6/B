@@ -13,9 +13,13 @@ interface AuthCtx {
   tenantId: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
-  signup: (data: { name: string; email: string; password: string; phone?: string; shopName?: string }) => Promise<void>;
-  forgotPassword: (email: string) => Promise<{ code?: string; message: string }>;
-  resetPassword: (email: string, code: string, newPassword: string) => Promise<void>;
+  signup: (data: {
+    name: string; email: string; password: string; phone?: string; shopName?: string;
+    securityQuestion: string; securityAnswer: string;
+  }) => Promise<void>;
+  forgotPassword: (email: string) => Promise<{ ok: boolean; question?: string; message: string }>;
+  resetPassword: (email: string, securityAnswer: string, newPassword: string) => Promise<void>;
+  googleLogin: (credential: string, shopName?: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -61,19 +65,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTenantId(tid);
   };
 
-  const signup = useCallback(async (data: { name: string; email: string; password: string; phone?: string; shopName?: string }) => {
+  const signup = useCallback(async (data: {
+    name: string; email: string; password: string; phone?: string; shopName?: string;
+    securityQuestion: string; securityAnswer: string;
+  }) => {
     const res = await api.post('/duebook/auth/signup', data);
     applyAuth(res.data.token, res.data.user);
   }, []);
 
   const forgotPassword = useCallback(async (email: string) => {
     const res = await api.post('/duebook/auth/forgot-password', { email });
-    return { code: res.data.code, message: res.data.message };
+    return { ok: !!res.data.ok, question: res.data.question, message: res.data.message };
   }, []);
 
-  const resetPassword = useCallback(async (email: string, code: string, newPassword: string) => {
-    const res = await api.post('/duebook/auth/reset-password', { email, code, newPassword });
+  const resetPassword = useCallback(async (email: string, securityAnswer: string, newPassword: string) => {
+    const res = await api.post('/duebook/auth/reset-password', { email, securityAnswer, newPassword });
     if (res.data?.token && res.data?.user) applyAuth(res.data.token, res.data.user);
+  }, []);
+
+  const googleLogin = useCallback(async (credential: string, shopName?: string) => {
+    const res = await api.post('/duebook/auth/google', { credential, shopName });
+    applyAuth(res.data.token, res.data.user);
   }, []);
 
   const logout = useCallback(() => {
@@ -82,7 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setTenantId(null);
   }, []);
 
-  return <Ctx.Provider value={{ user, tenantId, loading, login, signup, forgotPassword, resetPassword, logout }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ user, tenantId, loading, login, signup, forgotPassword, resetPassword, googleLogin, logout }}>{children}</Ctx.Provider>;
 }
 
 export function useAuth() {

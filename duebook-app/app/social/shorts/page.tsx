@@ -88,15 +88,19 @@ export default function ShortsPage() {
   return (
     <div className="fixed inset-0 bg-black text-white overflow-hidden">
       <div className="absolute top-0 inset-x-0 z-30 px-3 py-2.5 flex items-center gap-2 bg-gradient-to-b from-black/70 to-transparent">
-        <Link href="/social" className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40">
+        <Link href="/social" title="Back to feed" aria-label="Back to feed"
+          className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40">
           <ChevronLeft size={18} />
         </Link>
         <div className="flex-1 text-[14px] font-semibold">Shorts</div>
         <button onClick={() => setMuted(m => !m)}
+          title={muted ? 'Unmute video / সাউন্ড চালু করুন' : 'Mute video / সাউন্ড বন্ধ করুন'}
+          aria-label={muted ? 'Unmute video' : 'Mute video'}
           className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40">
           {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
         </button>
         <button onClick={() => setShowComposer(true)}
+          title="Post a new short / নতুন শর্ট পোস্ট করুন" aria-label="Post a new short"
           className="w-9 h-9 flex items-center justify-center rounded-full bg-white text-black">
           <Plus size={18} />
         </button>
@@ -104,10 +108,13 @@ export default function ShortsPage() {
 
       {posts.length === 0 && (
         <div className="h-full flex flex-col items-center justify-center text-center px-6">
-          <div className="text-[14px] mb-3 text-white/70">No shorts yet</div>
+          <div className="text-[15px] font-semibold text-white mb-1">এখনো কোনো শর্ট নেই</div>
+          <div className="text-[12px] mb-4 text-white/60 max-w-xs">
+            ছোট ভিডিও শেয়ার করুন — কাস্টমার আপনার দোকান/পণ্য দেখতে পাবে।
+          </div>
           <button onClick={() => setShowComposer(true)}
-            className="px-5 py-2 rounded-full bg-white text-black text-[13px] font-semibold">
-            Post the first short
+            className="px-5 py-2 rounded-full bg-white text-black text-[13px] font-semibold flex items-center gap-1.5">
+            <Plus size={15} /> প্রথম শর্ট পোস্ট করুন
           </button>
         </div>
       )}
@@ -156,19 +163,22 @@ export default function ShortsPage() {
             </div>
 
             <div className="absolute right-2 bottom-24 z-10 flex flex-col gap-4 items-center">
-              <button onClick={() => like(p)} className="flex flex-col items-center">
+              <button onClick={() => like(p)} title={p.liked ? 'Unlike' : 'Like'} aria-label={p.liked ? 'Unlike' : 'Like'}
+                className="flex flex-col items-center">
                 <div className={`w-11 h-11 flex items-center justify-center rounded-full bg-black/40 ${p.liked ? 'text-rose-500' : ''}`}>
                   <Heart size={20} fill={p.liked ? 'currentColor' : 'none'} />
                 </div>
                 <span className="text-[11px] mt-0.5">{p.likeCount || 0}</span>
               </button>
-              <Link href={`/social/post/${p._id}`} className="flex flex-col items-center">
+              <Link href={`/social/post/${p._id}`} title="Comments" aria-label="Comments"
+                className="flex flex-col items-center">
                 <div className="w-11 h-11 flex items-center justify-center rounded-full bg-black/40">
                   <MessageCircle size={20} />
                 </div>
                 <span className="text-[11px] mt-0.5">{p.commentCount || 0}</span>
               </Link>
-              <button onClick={() => doShare(p)} className="flex flex-col items-center">
+              <button onClick={() => doShare(p)} title="Share" aria-label="Share"
+                className="flex flex-col items-center">
                 <div className="w-11 h-11 flex items-center justify-center rounded-full bg-black/40">
                   <Share2 size={19} />
                 </div>

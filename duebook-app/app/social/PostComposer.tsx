@@ -84,7 +84,7 @@ export default function PostComposer({ onCreated, authorName, authorImage, defau
         <Avatar name={authorName} image={authorImage} size={compact ? 34 : 40} />
         <div className="flex-1">
           <textarea value={text} onChange={e => setText(e.target.value)}
-            placeholder={kind === 'short' ? 'Add a caption…' : "What's happening in your shop?"}
+            placeholder={kind === 'short' ? 'ছোট ক্যাপশন লিখুন… / Add a caption…' : 'আপনার দোকানে নতুন কী? / What\'s happening in your shop?'}
             className="w-full min-h-[52px] bg-transparent outline-none resize-none text-[14px] placeholder:text-gray-400"
             maxLength={5000} />
           {images.length > 0 && (
@@ -117,10 +117,13 @@ export default function PostComposer({ onCreated, authorName, authorImage, defau
         <input ref={vidRef} type="file" accept="video/*" hidden
           onChange={e => e.target.files?.[0] && uploadVideo(e.target.files[0])} />
         <button onClick={() => imgRef.current?.click()} disabled={uploading}
+          title="Add a photo" aria-label="Add a photo"
           className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[12px] text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/40">
           <ImagePlus size={16} /> Photo
         </button>
         <button onClick={() => vidRef.current?.click()} disabled={uploading}
+          title={kind === 'short' ? 'Upload a short video' : 'Upload a video'}
+          aria-label={kind === 'short' ? 'Upload a short video' : 'Upload a video'}
           className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-[12px] text-fuchsia-600 hover:bg-fuchsia-50 dark:hover:bg-fuchsia-950/40">
           <Video size={16} /> {kind === 'short' ? 'Short' : 'Video'}
         </button>
@@ -131,6 +134,9 @@ export default function PostComposer({ onCreated, authorName, authorImage, defau
           {posting ? 'Posting…' : 'Post'}
         </button>
       </div>
+      <p className="mt-1.5 text-[10.5px] text-gray-400 leading-snug">
+        টিপ: ছবি/ভিডিও যোগ করলে পোস্ট বেশি নজরে আসে। শেয়ার করতে <b>Post</b> চাপুন।
+      </p>
     </div>
   );
 }

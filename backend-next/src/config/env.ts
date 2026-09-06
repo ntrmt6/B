@@ -17,6 +17,7 @@ const envSchema = z.object({
   IMAGEKIT_URL_ENDPOINT: z.string().optional().default(''),
   STOREFRONT_URL: z.string().optional().default(''),
   REVALIDATION_SECRET: z.string().optional().default(''),
+  GOOGLE_CLIENT_ID: z.string().optional().default(''),
 });
 
 const parsed = envSchema.safeParse(process.env);
@@ -42,4 +43,5 @@ export const env = {
   imagekitUrlEndpoint: parsed.data.IMAGEKIT_URL_ENDPOINT || '',
   storefrontUrl: parsed.data.STOREFRONT_URL || '',
   revalidationSecret: parsed.data.REVALIDATION_SECRET || '',
+  googleClientId: parsed.data.GOOGLE_CLIENT_ID || '',
 };

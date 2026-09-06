@@ -72,6 +72,7 @@ export default function MyProfilePage() {
       title="My Profile"
       right={
         <button onClick={() => { logout(); router.push('/login'); }}
+          title="Log out / লগ আউট" aria-label="Log out"
           className="w-8 h-8 flex items-center justify-center rounded-lg text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40">
           <LogOut size={16} />
         </button>
@@ -84,8 +85,9 @@ export default function MyProfilePage() {
             <div className="h-32 bg-gradient-to-br from-sky-400 to-indigo-500 relative">
               {profile.coverImage && <img src={profile.coverImage} alt="" className="absolute inset-0 w-full h-full object-cover" />}
               <button onClick={() => cvRef.current?.click()}
-                className="absolute right-2 bottom-2 w-8 h-8 flex items-center justify-center rounded-full bg-black/50 text-white">
-                <Camera size={14} />
+                title="Change cover photo / কভার ছবি বদলান" aria-label="Change cover photo"
+                className="absolute right-2 bottom-2 h-8 px-2.5 flex items-center gap-1 rounded-full bg-black/60 hover:bg-black/70 text-white text-[11px] font-semibold">
+                <Camera size={13} /> Cover
               </button>
               <input ref={cvRef} type="file" accept="image/*" hidden onChange={e => e.target.files?.[0] && pickCover(e.target.files[0])} />
             </div>
@@ -93,7 +95,8 @@ export default function MyProfilePage() {
               <div className="relative w-20 h-20">
                 <Avatar name={profile.name} image={profile.image} size={80} />
                 <button onClick={() => avRef.current?.click()}
-                  className="absolute -right-1 -bottom-1 w-7 h-7 flex items-center justify-center rounded-full bg-sky-500 text-white ring-2 ring-white dark:ring-slate-900">
+                  title="Change profile photo / প্রোফাইল ছবি বদলান" aria-label="Change profile photo"
+                  className="absolute -right-1 -bottom-1 w-7 h-7 flex items-center justify-center rounded-full bg-sky-500 hover:bg-sky-600 text-white ring-2 ring-white dark:ring-slate-900">
                   <Camera size={12} />
                 </button>
                 <input ref={avRef} type="file" accept="image/*" hidden onChange={e => e.target.files?.[0] && pickAvatar(e.target.files[0])} />
@@ -145,7 +148,11 @@ export default function MyProfilePage() {
 
           <div className="mt-3">
             <div className="px-3 pb-2 text-[13px] font-semibold text-gray-500 dark:text-slate-400">Posts</div>
-            {posts.length === 0 && <div className="py-10 text-center text-[12px] text-gray-500">No posts yet</div>}
+            {posts.length === 0 && (
+              <div className="py-8 px-6 text-center text-[12px] text-gray-500 dark:text-slate-400">
+                এখনো কোনো পোস্ট নেই — Feed-এ গিয়ে আপনার প্রথম পোস্ট তৈরি করুন।
+              </div>
+            )}
             {posts.map(p => (
               <PostCard key={p._id} post={p} currentUserId={user?._id}
                 onDelete={id => setPosts(list => list.filter(p => p._id !== id))} />
