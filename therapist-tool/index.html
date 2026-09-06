@@ -50,9 +50,9 @@
 <div class="app">
   <header>
     <div class="titles">
-      <span class="badge">Meta-Model · The Structure of Magic</span>
-      <h1>Therapeutic Conversation</h1>
-      <p class="sub">A private reflection space. Runs offline by default; add an Anthropic key for full LLM responses.</p>
+      <span class="badge">Meta-Model · Milton · Satir · Gestalt</span>
+      <h1>Clinical Linguistic Reframing</h1>
+      <p class="sub">Recovers Deep Structure from impoverished Surface Structure. Runs offline; add an Anthropic key for full LLM responses.</p>
     </div>
     <button class="gear" id="gear" type="button" title="Settings">⚙ Settings</button>
   </header>
@@ -212,7 +212,7 @@ If you're in immediate danger, please call your local emergency number now. A hu
       return pick([
         "That's an honest place to start. If you had to guess — even a wrong guess — what would you say?",
         "'I don't know' is often where something true is waiting. What comes up if you finish the sentence: 'If I did know, I'd say…'?",
-        "Not knowing is welcome here. What part of it feels the most uncertain — the what, the why, or the who?",
+        "Not knowing is welcome here. What part of it feels the most uncertain — the what, the who, or the when?",
       ]);
     }
     // Single emotion word
@@ -229,112 +229,149 @@ If you're in immediate danger, please call your local emergency number now. A hu
   function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
   function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
 
+  // Nominalization → active verb mapping (structural denominalization).
+  // If a mapping isn't listed, fall back to "<noun>-ing yourself" heuristic.
+  const DENOMINALIZE = {
+    fear: 'scaring yourself', anxiety: 'making yourself anxious', depression: 'depressing yourself',
+    anger: 'angering yourself', frustration: 'frustrating yourself', rejection: 'rejecting yourself',
+    failure: 'failing yourself', shame: 'shaming yourself', guilt: 'guilting yourself',
+    confidence: 'trusting yourself', trust: 'trusting', respect: 'respecting', love: 'loving',
+    communication: 'communicating', relationship: 'relating', decision: 'deciding',
+    understanding: 'understanding', approval: 'approving', support: 'supporting',
+    connection: 'connecting', distance: 'distancing', intimacy: 'being intimate',
+    control: 'controlling', responsibility: 'responding', commitment: 'committing',
+    conflict: 'conflicting', attention: 'attending', freedom: 'choosing freely',
+  };
+  function toActiveVerb(noun) {
+    const n = noun.toLowerCase();
+    return DENOMINALIZE[n] || (n.endsWith('e') ? n.slice(0, -1) + 'ing' : n + 'ing');
+  }
+
   const DETECTORS = [
     {
       type: 'universal_quantifier', priority: 100,
-      test: (t) => t.match(/\b(never|always|nothing|nobody|no one|everyone|everybody|everything|no\s?body|all the time|constantly|forever|not once|not ever|every single)\b/i),
-      challenge: (m, ctx) => {
+      test: (t) => t.match(/\b(never|always|nothing|nobody|no one|everyone|everybody|everything|no\s?body|all the time|constantly|forever|not once|not ever|every single|every time)\b/i),
+      challenge: (m) => {
         const w = m[0].toLowerCase();
         return pick([
-          `${cap(w)}? Has there been even one moment — however small, however brief — when it wasn't ${w}?`,
-          `You said "${w}" — I want to slow down there. Can you remember a single time, even years ago, when it was different?`,
-          `${cap(w)} is a big word. If we scanned the last month carefully, would we find one exception?`,
+          `${cap(w)}? Recall a single instance — even microscopic — where one small element went differently.`,
+          `You said "${w}" — scan the last month carefully. Is there one exception, however brief?`,
+          `${cap(w)} is a totality. Before we accept it, name one moment where the pattern broke, even for a second.`,
         ]);
       },
     },
     {
       type: 'modal_impossibility', priority: 95,
       test: (t) => t.match(/\b(can'?t|cannot|couldn'?t|impossible|unable|no way|won'?t be able)\b/i),
-      challenge: (m, ctx) => pick([
-        "What specifically stops you? If that obstacle weren't there, what would you do first?",
-        `You said you can't. What would need to be true for you to be able to?`,
-        "If a friend you loved was in your exact spot — what would you tell them was still possible?",
+      challenge: () => pick([
+        "What specific constraint stops you? What prevents you from doing it right now?",
+        "If that constraint dissolved this instant, what is the very first action you would take?",
+        "Name the exact barrier — is it a person, a rule, a physical impossibility, or a felt sensation?",
+      ]),
+    },
+    {
+      type: 'complex_equivalence', priority: 92,
+      test: (t) => t.match(/\b(so\s+(he|she|they|it|that)\s+(hates?|means?|thinks?|doesn'?t|does not|must|is)|means?\s+(i'?m|i am|he'?s|she'?s|they'?re|nobody|no one|everyone))\b/i),
+      challenge: () => pick([
+        "How does that one event equate directly to that conclusion? What are the missing steps between them?",
+        "You collapsed two very different things into one meaning. Show me the bridge — what makes the first automatically mean the second?",
+        "That's an equation you've drawn. Would every observer draw the same one? What would a stranger say the event meant?",
       ]),
     },
     {
       type: 'cause_effect', priority: 90,
-      test: (t) => t.match(/\b(makes? me|made me|causes me to|because of (him|her|them|you|it) i)\b/i),
-      challenge: (m, ctx) => pick([
-        "How specifically does that produce that feeling inside you? Is there a moment when the same thing happens and you don't feel that way?",
-        "You linked those two tightly — the outside thing and the inside feeling. What's the step in between that we're skipping over?",
-        "If two people had that same thing happen, would they both feel exactly what you feel? What's the piece that's yours?",
+      test: (t) => t.match(/\b(makes? me|made me|causes me to|because of (him|her|them|you|it) i|when (he|she|they|it) [a-z]+ i (feel|get|become))\b/i),
+      challenge: () => pick([
+        "How specifically does that external event compel your physiology to generate that feeling inside you?",
+        "You linked stimulus to state as if by law. What is the internal step you're taking, in between, that we can slow down?",
+        "If two people were in that exact situation, would they both feel precisely what you feel? What is the piece that is uniquely yours?",
       ]),
     },
     {
       type: 'mind_reading', priority: 85,
       test: (t) => t.match(/\b(he|she|they|everyone|nobody|people|my\s+(boss|partner|husband|wife|mom|mother|dad|father|friend|kids?|children|colleague|coworker|manager))\s+(thinks?|knows?|feels?|believes?|hates?|likes?|wants?|expects?|assumes?|resents?)\b/i),
-      challenge: (m, ctx) => pick([
-        "How specifically do you know that? What did they actually say or do that told you?",
-        "That's a strong read on what's inside their head. What's the piece of evidence you'd point to if I asked to see it?",
-        "If they read that sentence back — would they agree, or would they say something different?",
+      challenge: () => pick([
+        "What sensory-verifiable data — sound, sight, action — demonstrated that to you?",
+        "You're reading their internal state. Point to the exact word, tone, or gesture that gave you access.",
+        "If they read that sentence back, would they agree? What would they say was actually happening for them?",
       ]),
     },
     {
       type: 'modal_necessity', priority: 80,
       test: (t) => t.match(/\b(have to|has to|had to|must|need to|needs to|got to|should|shouldn'?t|ought to|supposed to)\b/i),
-      challenge: (m, ctx) => pick([
-        "What would happen if you didn't?",
-        "You said you have to — who decided that? What's the consequence you're bracing for?",
-        `Where did the rule "${m[0].toLowerCase()}" come from originally?`,
+      challenge: (m) => pick([
+        "What exact outcome do you anticipate would occur if you did not?",
+        `You said "${m[0].toLowerCase()}" — who set that requirement, and what is the consequence you are bracing for?`,
+        "Trace the rule to its source. What happens, specifically, in the moment you refuse it?",
       ]),
     },
     {
       type: 'lost_performative', priority: 75,
-      test: (t) => t.match(/\bit'?s (wrong|bad|right|good|stupid|selfish|weak|shameful|pathetic|ridiculous|foolish|childish|unacceptable)\b/i),
-      challenge: (m, ctx) => pick([
-        `According to whom? Whose voice first told you it's ${m[1].toLowerCase()}?`,
-        `Who taught you that? Whose face do you see when you hear "it's ${m[1].toLowerCase()}"?`,
-        `Is that your judgment, or someone else's living inside you?`,
-      ]),
+      test: (t) => t.match(/\bit'?s (wrong|bad|right|good|stupid|selfish|weak|shameful|pathetic|ridiculous|foolish|childish|unacceptable|inappropriate)\b/i),
+      challenge: (m) => {
+        const j = m[1].toLowerCase();
+        return pick([
+          `According to what authority or rulebook is that ${j}?`,
+          `Whose voice first told you it's ${j}? Trace it to a single face.`,
+          `Is that your evaluation, or a rule you inherited from someone else living inside you?`,
+        ]);
+      },
     },
     {
       type: 'unspecified_referent', priority: 65,
-      test: (t) => t.match(/\b(they|people|everyone|nobody|someone|things|folks)\s+(don'?t|do not|are|is|aren'?t|were|make|makes|treat|treats|say|says|think|thinks)\b/i),
-      challenge: (m, ctx) => pick([
-        "Who, specifically? Can you name one particular person, or one particular moment?",
-        `"They" is doing a lot of work in that sentence. Who's the one whose face comes up first?`,
-        "If we shrank that down to one specific incident, this week — who was there and what happened?",
+      test: (t) => t.match(/\b(they|people|everyone|nobody|someone|things|folks)\s+(don'?t|do not|are|is|aren'?t|were|make|makes|treat|treats|say|says|think|thinks|do|does)\b/i),
+      challenge: () => pick([
+        "Who specifically is acting, and what exact action are they taking?",
+        "Collapse the plural into one person. Whose face is the first to arrive?",
+        "Shrink that to one incident this week — who was present, and what precisely occurred?",
       ]),
-    },
-    {
-      type: 'nominalization', priority: 55,
-      test: (t) => t.match(/\b(relationship|communication|confidence|respect|trust|love|freedom|attention|understanding|failure|success|depression|anxiety|decision|frustration|rejection|approval|control|responsibility|commitment|connection|distance|closeness|intimacy|support)\b/i),
-      challenge: (m, ctx) => {
-        const w = m[0].toLowerCase();
-        return pick([
-          `You named "${w}" — in what specific moments this week are you actually experiencing that? Who is doing what?`,
-          `If I could watch "${w}" happening (or not happening) on video, what would I see?`,
-          `"${cap(w)}" sounds like a solid thing, but it's really a lot of small actions. Which specific action is missing right now?`,
-        ]);
-      },
     },
     {
       type: 'unspecified_verb', priority: 60,
-      test: (t) => t.match(/\b(attacked|hurt|helped|rejected|ignored|criticized|dismissed|abandoned|betrayed|humiliated|disrespected|shamed|belittled|controlled|manipulated)\b/i),
-      challenge: (m, ctx) => {
+      test: (t) => t.match(/\b(attacked|hurt|helped|rejected|ignored|criticized|dismissed|abandoned|betrayed|humiliated|disrespected|shamed|belittled|controlled|manipulated|disappointed)\b/i),
+      challenge: (m) => {
         const v = m[0].toLowerCase();
         return pick([
-          `How specifically did that ${v.replace(/ed$/, '')} happen — what did they actually say or do?`,
-          `"${cap(v)}" is the label. Underneath it, what were the actual words or actions?`,
-          `If we replayed the moment slowly — the exact sentence, the exact tone — what would we see?`,
+          `How specifically did they ${v.replace(/ed$/, '')} you? What exact behavior occurred?`,
+          `"${cap(v)}" is the label you've placed on it. Underneath, what were the actual words, tone, gestures?`,
+          `Replay the moment slowly — sentence by sentence, movement by movement. What did we actually see?`,
         ]);
       },
     },
     {
-      type: 'comparative', priority: 45,
-      test: (t) => t.match(/\b(better|worse|best|worst|more|less|too much|too little|not enough|harder|easier)\b/i),
-      challenge: (m, ctx) => pick([
-        `${cap(m[0])} — compared to what, specifically? Measured against what standard?`,
-        `You used "${m[0].toLowerCase()}" — that implies a comparison. Compared to what?`,
-      ]),
+      type: 'nominalization', priority: 55,
+      test: (t) => t.match(/\b(relationship|communication|confidence|respect|trust|love|freedom|attention|understanding|failure|success|depression|anxiety|fear|anger|shame|guilt|decision|frustration|rejection|approval|control|responsibility|commitment|connection|distance|closeness|intimacy|support|conflict)\b/i),
+      challenge: (m) => {
+        const noun = m[0].toLowerCase();
+        const verb = toActiveVerb(noun);
+        return pick([
+          `In what specific ways are you ${verb} right now? Who is doing what, and when?`,
+          `Notice "${noun}" is a frozen verb — it names something you're actively doing. In what moments this week are you ${verb}?`,
+          `If I could watch "${noun}" happening on video, what specific behaviors would I see? What are you doing when you are ${verb}?`,
+        ]);
+      },
+    },
+    {
+      type: 'comparative', priority: 50,
+      test: (t) => t.match(/\b(better|worse|best|worst|safer|riskier|more|less|too much|too little|not enough|harder|easier)\b/i),
+      challenge: (m) => {
+        const w = m[0].toLowerCase();
+        return pick([
+          `${cap(w)} compared to what specific consequence, measured by whose metric?`,
+          `You used "${w}" — that implies a benchmark. Name the standard, and name who set it.`,
+        ]);
+      },
     },
     {
       type: 'simple_deletion', priority: 40,
-      test: (t) => t.match(/^\s*i\s+(feel|am|'m)\s+(terrible|awful|bad|lost|broken|empty|numb|done|off|weird|strange)\b/i),
-      challenge: (m, ctx) => pick([
-        "About what, specifically? What triggered that in the last day or so?",
-        `You said you feel ${m[2].toLowerCase()}. About what? When did that start?`,
-      ]),
+      test: (t) => t.match(/^\s*i\s+(feel|am|'m)\s+(terrible|awful|bad|lost|broken|empty|numb|done|off|weird|strange|helpless|hopeless|worthless)\b/i),
+      challenge: (m) => {
+        const state = m[2].toLowerCase();
+        return pick([
+          `About what specific event or condition?`,
+          `You feel ${state} — about what, exactly? What triggered it, and when?`,
+        ]);
+      },
     },
   ];
 
@@ -486,19 +523,44 @@ If you're in immediate danger, please call your local emergency number now. A hu
   // =====================================================================
   // Live LLM path (only when user has pasted an API key)
   // =====================================================================
-  const SYSTEM_PROMPT = `You are an expert therapeutic conversational agent rooted strictly in Bandler & Grinder's Meta-Model (Structure of Magic, Vols. I & II).
+  const SYSTEM_PROMPT = `You are an advanced clinical linguistic agent operating strictly on the generative-transformational framework formulated by Richard Bandler and John Grinder in "The Structure of Magic" (Vols. I & II), integrated with Milton Model pacing, Virginia Satir's parts integration, and Gestalt polarities.
 
-For every user turn:
-1. Detect the client's dominant sensory predicate (visual, auditory, kinesthetic, or auditory-digital) from their verbs and metaphors.
-2. FIRST SENTENCE: pace their emotional reality in one warm, human sentence, matching their predicate. Mirror one specific word or phrase they used.
-3. SECOND SENTENCE: ask exactly ONE surgical Meta-Model question targeting the deepest structural violation (universal quantifier > modal of impossibility > cause-effect > mind-reading > modal of necessity > lost performative > nominalization > unspecified verb > unspecified referent > comparative > simple deletion).
+Your primary objective is not content-level advice, but semantic reframing: systematically collapsing the user's impoverished Surface Structure to recover Deep Structure, dissolving self-limiting cognitive boundaries, and returning agency.
 
-Strict rules:
-- Never chain multiple questions.
-- Never offer advice, interpretation, diagnosis, or solutions.
-- Never re-ask a challenge you just asked in the previous turn.
-- Keep the total response under 3 sentences.
-- If the client shows signs of self-harm, suicide, or acute crisis, immediately drop the Meta-Model frame and offer crisis-line resources (US: 988; UK: Samaritans 116 123; international: findahelpline.com).`;
+## I. LATENT LINGUISTIC PARSER (execute silently before responding)
+1. Sensory Predicate Extraction — dominant channel: Visual, Auditory, Kinesthetic, or Auditory-Digital. Flag mismatches between sensory vocabulary and reported affect.
+2. Syntax & Transformational Anomaly Audit — scan for:
+   - DELETIONS: Simple, Comparative, Unspecified Referential Index, Unspecified Verb.
+   - GENERALIZATIONS: Universal Quantifiers, Modal Operators of Necessity, Modal Operators of Possibility/Impossibility.
+   - DISTORTIONS: Nominalizations, Mind Reading, Cause-Effect, Complex Equivalence, Lost Performative.
+3. Target Selection — isolate the single linguistic presupposition that, if challenged, forces the largest map expansion.
+
+## II. INTERVENTION TAXONOMY
+| Violation | Signal | Surgical Pattern |
+|---|---|---|
+| Simple Deletion | "I feel helpless." | "About what specific event or condition?" |
+| Comparative Deletion | "It is safer to stay silent." | "Safer compared to what specific consequence, measured by whose metric?" |
+| Unspecified Referent | "They are destroying my peace." | "Who specifically is acting, and what exact action are they taking?" |
+| Unspecified Verb | "He hurt me badly." | "How specifically did he hurt you? What exact behavior occurred?" |
+| Universal Quantifier | "I never get this right." | "Never? Recall an instance — even microscopic — where an element went right." |
+| Modal: Necessity | "I must endure this." | "What exact outcome do you anticipate would occur if you did not?" |
+| Modal: Impossibility | "I cannot say no to him." | "What specific constraint stops you? What prevents you from speaking the word?" |
+| Nominalization | "Our communication has failed." | "In what specific ways are you both failing to communicate right now?" |
+| Mind Reading | "She resents my success." | "What sensory-verifiable data (sound, sight, action) demonstrated that resentment to you?" |
+| Cause-Effect | "His silence makes me anxious." | "How specifically does the absence of his voice compel your physiology to generate anxiety?" |
+| Complex Equivalence | "He didn't reply, so he hates me." | "How does the absence of a text message equate directly to the emotion of hatred?" |
+| Lost Performative | "It's wrong to put myself first." | "According to what authority or rulebook is that wrong?" |
+
+## III. RESPONSE PROTOCOL (every turn, exactly)
+1. PACING (Sentence 1) — mirror internal state in the client's EXACT sensory channel (V/A/K/Ad). Establish rapport without endorsing the distortion.
+2. SURGICAL STRIKE (Sentence 2) — deploy exactly ONE targeted Meta-Model challenge on the primary structural node. Never compound. Never ask "why" (it invites rationalization, not structural discovery). Never chain questions.
+3. STRUCTURAL DENOMINALIZATION — when a nominalization appears (e.g., "fear", "depression", "conflict", "rejection"), automatically convert it back into an active present-tense verb the client is doing to themselves ("scaring yourself", "depressing yourself", "conflicting", "rejecting yourself") so agency is returned.
+
+## IV. STRICT CONSTRAINTS
+- Zero didactic explanation: never lecture, never name the Meta-Model.
+- Zero premature solutions, advice, coping strategies, or diagnoses until Deep Structure is fully retrieved.
+- Maximum 2 to 3 sentences per turn. Let the question do the therapeutic work.
+- SAFETY OVERRIDE: on any signal of acute self-harm, suicidal ideation, or dangerous intent, suspend all reframing and provide direct crisis resources (US 988; UK Samaritans 116 123; international findahelpline.com).`;
 
   const conversation = []; // {role, content}
 
