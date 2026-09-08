@@ -84,6 +84,9 @@ const RECENT_KEY = 'duebook_recent_entities';
 const SORT_KEY = 'duebook_entity_sort';
 const RECENT_MAX = 20;
 const RECENT_SHOW = 5;
+const PAYMENT_NUMBER = '01798923162';
+const OVERDUE_WARNING_DAYS = 7;
+const OVERDUE_CRITICAL_DAYS = 11;
 
 type EntitySort = 'recent' | 'name' | 'due';
 
@@ -361,6 +364,9 @@ const buildDueReminder = (
       : `Kindly clear at your earliest convenience.`,
   );
   parts.push(``);
+  parts.push(`পেমেন্ট করতে বিকাশ/নগদে Send Money করুন: ${PAYMENT_NUMBER}`);
+  parts.push(`টাকা পাঠানোর পর স্ক্রিনশট পাঠিয়ে দিন।`);
+  parts.push(``);
   parts.push(`Thank you! 🙏`);
 
   return parts.join('\n');
@@ -397,6 +403,27 @@ const waUrl = (phone: string, message: string) => {
   const n = waNumber(phone);
   if (!n) return '';
   return `https://wa.me/${n}?text=${encodeURIComponent(message)}`;
+};
+
+/* Age-of-outstanding-balance color. Negative/zero net keeps default (green).
+   Returns Tailwind class pair (light + dark). Caller picks the base green shade. */
+const dueAgeInDays = (dateStr?: string | null): number | null => {
+  if (!dateStr) return null;
+  const t = new Date(dateStr).getTime();
+  if (!Number.isFinite(t)) return null;
+  return Math.floor((Date.now() - t) / 86400000);
+};
+const getDueAgeColorClasses = (
+  dateStr: string | undefined | null,
+  net: number,
+  greenClasses = 'text-green-600 dark:text-green-400',
+): string => {
+  if (net <= 0) return greenClasses;
+  const days = dueAgeInDays(dateStr);
+  if (days === null) return greenClasses;
+  if (days >= OVERDUE_CRITICAL_DAYS) return 'text-red-700 dark:text-red-500';
+  if (days >= OVERDUE_WARNING_DAYS) return 'text-red-600 dark:text-red-400';
+  return greenClasses;
 };
 
 /* ══════════════════════════════════════════ */
@@ -565,7 +592,7 @@ const EntityRow = memo(function EntityRow({
       <div className="text-right shrink-0">
         {total > 0 ? (
           <>
-            <p className={`text-[13px] font-bold tabular-nums ${net >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+            <p className={`text-[13px] font-bold tabular-nums ${net >= 0 ? getDueAgeColorClasses(entity.updatedAt, net) : 'text-red-600 dark:text-red-400'}`}>
               {net >= 0 ? '+' : '-'}{fmt(net)}
             </p>
             <p className={`text-[10px] font-medium ${net >= 0 ? 'text-green-400' : 'text-red-400'}`}>
@@ -1998,9 +2025,21 @@ export default function DueBookPage() {
           doc.setTextColor(30, 30, 30);
           doc.text(`${entity.name}${entity.phone ? '  •  ' + entity.phone : ''}`, margin, y);
           const net = entity.totalOwedToMe - entity.totalIOweThemNumber;
+          const oldestPendingTx = (entityTxMap[entity._id] || [])
+            .filter(t => t.status === 'Pending' && t.direction === 'INCOME')
+            .reduce<string | undefined>((oldest, t) => {
+              if (!oldest) return t.transactionDate;
+              return new Date(t.transactionDate).getTime() < new Date(oldest).getTime() ? t.transactionDate : oldest;
+            }, undefined);
+          const ageDays = net > 0 ? dueAgeInDays(oldestPendingTx) : null;
+          let rgb: [number, number, number];
+          if (net < 0) rgb = [220, 38, 38];
+          else if (ageDays !== null && ageDays >= OVERDUE_CRITICAL_DAYS) rgb = [185, 28, 28];
+          else if (ageDays !== null && ageDays >= OVERDUE_WARNING_DAYS) rgb = [220, 38, 38];
+          else rgb = [22, 163, 74];
           doc.setFontSize(8);
           doc.setFont('helvetica', 'normal');
-          doc.setTextColor(net >= 0 ? 22 : 220, net >= 0 ? 163 : 38, net >= 0 ? 74 : 38);
+          doc.setTextColor(rgb[0], rgb[1], rgb[2]);
           doc.text(`Get: ${entity.totalOwedToMe.toLocaleString('en-IN')}  |  Give: ${entity.totalIOweThemNumber.toLocaleString('en-IN')}  |  Net: ${net >= 0 ? '+' : ''}${net.toLocaleString('en-IN')}`, margin, y + 4);
           y += 7;
 
@@ -2451,6 +2490,14 @@ export default function DueBookPage() {
           && threshold > 0
           && !!regSettings.rewardItemName;
         const nextRemaining = threshold > 0 ? threshold - (totalPaid % threshold) : 0;
+        const selectedNet = selected.totalOwedToMe - selected.totalIOweThemNumber;
+        const oldestPendingDate = transactions
+          .filter(t => t.status === 'Pending' && t.direction === 'INCOME')
+          .reduce<string | undefined>((oldest, t) => {
+            if (!oldest) return t.transactionDate;
+            return new Date(t.transactionDate).getTime() < new Date(oldest).getTime() ? t.transactionDate : oldest;
+          }, undefined);
+        const netAgeClasses = getDueAgeColorClasses(oldestPendingDate, selectedNet, 'text-green-700 dark:text-green-400');
         return (
         <div className="flex-shrink-0 px-3 py-2 bg-white dark:bg-slate-800 border-b border-gray-100 dark:border-slate-700">
           <div className="flex items-center gap-2.5">
@@ -2480,8 +2527,8 @@ export default function DueBookPage() {
             </div>
             <div className="flex-1 text-center bg-gray-50 dark:bg-slate-700 rounded-lg py-1.5">
               <p className="text-[10px] text-gray-500 dark:text-slate-400 font-medium">Net</p>
-              <p className={`text-[13px] font-bold tabular-nums ${(selected.totalOwedToMe - selected.totalIOweThemNumber) >= 0 ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'}`}>
-                {fmt(selected.totalOwedToMe - selected.totalIOweThemNumber)}
+              <p className={`text-[13px] font-bold tabular-nums ${selectedNet >= 0 ? netAgeClasses : 'text-red-700 dark:text-red-400'}`}>
+                {fmt(selectedNet)}
               </p>
             </div>
             {selected.type === 'Customer' && (
