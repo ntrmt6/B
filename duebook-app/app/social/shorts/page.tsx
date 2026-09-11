@@ -10,17 +10,33 @@ import toast from 'react-hot-toast';
 import { Avatar } from '../SocialShell';
 import PostComposer from '../PostComposer';
 
+const MUTE_KEY = 'duebook_shorts_muted';
+
 export default function ShortsPage() {
   const { user } = useAuth();
   const router = useRouter();
   const isGuest = !user;
   const [posts, setPosts] = useState<SocialPost[]>([]);
-  const [muted, setMuted] = useState(true);
+  // Sound ON by default. If autoplay-with-sound fails (mobile browsers),
+  // we fall back to muted playback per-video and show the unmute button.
+  const [muted, setMuted] = useState<boolean>(false);
   const [showComposer, setShowComposer] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [pausedIds, setPausedIds] = useState<Record<string, boolean>>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
+
+  // Restore user's last mute choice (if any). No stored value → keep default (unmuted).
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(MUTE_KEY);
+      if (v === '1') setMuted(true);
+      else if (v === '0') setMuted(false);
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try { localStorage.setItem(MUTE_KEY, muted ? '1' : '0'); } catch {}
+  }, [muted]);
 
   function requireLogin(action: string) {
     toast(`${action} করতে সাইন-ইন করুন`, { icon: '🔒' });
@@ -48,19 +64,36 @@ export default function ShortsPage() {
           if (ent.isIntersecting && ent.intersectionRatio > 0.5) {
             setActiveIndex(idx);
             video.currentTime = 0;
-            const p = video.play();
-            if (p && typeof p.then === 'function') {
+            const tryPlay = () => {
+              const p = video.play();
+              if (!p || typeof p.then !== 'function') return;
               p.catch(() => {
-                const id = (ent.target as HTMLElement).dataset.postid || '';
-                if (id) setPausedIds(prev => ({ ...prev, [id]: true }));
+                // Autoplay-with-sound is often blocked on mobile until the
+                // user has interacted with the page. Fall back to muted so
+                // the video still plays; user can tap the speaker to unmute.
+                if (!video.muted) {
+                  video.muted = true;
+                  setMuted(true);
+                  const p2 = video.play();
+                  if (p2 && typeof p2.then === 'function') {
+                    p2.catch(() => {
+                      const id = (ent.target as HTMLElement).dataset.postid || '';
+                      if (id) setPausedIds(prev => ({ ...prev, [id]: true }));
+                    });
+                  }
+                } else {
+                  const id = (ent.target as HTMLElement).dataset.postid || '';
+                  if (id) setPausedIds(prev => ({ ...prev, [id]: true }));
+                }
               });
-            }
+            };
+            tryPlay();
           } else {
             video.pause();
           }
         });
       },
-      { root: c, threshold: [0, 0.6, 1] }
+      { root: c, threshold: [0.6] }
     );
     const nodes = c.querySelectorAll('[data-idx]');
     nodes.forEach(n => io.observe(n));
@@ -140,9 +173,16 @@ export default function ShortsPage() {
       )}
 
       <div ref={containerRef}
+        style={{
+          scrollBehavior: 'smooth',
+          overscrollBehavior: 'contain',
+          WebkitOverflowScrolling: 'touch',
+          scrollSnapType: 'y mandatory',
+        }}
         className="h-full overflow-y-scroll snap-y snap-mandatory">
         {posts.map((p, i) => (
           <section key={p._id} data-idx={i} data-postid={p._id}
+            style={{ scrollSnapStop: 'always', scrollSnapAlign: 'start' }}
             className="relative h-[100dvh] w-full snap-start flex items-center justify-center bg-black">
             {p.videoUrl && (
               <video ref={el => { videoRefs.current[i] = el; }}
@@ -163,7 +203,19 @@ export default function ShortsPage() {
               <button
                 onClick={() => {
                   const v = videoRefs.current[i];
-                  if (v) { v.muted = true; setMuted(true); v.play().catch(() => {}); }
+                  if (!v) return;
+                  // A tap counts as a user gesture — try to honor the user's
+                  // current sound preference. Fall back to muted only if the
+                  // browser still refuses.
+                  v.muted = muted;
+                  const p1 = v.play();
+                  if (p1 && typeof p1.then === 'function') {
+                    p1.catch(() => {
+                      v.muted = true;
+                      setMuted(true);
+                      v.play().catch(() => {});
+                    });
+                  }
                 }}
                 className="absolute inset-0 z-10 flex items-center justify-center bg-black/20">
                 <div className="w-16 h-16 rounded-full bg-white/90 text-black flex items-center justify-center shadow-lg">
