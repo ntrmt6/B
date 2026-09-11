@@ -2,15 +2,18 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { social, SocialPost, socialTimeAgo } from '@/lib/socialApi';
-import { Heart, MessageCircle, Share2, ChevronLeft, Plus, Volume2, VolumeX, Home, Video as VideoIcon, User as UserIcon, Play } from 'lucide-react';
+import { Heart, MessageCircle, Share2, ChevronLeft, Plus, Volume2, VolumeX, Home, Video as VideoIcon, User as UserIcon, Play, LogIn } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Avatar } from '../SocialShell';
 import PostComposer from '../PostComposer';
 
 export default function ShortsPage() {
-  const { user, loading: authLoading } = useAuth();
+  const { user } = useAuth();
+  const router = useRouter();
+  const isGuest = !user;
   const [posts, setPosts] = useState<SocialPost[]>([]);
   const [muted, setMuted] = useState(true);
   const [showComposer, setShowComposer] = useState(false);
@@ -18,6 +21,11 @@ export default function ShortsPage() {
   const [pausedIds, setPausedIds] = useState<Record<string, boolean>>({});
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
+
+  function requireLogin(action: string) {
+    toast(`${action} করতে সাইন-ইন করুন`, { icon: '🔒' });
+    router.push('/login');
+  }
 
   const load = useCallback(async () => {
     try {
@@ -27,10 +35,6 @@ export default function ShortsPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
-
-  useEffect(() => {
-    if (!authLoading && !user && typeof window !== 'undefined') window.location.href = '/login';
-  }, [user, authLoading]);
 
   useEffect(() => {
     const c = containerRef.current;
@@ -64,6 +68,7 @@ export default function ShortsPage() {
   }, [posts]);
 
   async function like(post: SocialPost) {
+    if (isGuest) return requireLogin('Like');
     const idx = posts.findIndex(p => p._id === post._id);
     if (idx < 0) return;
     const prev = posts[idx];
@@ -81,6 +86,7 @@ export default function ShortsPage() {
     try {
       if ((navigator as any).share) await (navigator as any).share({ url });
       else { await navigator.clipboard.writeText(url); toast.success('Link copied'); }
+      if (isGuest) return;
       await social.share(post._id);
     } catch {}
   }
@@ -99,11 +105,18 @@ export default function ShortsPage() {
           className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40">
           {muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
         </button>
-        <button onClick={() => setShowComposer(true)}
-          title="Post a new short / নতুন শর্ট পোস্ট করুন" aria-label="Post a new short"
-          className="w-9 h-9 flex items-center justify-center rounded-full bg-white text-black">
-          <Plus size={18} />
-        </button>
+        {isGuest ? (
+          <Link href="/login" title="Sign in / সাইন-ইন" aria-label="Sign in"
+            className="flex items-center gap-1 px-3 h-9 rounded-full bg-white text-black text-[12px] font-semibold">
+            <LogIn size={14} /> Sign in
+          </Link>
+        ) : (
+          <button onClick={() => setShowComposer(true)}
+            title="Post a new short / নতুন শর্ট পোস্ট করুন" aria-label="Post a new short"
+            className="w-9 h-9 flex items-center justify-center rounded-full bg-white text-black">
+            <Plus size={18} />
+          </button>
+        )}
       </div>
 
       {posts.length === 0 && (
@@ -112,10 +125,17 @@ export default function ShortsPage() {
           <div className="text-[12px] mb-4 text-white/60 max-w-xs">
             ছোট ভিডিও শেয়ার করুন — কাস্টমার আপনার দোকান/পণ্য দেখতে পাবে।
           </div>
-          <button onClick={() => setShowComposer(true)}
-            className="px-5 py-2 rounded-full bg-white text-black text-[13px] font-semibold flex items-center gap-1.5">
-            <Plus size={15} /> প্রথম শর্ট পোস্ট করুন
-          </button>
+          {isGuest ? (
+            <Link href="/login"
+              className="px-5 py-2 rounded-full bg-white text-black text-[13px] font-semibold flex items-center gap-1.5">
+              <LogIn size={15} /> সাইন-ইন করে শুরু করুন
+            </Link>
+          ) : (
+            <button onClick={() => setShowComposer(true)}
+              className="px-5 py-2 rounded-full bg-white text-black text-[13px] font-semibold flex items-center gap-1.5">
+              <Plus size={15} /> প্রথম শর্ট পোস্ট করুন
+            </button>
+          )}
         </div>
       )}
 

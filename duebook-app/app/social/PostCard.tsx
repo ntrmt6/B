@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Heart, MessageCircle, Share2, MoreHorizontal, Trash2, Send } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { social, socialTimeAgo, SocialPost, SocialComment } from '@/lib/socialApi';
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export default function PostCard({ post, currentUserId, onDelete, onChange }: Props) {
+  const router = useRouter();
   const [liked, setLiked] = useState(!!post.liked);
   const [likeCount, setLikeCount] = useState(post.likeCount);
   const [showComments, setShowComments] = useState(false);
@@ -25,9 +27,16 @@ export default function PostCard({ post, currentUserId, onDelete, onChange }: Pr
   const [replyText, setReplyText] = useState('');
   const [showMenu, setShowMenu] = useState(false);
 
+  const isGuest = !currentUserId;
   const canDelete = currentUserId && String(currentUserId) === String(post.authorId);
 
+  function requireLogin(action: string) {
+    toast(`${action} করতে সাইন-ইন করুন`, { icon: '🔒' });
+    router.push('/login');
+  }
+
   async function toggleLike() {
+    if (isGuest) return requireLogin('Like');
     const prevLiked = liked;
     const prevCount = likeCount;
     setLiked(!prevLiked);
@@ -60,6 +69,7 @@ export default function PostCard({ post, currentUserId, onDelete, onChange }: Pr
   }
 
   async function submitComment() {
+    if (isGuest) return requireLogin('Comment');
     const text = newComment.trim();
     if (!text) return;
     try {
@@ -71,6 +81,7 @@ export default function PostCard({ post, currentUserId, onDelete, onChange }: Pr
   }
 
   async function submitReply(parentId: string) {
+    if (isGuest) return requireLogin('Reply');
     const text = replyText.trim();
     if (!text) return;
     try {
@@ -100,6 +111,7 @@ export default function PostCard({ post, currentUserId, onDelete, onChange }: Pr
         await navigator.clipboard.writeText(url);
         toast.success('Link copied');
       }
+      if (isGuest) return; // don't bump counter as guest — endpoint requires auth
       const r = await social.share(post._id);
       onChange?.({ ...post, shareCount: r.shareCount });
     } catch { /* user cancel */ }
@@ -241,16 +253,25 @@ export default function PostCard({ post, currentUserId, onDelete, onChange }: Pr
             ))}
           </ul>
 
-          <div className="mt-3 flex gap-2">
-            <input value={newComment} onChange={e => setNewComment(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') submitComment(); }}
-              placeholder="Write a comment…"
-              className="flex-1 bg-gray-100 dark:bg-slate-800 rounded-full px-3 py-2 text-[13px] outline-none" />
-            <button onClick={submitComment}
-              className="w-9 h-9 flex items-center justify-center rounded-full bg-sky-500 text-white">
-              <Send size={14} />
-            </button>
-          </div>
+          {isGuest ? (
+            <div className="mt-3">
+              <button onClick={() => requireLogin('Comment')}
+                className="w-full text-left bg-gray-100 dark:bg-slate-800 rounded-full px-3 py-2 text-[13px] text-gray-500 dark:text-slate-400">
+                Sign in to comment…
+              </button>
+            </div>
+          ) : (
+            <div className="mt-3 flex gap-2">
+              <input value={newComment} onChange={e => setNewComment(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') submitComment(); }}
+                placeholder="Write a comment…"
+                className="flex-1 bg-gray-100 dark:bg-slate-800 rounded-full px-3 py-2 text-[13px] outline-none" />
+              <button onClick={submitComment}
+                className="w-9 h-9 flex items-center justify-center rounded-full bg-sky-500 text-white">
+                <Send size={14} />
+              </button>
+            </div>
+          )}
         </div>
       )}
     </article>

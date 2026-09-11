@@ -6,7 +6,7 @@ import fs from 'fs';
 import { randomUUID } from 'crypto';
 import { z } from 'zod';
 import { env } from '../config/env';
-import { authenticateToken } from '../middleware/auth';
+import { authenticateToken, optionalAuth } from '../middleware/auth';
 import { User } from '../models/User';
 import { SocialPost } from '../models/SocialPost';
 import { SocialComment } from '../models/SocialComment';
@@ -43,7 +43,24 @@ duebookSocialRouter.post('/upload', authenticateToken, socialUpload.single('file
   res.json({ url, mimeType: req.file.mimetype, size: req.file.size });
 });
 
-duebookSocialRouter.use(authenticateToken);
+// Public reads run through optionalAuth (populates req.userId if a valid token
+// is sent, else proceeds as guest). Everything else falls through to
+// authenticateToken. Anyone can browse the feed and individual posts, but writes
+// (like, comment, post, share, follow, message) still require login.
+duebookSocialRouter.use(optionalAuth);
+duebookSocialRouter.use((req, res, next) => {
+  if (req.method === 'GET') {
+    const p = req.path;
+    const publicGet =
+      p === '/feed' ||
+      (/^\/posts\/[^/]+$/.test(p)) ||
+      (/^\/posts\/[^/]+\/comments$/.test(p)) ||
+      (/^\/profile\/[^/]+$/.test(p) && p !== '/profile/me') ||
+      (/^\/profile\/[^/]+\/posts$/.test(p));
+    if (publicGet) return next();
+  }
+  return authenticateToken(req, res, next);
+});
 
 const toObjectId = (id: string) => new mongoose.Types.ObjectId(id);
 const isValidId = (id: string) => mongoose.isValidObjectId(id);

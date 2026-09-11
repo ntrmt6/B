@@ -31,7 +31,13 @@ export default function UserProfilePage() {
     load();
   }, [id, load, router, user]);
 
+  function requireLogin(action: string) {
+    toast(`${action} করতে সাইন-ইন করুন`, { icon: '🔒' });
+    router.push('/login');
+  }
+
   async function toggleFollow() {
+    if (!user) return requireLogin('Follow');
     if (!prof) return;
     setBusy(true);
     try {
@@ -42,6 +48,7 @@ export default function UserProfilePage() {
   }
 
   async function startChat() {
+    if (!user) return requireLogin('Message');
     if (!prof) return;
     try {
       const c = await social.startConversation(prof._id);

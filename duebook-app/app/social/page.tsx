@@ -1,13 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { social, SocialPost } from '@/lib/socialApi';
 import SocialShell from './SocialShell';
 import PostComposer from './PostComposer';
 import PostCard from './PostCard';
 import toast from 'react-hot-toast';
-import { Loader2, RefreshCw, X, Sparkles } from 'lucide-react';
+import { Loader2, RefreshCw, X, Sparkles, LogIn } from 'lucide-react';
 
 const WELCOME_KEY = 'duebook_social_welcome_v1';
 
@@ -75,7 +76,7 @@ export default function SocialFeedPage() {
         </button>
       }
     >
-      {showWelcome && (
+      {showWelcome && user && (
         <div className="mx-3 mt-2 mb-1 rounded-xl bg-gradient-to-br from-sky-50 to-indigo-50 dark:from-sky-950/40 dark:to-indigo-950/40 border border-sky-200 dark:border-sky-900 p-3 relative">
           <button onClick={dismissWelcome} aria-label="Dismiss welcome"
             className="absolute top-1.5 right-1.5 w-6 h-6 flex items-center justify-center rounded-full text-gray-400 hover:bg-white/60">
@@ -92,7 +93,34 @@ export default function SocialFeedPage() {
           </div>
         </div>
       )}
-      <PostComposer onCreated={onCreated} authorName={user?.name} authorImage={(user as any)?.image} />
+      {!user && (
+        <div className="mx-3 mt-2 mb-1 rounded-xl bg-gradient-to-br from-sky-50 to-indigo-50 dark:from-sky-950/40 dark:to-indigo-950/40 border border-sky-200 dark:border-sky-900 p-3">
+          <div className="flex items-start gap-2">
+            <div className="w-8 h-8 rounded-lg bg-sky-500 text-white flex items-center justify-center shrink-0">
+              <Sparkles size={15} />
+            </div>
+            <div className="flex-1">
+              <div className="font-bold text-[13px] text-sky-700 dark:text-sky-300">
+                DueBook Social এ স্বাগতম!
+              </div>
+              <div className="text-[12px] leading-relaxed text-gray-700 dark:text-slate-200 mt-0.5">
+                ফিড ঘুরে দেখুন — <b>like</b>, <b>comment</b> বা পোস্ট করতে সাইন-ইন করুন।
+              </div>
+              <div className="mt-2 flex gap-2">
+                <Link href="/login"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-[12px] font-semibold">
+                  <LogIn size={13} /> Sign in
+                </Link>
+                <Link href="/register"
+                  className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-sky-200 dark:border-slate-700 text-sky-700 dark:text-sky-300 text-[12px] font-semibold">
+                  Create account
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      {user && <PostComposer onCreated={onCreated} authorName={user?.name} authorImage={(user as any)?.image} />}
       {loading && (
         <div className="py-10 flex justify-center"><Loader2 size={22} className="animate-spin text-sky-500" /></div>
       )}

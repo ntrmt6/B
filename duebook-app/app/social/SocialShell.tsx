@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { ReactNode, useEffect } from 'react';
-import { Home, Video, MessageCircle, User, ChevronLeft, UserPlus } from 'lucide-react';
+import { Home, Video, MessageCircle, User, ChevronLeft, UserPlus, LogIn } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 interface Props {
@@ -12,16 +12,27 @@ interface Props {
   back?: string;
   right?: ReactNode;
   hideNav?: boolean;
+  requireAuth?: boolean;
 }
 
-export default function SocialShell({ children, title = 'DueBook Social', back, right, hideNav }: Props) {
+// Routes that guests can browse without logging in.
+const PUBLIC_ROUTES = [
+  /^\/social\/?$/,
+  /^\/social\/shorts(\/|$)/,
+  /^\/social\/post\/[^/]+$/,
+  /^\/social\/profile\/[^/]+$/,
+];
+
+export default function SocialShell({ children, title = 'DueBook Social', back, right, hideNav, requireAuth }: Props) {
   const pathname = usePathname();
   const router = useRouter();
   const { user, loading } = useAuth();
 
+  const isPublic = requireAuth ? false : PUBLIC_ROUTES.some(r => r.test(pathname || ''));
+
   useEffect(() => {
-    if (!loading && !user) router.replace('/login');
-  }, [user, loading, router]);
+    if (!loading && !user && !isPublic) router.replace('/login');
+  }, [user, loading, router, isPublic]);
 
   const items = [
     { href: '/social', label: 'Feed', icon: Home, match: (p: string) => p === '/social' || p === '/social/' },
@@ -50,6 +61,15 @@ export default function SocialShell({ children, title = 'DueBook Social', back, 
           )}
           <h1 className="text-[15px] font-semibold flex-1 truncate">{title}</h1>
           {right}
+          {!loading && !user && (
+            <Link href="/login"
+              title="Sign in to interact / সাইন-ইন করুন"
+              aria-label="Sign in"
+              className="ml-1 flex items-center gap-1 px-2.5 py-1 rounded-lg bg-sky-500 hover:bg-sky-600 text-white text-[12px] font-semibold">
+              <LogIn size={13} />
+              <span>Sign in</span>
+            </Link>
+          )}
         </div>
       </header>
       <main className={`mx-auto max-w-xl px-0 pb-24 ${hideNav ? '' : 'pt-1'}`}>{children}</main>
