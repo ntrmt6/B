@@ -17,7 +17,7 @@ import {
   Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon, CloudOff, Send, Bell,
   MessageSquare, Copy, Users, Upload, ClipboardPaste, Check, Pin, PinOff, ShieldCheck, Camera,
   Lock, Unlock, Package, Menu, ArrowUpDown, Clock, Calculator as CalcIcon, Sparkles, Delete,
-  Wind, Zap, MessageSquareQuote, Compass,
+  Wind, Zap, MessageSquareQuote, Compass, Trophy,
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import SyncBar from './SyncBar';
@@ -858,6 +858,18 @@ export default function DueBookPage() {
   const [bulkSelected, setBulkSelected] = useState<Set<string>>(new Set());
   const [bulkSentIds, setBulkSentIds] = useState<Set<string>>(new Set());
 
+  /* Customer of the Month */
+  interface TopCustomer { _id: string; name: string; phone: string; totalPaid: number; txCount: number; lastPayment?: string; }
+  const [showTopCust, setShowTopCust] = useState(false);
+  const [topCustLoading, setTopCustLoading] = useState(false);
+  const [topCustSending, setTopCustSending] = useState(false);
+  const [topCustList, setTopCustList] = useState<TopCustomer[]>([]);
+  const [topCustMin, setTopCustMin] = useState<number>(1000);
+  const [topCustPeriod, setTopCustPeriod] = useState<'month' | 'all'>('month');
+  const [topCustReward, setTopCustReward] = useState<string>('একটি ফ্রি উপহার');
+  const [topCustSelected, setTopCustSelected] = useState<Set<string>>(new Set());
+  const [topCustSentIds, setTopCustSentIds] = useState<Set<string>>(new Set());
+
   /* dark mode */
   const [isDark, setIsDark] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -1084,6 +1096,7 @@ export default function DueBookPage() {
   useEffect(() => {
     const onPop = () => {
       if (showImport) { setShowImport(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
+      if (showTopCust) { setShowTopCust(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showBulk) { setShowBulk(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showTplPreview) { setShowTplPreview(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
       if (showTplEditor) { setShowTplEditor(false); window.history.pushState({ duebook: 'modal' }, ''); return; }
@@ -1101,7 +1114,7 @@ export default function DueBookPage() {
     };
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, [showAdd, showAddEntity, showCatalog, showSettings, showInventory, showEditEntity, showCalc, showAiChat, showCoach, selected, showTplPicker, showTplEditor, showTplPreview, showBulk, showImport]);
+  }, [showAdd, showAddEntity, showCatalog, showSettings, showInventory, showEditEntity, showCalc, showAiChat, showCoach, selected, showTplPicker, showTplEditor, showTplPreview, showBulk, showImport, showTopCust]);
 
   const loadTx = useCallback(async (entity: Entity) => {
     if (!tenantId) return;
@@ -1617,6 +1630,84 @@ export default function DueBookPage() {
     if (!href) { toast.error('No phone'); return; }
     window.open(href, '_blank', 'noopener,noreferrer');
     setBulkSentIds(prev => new Set(prev).add(e._id));
+  };
+
+  /* ─── Customer of the Month helpers ─── */
+  const buildTopCustMessage = (c: TopCustomer) => {
+    const shop = (regSettings.shopName || '').trim() || 'আমাদের দোকান';
+    const gift = (topCustReward || '').trim() || 'একটি ফ্রি উপহার';
+    const periodBn = topCustPeriod === 'month' ? 'এই মাসের' : 'সেরা';
+    return `প্রিয় ${c.name}, ${shop}-এর ${periodBn} সেরা কাস্টমার হিসেবে আপনি নির্বাচিত হয়েছেন! উপহার: ${gift}। ধন্যবাদ। - ${shop}`;
+  };
+  const loadTopCust = useCallback(async () => {
+    if (!tenantId) return;
+    setTopCustLoading(true);
+    try {
+      const r = await api.get('/duebook/top-customers', {
+        headers: { 'X-Tenant-Id': tenantId },
+        params: { minAmount: topCustMin, period: topCustPeriod },
+      });
+      const list: TopCustomer[] = Array.isArray(r.data?.customers) ? r.data.customers : [];
+      setTopCustList(list);
+      setTopCustSelected(new Set(list.filter(c => c.phone).map(c => c._id)));
+      setTopCustSentIds(new Set());
+    } catch (e) {
+      const err = e as { response?: { data?: { error?: string } }; message?: string };
+      toast.error(err?.response?.data?.error || err?.message || 'Failed to load');
+    } finally {
+      setTopCustLoading(false);
+    }
+  }, [tenantId, topCustMin, topCustPeriod]);
+  const openTopCust = () => {
+    setShowMenu(false);
+    setShowTopCust(true);
+    window.history.pushState({ duebook: 'modal' }, '');
+    loadTopCust();
+  };
+  const toggleTopCust = (id: string) => {
+    setTopCustSelected(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      return n;
+    });
+  };
+  const sendTopCustSMS = async (only?: TopCustomer) => {
+    if (!tenantId) { toast.error('Not signed in'); return; }
+    const targets: TopCustomer[] = only
+      ? [only]
+      : topCustList.filter(c => topCustSelected.has(c._id) && c.phone && !topCustSentIds.has(c._id));
+    if (targets.length === 0) { toast.error('No recipients selected'); return; }
+    if (!topCustReward.trim()) { toast.error('Free item লিখুন'); return; }
+    setTopCustSending(true);
+    try {
+      let ok = 0;
+      let fail = 0;
+      for (const c of targets) {
+        try {
+          const res = await api.post(
+            '/sms/send',
+            {
+              recipients: [{ phone: c.phone, name: c.name }],
+              message: buildTopCustMessage(c),
+            },
+            { headers: { 'X-Tenant-Id': tenantId } },
+          );
+          if (res.data?.success && (res.data?.sentCount ?? 0) > 0) {
+            ok++;
+            setTopCustSentIds(prev => new Set(prev).add(c._id));
+          } else {
+            fail++;
+          }
+        } catch {
+          fail++;
+        }
+      }
+      if (ok > 0 && fail === 0) toast.success(`SMS পাঠানো হয়েছে (${ok})`);
+      else if (ok > 0) toast(`পাঠানো: ${ok} · ব্যর্থ: ${fail}`, { icon: '⚠️' });
+      else toast.error('SMS পাঠাতে ব্যর্থ — SMS config দেখুন');
+    } finally {
+      setTopCustSending(false);
+    }
   };
 
   /* ─── Named list helpers ─── */
@@ -2394,6 +2485,10 @@ export default function DueBookPage() {
                         ? <span className="w-3.5 h-3.5 border-2 border-gray-400 border-t-transparent rounded-full animate-spin" />
                         : <Download size={14} className="text-gray-500 dark:text-slate-400" />}
                       {exporting ? 'Exporting…' : 'Export PDF'}
+                    </button>
+                    <button onClick={openTopCust}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700">
+                      <Trophy size={14} className="text-amber-500" /> Customer of the Month
                     </button>
                     <button onClick={() => { setShowMenu(false); openBulk(); }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700">
@@ -4569,6 +4664,155 @@ export default function DueBookPage() {
             <div className="flex-shrink-0 px-4 pt-2 pb-5 text-center">
               <p className="text-[10px] text-gray-400 dark:text-slate-500">
                 WhatsApp only allows one message per tap — send one at a time and come back for the next.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════
+          CUSTOMER OF THE MONTH SHEET
+          ══════════════════════════════════════ */}
+      {showTopCust && (
+        <div className="absolute inset-0 z-[66] flex flex-col justify-end" onClick={() => setShowTopCust(false)}>
+          <div className="absolute inset-0 bg-black/40" />
+          <div className="relative bg-white dark:bg-slate-800 rounded-t-2xl shadow-2xl z-10 sheet-slide-up flex flex-col max-h-[92dvh]" onClick={e => e.stopPropagation()}>
+            <div className="flex-shrink-0 flex justify-center pt-2 pb-1">
+              <div className="w-9 h-1 bg-gray-300 dark:bg-slate-600 rounded-full" />
+            </div>
+            <div className="flex-shrink-0 flex items-center justify-between px-4 pb-2 pt-1">
+              <h3 className="text-[14px] font-bold text-gray-900 dark:text-slate-100 flex items-center gap-1.5">
+                <Trophy size={14} className="text-amber-500" /> Customer of the Month
+              </h3>
+              <button onClick={() => setShowTopCust(false)} className="w-6 h-6 flex items-center justify-center">
+                <X size={15} className="text-gray-400 dark:text-slate-500" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-4 pb-2 space-y-3">
+              {/* Threshold + period */}
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 block mb-1">Min Paid (Tk)</label>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    value={topCustMin}
+                    onChange={e => setTopCustMin(Math.max(0, Number(e.target.value) || 0))}
+                    className="w-full border border-gray-200 dark:border-slate-600 rounded-lg px-2.5 py-2 text-[13px] bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 block mb-1">Period</label>
+                  <select
+                    value={topCustPeriod}
+                    onChange={e => setTopCustPeriod(e.target.value as 'month' | 'all')}
+                    className="w-full border border-gray-200 dark:border-slate-600 rounded-lg px-2.5 py-2 text-[13px] bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400">
+                    <option value="month">This Month</option>
+                    <option value="all">All Time</option>
+                  </select>
+                </div>
+              </div>
+              <button
+                onClick={loadTopCust}
+                disabled={topCustLoading}
+                className="w-full py-1.5 rounded-lg bg-sky-500 text-white text-[12px] font-bold active:scale-[0.99] disabled:opacity-50">
+                {topCustLoading ? 'Loading…' : 'Refresh List'}
+              </button>
+
+              {/* Free reward selector */}
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 block mb-1">
+                  Free Gift (উপহার) — এটি SMS-এ যাবে
+                </label>
+                <input
+                  type="text"
+                  value={topCustReward}
+                  onChange={e => setTopCustReward(e.target.value)}
+                  placeholder="যেমন: 500 টাকার ছাড় / একটি ফ্রি চা"
+                  className="w-full border border-gray-200 dark:border-slate-600 rounded-lg px-2.5 py-2 text-[13px] bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 outline-none focus:border-amber-400"
+                />
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {['একটি ফ্রি চা', '৫০০ টাকার ছাড়', 'ফ্রি ডেলিভারি', 'একটি ফ্রি পণ্য', '১০% ডিসকাউন্ট'].map(preset => (
+                    <button key={preset} onClick={() => setTopCustReward(preset)}
+                      className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-400 border border-amber-200 dark:border-amber-800">
+                      {preset}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* SMS preview */}
+              <div className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 p-2.5">
+                <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide mb-1">SMS Preview (Bangla)</p>
+                <p className="text-[12px] text-gray-800 dark:text-slate-100 leading-relaxed whitespace-pre-wrap">
+                  {buildTopCustMessage({ _id: 'preview', name: 'রহিম', phone: '', totalPaid: 0, txCount: 0 })}
+                </p>
+              </div>
+
+              {/* Recipients list */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">
+                    Recipients ({topCustList.length}) — {topCustSelected.size} selected, {topCustSentIds.size} sent
+                  </label>
+                  <button onClick={() => setTopCustSelected(new Set(topCustList.filter(c => c.phone).map(c => c._id)))}
+                    className="text-[10px] font-bold text-sky-500">Select All</button>
+                </div>
+                {topCustLoading ? (
+                  <p className="text-center text-[12px] text-gray-400 dark:text-slate-500 py-4">Loading…</p>
+                ) : topCustList.length === 0 ? (
+                  <p className="text-center text-[12px] text-gray-400 dark:text-slate-500 py-4">
+                    কোনো কাস্টমার Tk {topCustMin} পরিশোধ করেনি এই সময়ের মধ্যে।
+                  </p>
+                ) : (
+                  <div className="space-y-1">
+                    {topCustList.map(c => {
+                      const isSel = topCustSelected.has(c._id);
+                      const isSent = topCustSentIds.has(c._id);
+                      const noPhone = !c.phone;
+                      return (
+                        <div key={c._id} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 ${isSent ? 'bg-green-50 dark:bg-green-900/20' : 'bg-gray-50 dark:bg-slate-700'}`}>
+                          <button onClick={() => !noPhone && toggleTopCust(c._id)} disabled={noPhone}
+                            className="w-5 h-5 flex items-center justify-center shrink-0 disabled:opacity-40">
+                            {isSel
+                              ? <CheckCircle2 size={17} className="text-sky-500" />
+                              : <Circle size={17} className="text-gray-300 dark:text-slate-600" />}
+                          </button>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[12px] font-semibold text-gray-800 dark:text-slate-200 truncate">{c.name}</p>
+                            <p className="text-[10px] text-gray-500 dark:text-slate-400 truncate">
+                              {c.phone || 'No phone'} • Paid Tk {fmt(c.totalPaid)}
+                            </p>
+                          </div>
+                          <button
+                            onClick={() => sendTopCustSMS(c)}
+                            disabled={noPhone || isSent || topCustSending || !topCustReward.trim()}
+                            className={`shrink-0 px-2 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 ${
+                              isSent ? 'bg-green-500 text-white' : 'bg-sky-500 text-white disabled:opacity-40'
+                            } active:scale-95`}>
+                            {isSent ? <><Check size={11} /> Sent</> : <><Send size={11} /> SMS</>}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex-shrink-0 px-4 pt-2 pb-5 space-y-1.5">
+              <button
+                onClick={() => sendTopCustSMS()}
+                disabled={topCustSending || topCustSelected.size === 0 || !topCustReward.trim()}
+                className="w-full py-2.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[13px] font-bold active:scale-[0.99] disabled:opacity-50 flex items-center justify-center gap-1.5">
+                {topCustSending
+                  ? <><span className="w-3.5 h-3.5 border-2 border-white/70 border-t-transparent rounded-full animate-spin" /> Sending…</>
+                  : <><Send size={13} /> Send SMS to Selected ({topCustSelected.size})</>}
+              </button>
+              <p className="text-[10px] text-gray-400 dark:text-slate-500 text-center">
+                SMS charges apply — SMS config অ্যাক্টিভ থাকা লাগবে।
               </p>
             </div>
           </div>

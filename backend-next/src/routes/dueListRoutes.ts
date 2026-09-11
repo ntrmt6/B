@@ -296,6 +296,72 @@ router.put('/duebook/settings', async (req: Request, res: Response) => {
   }
 });
 
+// ============ CUSTOMER OF THE MONTH (top payers) ============
+
+// GET customers whose total INCOME-Paid >= minAmount in given period
+// Query: minAmount (default 1000), period ('month' | 'all', default 'month')
+router.get('/duebook/top-customers', async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantId(req);
+    if (!tenantId) return res.status(400).json({ error: 'Tenant ID is required' });
+
+    const minAmount = Math.max(0, Number(req.query.minAmount) || 1000);
+    const period = String(req.query.period || 'month');
+
+    const match: any = { tenantId, direction: 'INCOME', status: 'Paid' };
+    if (period === 'month') {
+      const now = new Date();
+      const from = new Date(now.getFullYear(), now.getMonth(), 1);
+      const to = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+      match.transactionDate = { $gte: from, $lt: to };
+    }
+
+    const rows = await Transaction.aggregate([
+      { $match: match },
+      { $group: {
+        _id: '$entityId',
+        totalPaid: { $sum: '$amount' },
+        lastPayment: { $max: '$transactionDate' },
+        txCount: { $sum: 1 },
+      } },
+      { $match: { totalPaid: { $gte: minAmount } } },
+      { $sort: { totalPaid: -1 } },
+      { $limit: 500 },
+    ]);
+
+    const ids = rows.map(r => r._id).filter(Boolean);
+    const ents = await Entity.find({
+      tenantId,
+      _id: { $in: ids },
+      type: 'Customer',
+    })
+      .select('_id name phone type')
+      .lean();
+    const emap = new Map<string, any>(ents.map((e: any) => [String(e._id), e]));
+
+    const customers = rows
+      .map(r => {
+        const e = emap.get(String(r._id));
+        if (!e) return null;
+        return {
+          _id: String(e._id),
+          name: e.name,
+          phone: e.phone || '',
+          type: e.type,
+          totalPaid: r.totalPaid,
+          txCount: r.txCount,
+          lastPayment: r.lastPayment,
+        };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+
+    res.json({ period, minAmount, customers });
+  } catch (error) {
+    console.error('Error fetching top customers:', error);
+    res.status(500).json({ error: 'Error fetching top customers' });
+  }
+});
+
 // ============ TRANSACTION ENDPOINTS ============
 
 // GET transactions for an entity with date range filter
