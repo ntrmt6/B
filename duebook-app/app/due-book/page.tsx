@@ -869,6 +869,7 @@ export default function DueBookPage() {
   const [topCustReward, setTopCustReward] = useState<string>('একটি ফ্রি উপহার');
   const [topCustSelected, setTopCustSelected] = useState<Set<string>>(new Set());
   const [topCustSentIds, setTopCustSentIds] = useState<Set<string>>(new Set());
+  const [topCustChannel, setTopCustChannel] = useState<'whatsapp' | 'sms'>('whatsapp');
 
   /* dark mode */
   const [isDark, setIsDark] = useState(() => {
@@ -1670,6 +1671,14 @@ export default function DueBookPage() {
       if (n.has(id)) n.delete(id); else n.add(id);
       return n;
     });
+  };
+  const sendTopCustWA = (c: TopCustomer) => {
+    if (!topCustReward.trim()) { toast.error('Free item লিখুন'); return; }
+    if (!c.phone) { toast.error('No phone'); return; }
+    const href = waUrl(c.phone, buildTopCustMessage(c));
+    if (!href) { toast.error('Invalid phone'); return; }
+    window.open(href, '_blank', 'noopener,noreferrer');
+    setTopCustSentIds(prev => new Set(prev).add(c._id));
   };
   const sendTopCustSMS = async (only?: TopCustomer) => {
     if (!tenantId) { toast.error('Not signed in'); return; }
@@ -4725,10 +4734,40 @@ export default function DueBookPage() {
                 {topCustLoading ? 'Loading…' : 'Refresh List'}
               </button>
 
+              {/* Channel selector */}
+              <div>
+                <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 block mb-1">
+                  Send via
+                </label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <button onClick={() => setTopCustChannel('whatsapp')}
+                    className={`py-1.5 rounded-lg text-[12px] font-bold border-2 flex items-center justify-center gap-1.5 transition ${
+                      topCustChannel === 'whatsapp'
+                        ? 'border-green-500 bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                        : 'border-gray-200 dark:border-slate-600 text-gray-400 dark:text-slate-500'
+                    }`}>
+                    <MessageCircle size={13} /> WhatsApp
+                  </button>
+                  <button onClick={() => setTopCustChannel('sms')}
+                    className={`py-1.5 rounded-lg text-[12px] font-bold border-2 flex items-center justify-center gap-1.5 transition ${
+                      topCustChannel === 'sms'
+                        ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/30 text-sky-700 dark:text-sky-400'
+                        : 'border-gray-200 dark:border-slate-600 text-gray-400 dark:text-slate-500'
+                    }`}>
+                    <MessageSquare size={13} /> SMS
+                  </button>
+                </div>
+                <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-1">
+                  {topCustChannel === 'whatsapp'
+                    ? 'WhatsApp: free, per-tenant — খুলে দেবে, আপনি Send চাপবেন। এক এক করে পাঠাতে হবে।'
+                    : 'SMS: SMS gateway লাগবে (Settings → SMS Config)।'}
+                </p>
+              </div>
+
               {/* Free reward selector */}
               <div>
                 <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 block mb-1">
-                  Free Gift (উপহার) — এটি SMS-এ যাবে
+                  Free Gift (উপহার) — এটি মেসেজে যাবে
                 </label>
                 <input
                   type="text"
@@ -4747,9 +4786,11 @@ export default function DueBookPage() {
                 </div>
               </div>
 
-              {/* SMS preview */}
+              {/* Message preview */}
               <div className="rounded-lg bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-100 dark:border-emerald-800 p-2.5">
-                <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide mb-1">SMS Preview (Bangla)</p>
+                <p className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wide mb-1">
+                  {topCustChannel === 'whatsapp' ? 'WhatsApp' : 'SMS'} Preview (Bangla)
+                </p>
                 <p className="text-[12px] text-gray-800 dark:text-slate-100 leading-relaxed whitespace-pre-wrap">
                   {buildTopCustMessage({ _id: 'preview', name: 'রহিম', phone: '', totalPaid: 0, txCount: 0 })}
                 </p>
@@ -4791,12 +4832,19 @@ export default function DueBookPage() {
                             </p>
                           </div>
                           <button
-                            onClick={() => sendTopCustSMS(c)}
+                            onClick={() => (topCustChannel === 'whatsapp' ? sendTopCustWA(c) : sendTopCustSMS(c))}
                             disabled={noPhone || isSent || topCustSending || !topCustReward.trim()}
                             className={`shrink-0 px-2 py-1 rounded-md text-[11px] font-bold flex items-center gap-1 ${
-                              isSent ? 'bg-green-500 text-white' : 'bg-sky-500 text-white disabled:opacity-40'
+                              isSent
+                                ? 'bg-green-500 text-white'
+                                : topCustChannel === 'whatsapp'
+                                  ? 'bg-green-500 text-white disabled:opacity-40'
+                                  : 'bg-sky-500 text-white disabled:opacity-40'
                             } active:scale-95`}>
-                            {isSent ? <><Check size={11} /> Sent</> : <><Send size={11} /> SMS</>}
+                            {isSent ? <><Check size={11} /> Sent</>
+                              : topCustChannel === 'whatsapp'
+                                ? <><MessageCircle size={11} /> WhatsApp</>
+                                : <><Send size={11} /> SMS</>}
                           </button>
                         </div>
                       );
@@ -4807,17 +4855,25 @@ export default function DueBookPage() {
             </div>
 
             <div className="flex-shrink-0 px-4 pt-2 pb-5 space-y-1.5">
-              <button
-                onClick={() => sendTopCustSMS()}
-                disabled={topCustSending || topCustSelected.size === 0 || !topCustReward.trim()}
-                className="w-full py-2.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[13px] font-bold active:scale-[0.99] disabled:opacity-50 flex items-center justify-center gap-1.5">
-                {topCustSending
-                  ? <><span className="w-3.5 h-3.5 border-2 border-white/70 border-t-transparent rounded-full animate-spin" /> Sending…</>
-                  : <><Send size={13} /> Send SMS to Selected ({topCustSelected.size})</>}
-              </button>
-              <p className="text-[10px] text-gray-400 dark:text-slate-500 text-center">
-                SMS charges apply — SMS config অ্যাক্টিভ থাকা লাগবে।
-              </p>
+              {topCustChannel === 'sms' ? (
+                <>
+                  <button
+                    onClick={() => sendTopCustSMS()}
+                    disabled={topCustSending || topCustSelected.size === 0 || !topCustReward.trim()}
+                    className="w-full py-2.5 rounded-lg bg-gradient-to-r from-amber-500 to-orange-500 text-white text-[13px] font-bold active:scale-[0.99] disabled:opacity-50 flex items-center justify-center gap-1.5">
+                    {topCustSending
+                      ? <><span className="w-3.5 h-3.5 border-2 border-white/70 border-t-transparent rounded-full animate-spin" /> Sending…</>
+                      : <><Send size={13} /> Send SMS to Selected ({topCustSelected.size})</>}
+                  </button>
+                  <p className="text-[10px] text-gray-400 dark:text-slate-500 text-center">
+                    SMS charges apply — SMS gateway config অ্যাক্টিভ থাকা লাগবে।
+                  </p>
+                </>
+              ) : (
+                <p className="text-[10px] text-gray-400 dark:text-slate-500 text-center">
+                  WhatsApp: প্রতি সারিতে বাটন চাপুন — একবারে একজন, তারপর ফিরে এসে পরেরটা।
+                </p>
+              )}
             </div>
           </div>
         </div>
