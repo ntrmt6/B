@@ -4,6 +4,8 @@ import path from 'path';
 import { Entity, IEntity } from '../models/Entity';
 import { Transaction, ITransaction } from '../models/Transaction';
 import { DueBookSettings } from '../models/DueBookSettings';
+import { SMSHistory } from '../models/SMSHistory';
+import { smsService } from '../services/smsService';
 import { authenticateToken, requireAdmin } from '../middleware/auth';
 
 const router = Router();
@@ -359,6 +361,62 @@ router.get('/duebook/top-customers', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error fetching top customers:', error);
     res.status(500).json({ error: 'Error fetching top customers' });
+  }
+});
+
+// POST send SMS from DueBook (bypasses shop-subscription gate; DueBook has self-tenancy).
+// Body: { recipients: [{ phone, name? }], message }
+router.post('/duebook/send-sms', async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantId(req);
+    if (!tenantId) return res.status(400).json({ error: 'Tenant ID is required' });
+
+    const { recipients, message } = req.body || {};
+    if (!Array.isArray(recipients) || recipients.length === 0) {
+      return res.status(400).json({ error: 'Recipients required' });
+    }
+    if (recipients.length > 200) {
+      return res.status(400).json({ error: 'Too many recipients (max 200)' });
+    }
+    if (typeof message !== 'string' || !message.trim()) {
+      return res.status(400).json({ error: 'Message required' });
+    }
+
+    const historyRecord = new SMSHistory({
+      tenantId,
+      recipients: recipients.map((r: any) => r.phone),
+      message,
+      type: 'sms',
+      status: 'pending',
+    });
+    await historyRecord.save();
+
+    const result = await smsService.sendSMS(tenantId, recipients, message);
+
+    historyRecord.status =
+      result.sentCount > 0 && result.failedCount > 0 ? 'partial'
+        : result.sentCount > 0 ? 'sent' : 'failed';
+    historyRecord.sentCount = result.sentCount;
+    historyRecord.failedCount = result.failedCount;
+    historyRecord.results = result.results.map((r, i) => ({
+      phone: recipients[i]?.phone || '',
+      success: r.success,
+      error: r.error,
+      messageId: r.messageId,
+    }));
+    await historyRecord.save();
+
+    const firstErr = result.results.find(r => !r.success)?.error;
+    res.json({
+      success: result.sentCount > 0,
+      sentCount: result.sentCount,
+      failedCount: result.failedCount,
+      historyId: historyRecord._id,
+      error: result.sentCount === 0 ? (firstErr || 'SMS failed') : undefined,
+    });
+  } catch (error: any) {
+    console.error('duebook send-sms error:', error);
+    res.status(500).json({ error: error?.message || 'Failed to send SMS' });
   }
 });
 

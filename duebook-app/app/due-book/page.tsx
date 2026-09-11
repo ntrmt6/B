@@ -1682,10 +1682,11 @@ export default function DueBookPage() {
     try {
       let ok = 0;
       let fail = 0;
+      let lastErr = '';
       for (const c of targets) {
         try {
           const res = await api.post(
-            '/sms/send',
+            '/duebook/send-sms',
             {
               recipients: [{ phone: c.phone, name: c.name }],
               message: buildTopCustMessage(c),
@@ -1697,14 +1698,17 @@ export default function DueBookPage() {
             setTopCustSentIds(prev => new Set(prev).add(c._id));
           } else {
             fail++;
+            if (res.data?.error) lastErr = res.data.error;
           }
-        } catch {
+        } catch (e) {
           fail++;
+          const err = e as { response?: { data?: { error?: string; message?: string } }; message?: string };
+          lastErr = err?.response?.data?.error || err?.response?.data?.message || err?.message || 'network error';
         }
       }
       if (ok > 0 && fail === 0) toast.success(`SMS পাঠানো হয়েছে (${ok})`);
-      else if (ok > 0) toast(`পাঠানো: ${ok} · ব্যর্থ: ${fail}`, { icon: '⚠️' });
-      else toast.error('SMS পাঠাতে ব্যর্থ — SMS config দেখুন');
+      else if (ok > 0) toast(`পাঠানো: ${ok} · ব্যর্থ: ${fail}${lastErr ? ' — ' + lastErr : ''}`, { icon: '⚠️' });
+      else toast.error(`SMS ব্যর্থ${lastErr ? ' — ' + lastErr : ' — SMS config দেখুন'}`);
     } finally {
       setTopCustSending(false);
     }
