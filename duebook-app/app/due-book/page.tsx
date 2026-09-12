@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo, useRef, memo } from 'react';
 import { useRouter } from 'next/navigation';
+import dynamic from 'next/dynamic';
 import { useAuth } from '@/context/AuthContext';
 import api from '@/lib/api';
 import {
@@ -19,10 +20,11 @@ import {
   Lock, Unlock, Package, Menu, ArrowUpDown, Clock, Calculator as CalcIcon, Sparkles, Delete,
   Wind, Zap, MessageSquareQuote, Compass, Trophy,
 } from 'lucide-react';
-import { QRCodeSVG } from 'qrcode.react';
 import SyncBar from './SyncBar';
 import ReminderInbox from './ReminderInbox';
-import InventoryModal from './InventoryModal';
+
+const InventoryModal = dynamic(() => import('./InventoryModal'), { ssr: false });
+const QRCodeSVG = dynamic(() => import('qrcode.react').then(m => m.QRCodeSVG), { ssr: false });
 
 /* ─── Types ─── */
 interface Entity {
@@ -935,12 +937,6 @@ export default function DueBookPage() {
   useEffect(() => { setSelectedTxIds(new Set()); }, [selected?._id]);
   const txListRef = useRef<HTMLDivElement>(null);
   const [exporting, setExporting] = useState(false);
-
-  /* pull-to-refresh */
-  const [pullDist, setPullDist] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
-  const pullStartY = useRef(0);
-  const PULL_THRESHOLD = 60;
 
   /* online/offline */
   const [isOnline, setIsOnline] = useState(true);
@@ -2029,30 +2025,6 @@ export default function DueBookPage() {
     } finally { setClaimingReward(false); }
   };
 
-  const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    if (selected || (txListRef.current?.scrollTop ?? 1) > 2) return;
-    pullStartY.current = e.touches[0].clientY;
-  }, [selected]);
-
-  const handleTouchMove = useCallback((e: React.TouchEvent) => {
-    if (!pullStartY.current) return;
-    const dist = e.touches[0].clientY - pullStartY.current;
-    if (dist > 0) setPullDist(Math.min(dist * 0.5, PULL_THRESHOLD + 20));
-    else pullStartY.current = 0;
-  }, []);
-
-  const handleTouchEnd = useCallback(async () => {
-    if (pullDist >= PULL_THRESHOLD && !refreshing) {
-      setRefreshing(true);
-      setPullDist(0);
-      await loadEntities();
-      setRefreshing(false);
-    } else {
-      setPullDist(0);
-    }
-    pullStartY.current = 0;
-  }, [pullDist, refreshing, loadEntities]);
-
   const handleExportPDF = async () => {
     if (!tenantId || exporting) return;
     setExporting(true);
@@ -2695,19 +2667,7 @@ export default function DueBookPage() {
       <div
         ref={txListRef}
         className="flex-1 overflow-y-auto scroll-view"
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
       >
-        {!selected && (pullDist > 0 || refreshing) && (
-          <div className="flex items-center justify-center" style={{ height: refreshing ? 48 : pullDist, overflow: 'hidden' }}>
-            <div
-              className={`ptr-spinner${refreshing ? ' spinning' : ''}`}
-              style={{ transform: refreshing ? undefined : `rotate(${pullDist * 4}deg)`, opacity: Math.min(pullDist / PULL_THRESHOLD, 1) }}
-            />
-          </div>
-        )}
-
         {/* Entity list */}
         {!selected && (
           loading ? (
@@ -3731,13 +3691,15 @@ export default function DueBookPage() {
       {/* ══════════════════════════════════════
           INVENTORY SHEET
           ══════════════════════════════════════ */}
-      <InventoryModal
-        open={showInventory}
-        onClose={() => setShowInventory(false)}
-        isDark={isDark}
-        entities={entities}
-        onSaleRecorded={() => { loadEntities(); if (selected) loadTx(selected); }}
-      />
+      {showInventory && (
+        <InventoryModal
+          open={showInventory}
+          onClose={() => setShowInventory(false)}
+          isDark={isDark}
+          entities={entities}
+          onSaleRecorded={() => { loadEntities(); if (selected) loadTx(selected); }}
+        />
+      )}
 
       {/* ══════════════════════════════════════
           SETTINGS SHEET

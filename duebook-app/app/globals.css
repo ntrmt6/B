@@ -13,10 +13,14 @@
 /* Prevent 300ms tap delay on all interactive elements in WebView */
 button, a, input, select, textarea { touch-action: manipulation; }
 
+html, body {
+  overscroll-behavior: none;
+  overscroll-behavior-y: none;
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   background: #f8fafc;
-  overscroll-behavior: none;
   /* Prevent text selection on long-press in WebView */
   -webkit-user-select: none;
   user-select: none;
@@ -28,7 +32,8 @@ input, textarea { -webkit-user-select: text; user-select: text; }
 /* Momentum scrolling for WebView — the single most impactful scroll fix */
 .scroll-view {
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
+  overscroll-behavior-y: none;
   scroll-behavior: smooth;
   /* GPU layer for buttery compositing */
   will-change: transform;
