@@ -2363,9 +2363,10 @@ export default function DueBookPage() {
   if (!user) return null;
 
   const canSave = cart.length > 0 ? cartTotal > 0 : !!addAmount;
+  const saveVerb = addDir === 'INCOME' ? 'Gave' : 'Got';
   const saveLabel = cart.length > 0
-    ? `Save  Tk ${cartTotal.toLocaleString('en-IN')}`
-    : addAmount ? `Save  Tk ${parseFloat(addAmount).toLocaleString('en-IN')}` : 'Save';
+    ? `Save ${saveVerb}  Tk ${cartTotal.toLocaleString('en-IN')}`
+    : addAmount ? `Save ${saveVerb}  Tk ${parseFloat(addAmount).toLocaleString('en-IN')}` : `Save ${saveVerb}`;
 
   return (
     <div className={`h-screen flex flex-col bg-gray-50 dark:bg-slate-900 max-w-sm mx-auto relative overflow-hidden${isDark ? ' dark' : ''}`}
@@ -2906,66 +2907,108 @@ export default function DueBookPage() {
               <div className="flex justify-center pt-2 pb-1">
                 <div className="w-9 h-1 bg-gray-300 dark:bg-slate-600 rounded-full" />
               </div>
-              <div className="flex items-center justify-between px-4 pb-2 pt-1">
-                <h3 className="text-[14px] font-bold text-gray-900 dark:text-slate-100">
-                  {addDir === 'INCOME' ? 'They Owe Me' : 'I Owe Them'}
-                </h3>
+              <div className="flex items-center justify-between px-4 pb-1 pt-1">
+                <div className="min-w-0 pr-2">
+                  <h3 className="text-[14px] font-bold text-gray-900 dark:text-slate-100 truncate">
+                    {selected?.name || 'Add Transaction'}
+                  </h3>
+                  {selected && (() => {
+                    const net = selected.totalOwedToMe - selected.totalIOweThemNumber;
+                    if (net > 0) return <p className="text-[11px] font-semibold text-green-600 dark:text-green-400">Will Get {fmt(net)}</p>;
+                    if (net < 0) return <p className="text-[11px] font-semibold text-red-600 dark:text-red-400">Will Give {fmt(-net)}</p>;
+                    return <p className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Settled</p>;
+                  })()}
+                </div>
                 <button onClick={() => setShowAdd(false)} className="w-6 h-6 flex items-center justify-center rounded-lg">
                   <X size={15} className="text-gray-400 dark:text-slate-500" />
                 </button>
               </div>
-              {/* direction toggle */}
-              <div className="flex gap-1.5 px-4 pb-3">
-                <button onClick={() => setAddDir('INCOME')}
-                  className={`flex-1 py-2 rounded-xl text-[13px] font-bold border-2 transition-all ${
-                    addDir === 'INCOME' ? 'bg-green-50 dark:bg-green-900/30 border-green-500 text-green-700 dark:text-green-400 shadow-sm' : 'border-gray-200 dark:border-slate-600 text-gray-400 dark:text-slate-500'
-                  }`}>
-                  <TrendingUp size={13} className="inline mr-1 -mt-0.5" />They Owe
-                </button>
-                <button onClick={() => setAddDir('EXPENSE')}
-                  className={`flex-1 py-2 rounded-xl text-[13px] font-bold border-2 transition-all ${
-                    addDir === 'EXPENSE' ? 'bg-red-50 dark:bg-red-900/30 border-red-500 text-red-700 dark:text-red-400 shadow-sm' : 'border-gray-200 dark:border-slate-600 text-gray-400 dark:text-slate-500'
-                  }`}>
-                  <TrendingDown size={13} className="inline mr-1 -mt-0.5" />I Owe
-                </button>
+              {/* Dual amount inputs — tap either box to enter that side */}
+              <div className="flex gap-2 px-4 pt-2 pb-2">
+                <label className={`flex-1 rounded-xl border-2 px-3 py-2 transition ${
+                  addDir === 'INCOME'
+                    ? 'border-green-400 bg-green-50 dark:bg-green-900/20'
+                    : 'border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700/40'
+                }`}>
+                  <span className="block text-[10px] font-bold tracking-wide text-green-600 dark:text-green-400">
+                    <TrendingUp size={10} className="inline -mt-0.5 mr-0.5" />GAVE (Tk)
+                  </span>
+                  <input type="number" inputMode="decimal"
+                    value={addDir === 'INCOME' ? addAmount : ''}
+                    onFocus={() => setAddDir('INCOME')}
+                    onChange={e => { setAddDir('INCOME'); setAddAmount(e.target.value); }}
+                    placeholder="0"
+                    className="w-full bg-transparent outline-none text-[18px] font-bold tabular-nums text-gray-900 dark:text-slate-100 placeholder:text-gray-300 dark:placeholder:text-slate-600"
+                  />
+                </label>
+                <label className={`flex-1 rounded-xl border-2 px-3 py-2 transition ${
+                  addDir === 'EXPENSE'
+                    ? 'border-red-400 bg-red-50 dark:bg-red-900/20'
+                    : 'border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700/40'
+                }`}>
+                  <span className="block text-[10px] font-bold tracking-wide text-red-600 dark:text-red-400">
+                    <TrendingDown size={10} className="inline -mt-0.5 mr-0.5" />GOT (Tk)
+                  </span>
+                  <input type="number" inputMode="decimal"
+                    value={addDir === 'EXPENSE' ? addAmount : ''}
+                    onFocus={() => { setAddDir('EXPENSE'); if (cart.length) setCart([]); }}
+                    onChange={e => { setAddDir('EXPENSE'); if (cart.length) setCart([]); setAddAmount(e.target.value); }}
+                    placeholder="0"
+                    className="w-full bg-transparent outline-none text-[18px] font-bold tabular-nums text-gray-900 dark:text-slate-100 placeholder:text-gray-300 dark:placeholder:text-slate-600"
+                  />
+                </label>
               </div>
+              {/* Quick-add chips for the active amount input */}
+              {cart.length === 0 && (
+                <div className="flex gap-1.5 px-4 pb-3 overflow-x-auto no-scrollbar">
+                  {[10, 20, 50, 100, 200, 500].map(chip => (
+                    <button key={chip}
+                      onClick={() => setAddAmount(v => String((parseFloat(v) || 0) + chip))}
+                      className="shrink-0 px-3 py-1 bg-sky-50 dark:bg-sky-900/30 border border-sky-200 dark:border-sky-800 rounded-full text-[11px] font-semibold text-sky-600 dark:text-sky-400 active:bg-sky-100 transition">
+                      +{chip}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Scrollable body */}
             <div className="flex-1 overflow-y-auto scroll-view px-4 pb-2 space-y-3">
 
-              {/* ── Quick-add item grid ── */}
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Quick Add</span>
-                  <button onClick={() => { setShowCatalog(true); window.history.pushState({ duebook: 'catalog' }, ''); }}
-                    className="text-[10px] text-sky-500 font-semibold">
-                    Edit items
-                  </button>
+              {/* ── Quick-add item grid (only for GAVE side) ── */}
+              {addDir === 'INCOME' && (
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-[11px] font-semibold text-gray-500 dark:text-slate-400">Quick Add</span>
+                    <button onClick={() => { setShowCatalog(true); window.history.pushState({ duebook: 'catalog' }, ''); }}
+                      className="text-[10px] text-sky-500 font-semibold">
+                      Edit items
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {sortedCatalog.map(item => {
+                      const inCart = cart.find(c => c.item.id === item.id);
+                      return (
+                        <button key={item.id} onClick={() => addToCart(item)}
+                          className={`flex flex-col items-center justify-center py-2.5 rounded-xl border-2 transition active:scale-95 ${
+                            inCart
+                              ? 'border-sky-400 bg-sky-50 dark:bg-sky-900/30'
+                              : 'border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700'
+                          }`}>
+                          <span className="text-[13px] font-bold text-gray-800 dark:text-slate-200">{item.name}</span>
+                          <span className="text-[10px] text-gray-400 dark:text-slate-500">Tk {item.price}</span>
+                          {inCart && (
+                            <span className="text-[10px] font-bold text-sky-600 mt-0.5 bg-sky-100 dark:bg-sky-900/40 px-1.5 rounded-full">×{inCart.qty}</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {sortedCatalog.map(item => {
-                    const inCart = cart.find(c => c.item.id === item.id);
-                    return (
-                      <button key={item.id} onClick={() => addToCart(item)}
-                        className={`flex flex-col items-center justify-center py-2.5 rounded-xl border-2 transition active:scale-95 ${
-                          inCart
-                            ? 'border-sky-400 bg-sky-50 dark:bg-sky-900/30'
-                            : 'border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-700'
-                        }`}>
-                        <span className="text-[13px] font-bold text-gray-800 dark:text-slate-200">{item.name}</span>
-                        <span className="text-[10px] text-gray-400 dark:text-slate-500">Tk {item.price}</span>
-                        {inCart && (
-                          <span className="text-[10px] font-bold text-sky-600 mt-0.5 bg-sky-100 dark:bg-sky-900/40 px-1.5 rounded-full">×{inCart.qty}</span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              )}
 
               {/* ── Cart summary ── */}
-              {cart.length > 0 && (
+              {addDir === 'INCOME' && cart.length > 0 && (
                 <div className="bg-sky-50 dark:bg-sky-900/30 border border-sky-100 dark:border-sky-800 rounded-xl px-3 py-2.5 space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[11px] font-bold text-sky-700 dark:text-sky-400">Cart</span>
@@ -2994,26 +3037,6 @@ export default function DueBookPage() {
                   <div className="border-t border-sky-200 dark:border-sky-800 pt-1.5 flex justify-between items-center">
                     <span className="text-[12px] font-bold text-sky-700 dark:text-sky-400">Total</span>
                     <span className="text-[15px] font-bold text-sky-700 dark:text-sky-400 tabular-nums">Tk {cartTotal.toLocaleString('en-IN')}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* ── Manual amount (when no cart items) ── */}
-              {cart.length === 0 && (
-                <div>
-                  <label className="text-[11px] font-semibold text-gray-500 dark:text-slate-400 block mb-1">Amount (Tk) *</label>
-                  <input type="number" inputMode="decimal" value={addAmount}
-                    onChange={e => setAddAmount(e.target.value)} placeholder="0.00"
-                    className="w-full border-2 border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2.5 text-[22px] font-bold tabular-nums text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400 transition"
-                  />
-                  <div className="flex gap-1.5 mt-2 overflow-x-auto pb-0.5 no-scrollbar">
-                    {[10, 20, 50, 100, 200].map(chip => (
-                      <button key={chip}
-                        onClick={() => setAddAmount(v => String((parseFloat(v) || 0) + chip))}
-                        className="shrink-0 px-3 py-1 bg-sky-50 dark:bg-sky-900/30 border border-sky-200 dark:border-sky-800 rounded-full text-[11px] font-semibold text-sky-600 dark:text-sky-400 active:bg-sky-100 transition">
-                        +{chip}
-                      </button>
-                    ))}
                   </div>
                 </div>
               )}
