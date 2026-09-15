@@ -6,14 +6,16 @@ import Link from 'next/link';
 import toast from 'react-hot-toast';
 import { useAuth } from '@/context/AuthContext';
 import {
-  MenuItemDoc, MenuSettingsDoc,
+  MenuItemDoc, MenuSettingsDoc, MenuExportDoc,
   listMenuItems, createMenuItem, updateMenuItem, deleteMenuItem, reorderMenuItems,
   getMenuSettings, saveMenuSettings, seedDefaultsIfNeeded,
+  listMenuExports, recordMenuExport, deleteMenuExport,
 } from '@/lib/menuApi';
-import { toBn, formatBdt } from '@/lib/bn';
+import { exportMenuPdf, exportMenuPng, shareOrDownload } from '@/lib/menuExport';
+import { toBn, formatBdt, formatBnDate, formatBnTime } from '@/lib/bn';
 import {
   ChevronLeft, Plus, Trash2, Pencil, Check, X, ArrowUp, ArrowDown, Eye, Settings as SettingsIcon,
-  Menu as MenuIcon, History, ToggleLeft, ToggleRight, Save,
+  Menu as MenuIcon, History, ToggleLeft, ToggleRight, Save, Download, Share2, FileText, ImageIcon,
 } from 'lucide-react';
 
 type Tab = 'items' | 'settings' | 'preview' | 'history';
@@ -194,14 +196,11 @@ export default function MenuBuilderPage() {
         )}
 
         {tab === 'preview' && (
-          <PreviewTab items={items} settings={settings} />
+          <PreviewTab items={items} settings={settings} tenantId={tenantId} />
         )}
 
         {tab === 'history' && (
-          <div className="text-center py-16 text-neutral-500">
-            <History size={40} className="mx-auto opacity-40 mb-2" />
-            <p>মেনু এক্সপোর্ট করলে এখানে হিস্ট্রি দেখাবে।</p>
-          </div>
+          <HistoryTab tenantId={tenantId} items={items} settings={settings} />
         )}
       </main>
     </div>
@@ -487,11 +486,169 @@ export function MenuPreview({ items, settings }: { items: MenuItemDoc[]; setting
   );
 }
 
-function PreviewTab({ items, settings }: { items: MenuItemDoc[]; settings: MenuSettingsDoc }) {
+function PreviewTab({ items, settings, tenantId }: { items: MenuItemDoc[]; settings: MenuSettingsDoc; tenantId: string | null }) {
+  const [busy, setBusy] = useState<null | 'a4' | 'a5' | 'png'>(null);
+
+  const doExport = async (kind: 'a4' | 'a5' | 'png') => {
+    if (!tenantId) return;
+    if (items.filter(i => i.available).length === 0) {
+      toast.error('কমপক্ষে একটি আইটেম চালু রাখুন');
+      return;
+    }
+    setBusy(kind);
+    try {
+      let blob: Blob;
+      let fileName: string;
+      let mime: string;
+      if (kind === 'png') {
+        ({ blob, fileName } = await exportMenuPng('menu-preview-card'));
+        mime = 'image/png';
+      } else {
+        ({ blob, fileName } = await exportMenuPdf({ items, settings, format: kind }));
+        mime = 'application/pdf';
+      }
+      const result = await shareOrDownload(blob, fileName, mime);
+      await recordMenuExport(tenantId, {
+        format: kind === 'a4' ? 'pdf-a4' : kind === 'a5' ? 'pdf-a5' : 'png',
+        fileName,
+        itemCount: items.filter(i => i.available).length,
+      }).catch(() => {});
+      toast.success(result === 'shared' ? 'শেয়ার হয়েছে' : 'ডাউনলোড হয়েছে');
+    } catch (e: any) {
+      toast.error(e?.message || 'এক্সপোর্ট ব্যর্থ');
+    } finally {
+      setBusy(null);
+    }
+  };
+
   return (
     <div className="space-y-3">
-      <p className="text-sm text-neutral-500 text-center">প্রিন্ট করার আগে চেক করে নিন</p>
+      <div className="grid grid-cols-3 gap-2">
+        <button
+          onClick={() => doExport('a4')}
+          disabled={!!busy}
+          className="flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
+        >
+          {busy === 'a4' ? <Spinner /> : <FileText size={16} />}
+          PDF A4
+        </button>
+        <button
+          onClick={() => doExport('a5')}
+          disabled={!!busy}
+          className="flex items-center justify-center gap-1.5 bg-emerald-500 hover:bg-emerald-600 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
+        >
+          {busy === 'a5' ? <Spinner /> : <FileText size={16} />}
+          PDF A5
+        </button>
+        <button
+          onClick={() => doExport('png')}
+          disabled={!!busy}
+          className="flex items-center justify-center gap-1.5 bg-sky-500 hover:bg-sky-600 text-white py-2.5 rounded-lg text-sm font-medium disabled:opacity-50"
+        >
+          {busy === 'png' ? <Spinner /> : <ImageIcon size={16} />}
+          PNG
+        </button>
+      </div>
+      <p className="text-xs text-neutral-500 text-center flex items-center justify-center gap-1"><Share2 size={12} /> Share শীট বা ডাউনলোড হবে</p>
       <MenuPreview items={items} settings={settings} />
+    </div>
+  );
+}
+
+function Spinner() {
+  return <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />;
+}
+
+/* ─────────────── History Tab ─────────────── */
+
+function HistoryTab({ tenantId, items, settings }: { tenantId: string | null; items: MenuItemDoc[]; settings: MenuSettingsDoc }) {
+  const [rows, setRows] = useState<MenuExportDoc[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      if (!tenantId) return;
+      try { setRows(await listMenuExports(tenantId)); }
+      catch { /* offline: leave empty */ }
+      finally { setLoading(false); }
+    })();
+  }, [tenantId]);
+
+  const reExport = async (row: MenuExportDoc) => {
+    if (!tenantId) return;
+    setBusy(row._id);
+    try {
+      let blob: Blob; let fileName: string; let mime: string;
+      if (row.format === 'png') {
+        ({ blob, fileName } = await exportMenuPng('menu-preview-card'));
+        mime = 'image/png';
+      } else {
+        const fmt = row.format === 'pdf-a5' ? 'a5' : 'a4';
+        ({ blob, fileName } = await exportMenuPdf({ items, settings, format: fmt }));
+        mime = 'application/pdf';
+      }
+      await shareOrDownload(blob, fileName, mime);
+      toast.success('আবার তৈরি হয়েছে');
+    } catch (e: any) {
+      toast.error(e?.message || 'ব্যর্থ');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const remove = async (row: MenuExportDoc) => {
+    if (!tenantId) return;
+    if (!confirm('হিস্ট্রি থেকে মুছবেন?')) return;
+    try {
+      await deleteMenuExport(tenantId, row._id);
+      setRows(prev => prev.filter(r => r._id !== row._id));
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || 'মোছা যায়নি');
+    }
+  };
+
+  const label = (f: MenuExportDoc['format']) => f === 'pdf-a4' ? 'PDF A4' : f === 'pdf-a5' ? 'PDF A5' : 'PNG';
+
+  if (loading) return <div className="text-center py-8 text-neutral-500">লোড হচ্ছে…</div>;
+  if (rows.length === 0) return (
+    <div className="text-center py-16 text-neutral-500">
+      <History size={40} className="mx-auto opacity-40 mb-2" />
+      <p>এখনো কোনো এক্সপোর্ট হয়নি।</p>
+    </div>
+  );
+  return (
+    <div>
+      {/* Hidden preview so PNG re-export can find the DOM node */}
+      <div className="absolute -left-[9999px] top-0 pointer-events-none opacity-0" aria-hidden>
+        <MenuPreview items={items} settings={settings} />
+      </div>
+      <ul className="space-y-2">
+        {rows.map(r => (
+          <li key={r._id} className="flex items-center gap-3 p-3 rounded-lg border border-neutral-200 dark:border-neutral-800">
+            <div className="flex-1 min-w-0">
+              <div className="font-medium truncate">{r.fileName}</div>
+              <div className="text-xs text-neutral-500">
+                {label(r.format)} · {formatBnDate(r.createdAt)} {formatBnTime(r.createdAt)} · {toBn(r.itemCount)} আইটেম
+              </div>
+            </div>
+            <button
+              onClick={() => reExport(r)}
+              disabled={busy === r._id}
+              className="p-2 text-sky-500 hover:bg-sky-50 dark:hover:bg-sky-900/30 rounded-lg disabled:opacity-50"
+              aria-label="আবার শেয়ার"
+              title="আবার শেয়ার"
+            >
+              {busy === r._id ? <span className="w-4 h-4 border-2 border-sky-500 border-t-transparent rounded-full animate-spin inline-block" /> : <Share2 size={16} />}
+            </button>
+            <button
+              onClick={() => remove(r)}
+              className="p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/30 rounded-lg"
+              aria-label="মুছুন"
+            ><Trash2 size={16} /></button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
