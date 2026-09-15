@@ -8,11 +8,12 @@ import { useAuth } from '@/context/AuthContext';
 import {
   ChevronLeft, Plus, Minus, Check, X, ShoppingCart, Trash2, Pencil,
   Clock, ChefHat, CheckCircle2, XCircle, User, Wallet, Smartphone, Package,
+  BarChart3, Coffee,
 } from 'lucide-react';
 import { listMenuItems, MenuItemDoc } from '@/lib/menuApi';
 import {
   listOrders, createOrderResilient, editOrder, updateOrderStatus,
-  drainOfflineOrders, offlineOrderCount,
+  drainOfflineOrders, offlineOrderCount, getDailySummary, DailySummary,
   OrderDoc, OrderItem, OrderPayment, OrderStatus, CreateOrderPayload,
 } from '@/lib/ordersApi';
 import { getEntitiesOffline } from '@/lib/offlineApi';
@@ -242,6 +243,7 @@ function OwnerScreen({ tenantId }: { tenantId: string }) {
       </header>
 
       <main className="max-w-3xl mx-auto px-3 py-3 space-y-4">
+        <DailySummaryCard tenantId={tenantId} today={today} />
         {editingId && (
           <div className="rounded-lg bg-amber-50 border border-amber-300 dark:bg-amber-900/20 dark:border-amber-700 px-3 py-2 text-sm flex items-center gap-2">
             <Pencil size={14} /> অর্ডার এডিট মোড
@@ -410,6 +412,86 @@ function OwnerScreen({ tenantId }: { tenantId: string }) {
 }
 
 interface CartLine { menuItemId?: string; name: string; price: number; qty: number; note?: string; }
+
+function DailySummaryCard({ tenantId, today }: { tenantId: string; today: OrderDoc[] }) {
+  const [summary, setSummary] = useState<DailySummary | null>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    const fetch = async () => {
+      try {
+        const s = await getDailySummary(tenantId);
+        if (!cancelled) setSummary(s);
+      } catch { /* offline: skip */ }
+    };
+    fetch();
+    return () => { cancelled = true; };
+    // Re-fetch whenever the order list changes locally (create / edit / status)
+  }, [tenantId, today.length, today.map(o => `${o._id}:${o.status}:${o.total}`).join('|')]);
+
+  if (!summary) return null;
+  const anyOrders = summary.orderCount > 0 || summary.cancelled > 0;
+  return (
+    <section className="rounded-2xl border border-neutral-200 dark:border-neutral-800 overflow-hidden">
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center gap-3 px-3 py-2.5 bg-gradient-to-r from-emerald-50 to-sky-50 dark:from-emerald-900/20 dark:to-sky-900/20 text-left"
+      >
+        <BarChart3 size={18} className="text-emerald-600 dark:text-emerald-400" />
+        <div className="flex-1">
+          <div className="text-sm font-semibold">আজকের সারাংশ</div>
+          <div className="text-xs text-neutral-500">{toBn(summary.orderCount)} অর্ডার · {formatBdt(summary.totals.all)}</div>
+        </div>
+        <span className="text-xs text-neutral-500">{open ? 'বন্ধ' : 'বিস্তারিত'}</span>
+      </button>
+      {open && anyOrders && (
+        <div className="p-3 space-y-3 border-t border-neutral-100 dark:border-neutral-800">
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <SummaryTile icon={<Wallet size={14} />} label="নগদ" value={formatBdt(summary.totals.cash)} tone="emerald" />
+            <SummaryTile icon={<Smartphone size={14} />} label="বিকাশ / নগদ" value={formatBdt(summary.totals.digital)} tone="sky" />
+            <SummaryTile icon={<User size={14} />} label="বাকি" value={formatBdt(summary.totals.baki)} tone="amber" />
+          </div>
+          {Object.keys(summary.perItem).length > 0 && (
+            <div>
+              <div className="text-xs font-semibold text-neutral-500 mb-1 flex items-center gap-1"><Coffee size={12} /> কাপ হিসাব</div>
+              <ul className="text-sm space-y-0.5">
+                {Object.entries(summary.perItem)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([name, cups]) => (
+                    <li key={name} className="flex items-baseline gap-2">
+                      <span className="flex-1">{name}</span>
+                      <span className="text-xs tabular-nums text-neutral-500">{toBn(cups)} কাপ</span>
+                    </li>
+                  ))}
+              </ul>
+            </div>
+          )}
+          {summary.cancelled > 0 && (
+            <div className="text-xs text-neutral-500">বাতিল: {toBn(summary.cancelled)}</div>
+          )}
+        </div>
+      )}
+      {open && !anyOrders && (
+        <div className="p-4 text-center text-sm text-neutral-500 border-t border-neutral-100 dark:border-neutral-800">
+          আজ কোনো অর্ডার নেই।
+        </div>
+      )}
+    </section>
+  );
+}
+
+function SummaryTile({ icon, label, value, tone }: { icon: React.ReactNode; label: string; value: string; tone: 'emerald' | 'sky' | 'amber' }) {
+  const cls = tone === 'emerald' ? 'bg-emerald-50 dark:bg-emerald-900/20 text-emerald-900 dark:text-emerald-200'
+    : tone === 'sky' ? 'bg-sky-50 dark:bg-sky-900/20 text-sky-900 dark:text-sky-200'
+    : 'bg-amber-50 dark:bg-amber-900/20 text-amber-900 dark:text-amber-200';
+  return (
+    <div className={`rounded-lg p-2 ${cls}`}>
+      <div className="text-[10px] flex items-center justify-center gap-0.5 opacity-80">{icon} {label}</div>
+      <div className="text-sm font-bold tabular-nums mt-0.5">{value}</div>
+    </div>
+  );
+}
 
 function PayBtn({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
   return (

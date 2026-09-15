@@ -5,6 +5,7 @@ import { Entity } from '../models/Entity';
 import { Transaction } from '../models/Transaction';
 import { MenuItem } from '../models/MenuItem';
 import { duebookAuth } from '../middleware/duebookRoleAuth';
+import { computeOrderTotal, isValidStatusTransition, isBakiPayable, snapshotItem } from '../lib/orderLogic';
 
 const router = Router();
 
@@ -20,14 +21,6 @@ const getRole = (req: Request): 'owner' | 'employee' => {
 
 const roomFor = (tid: string) => `tenant:${tid.replace(/[^a-zA-Z0-9_-]/g, '')}`;
 const shortCode = () => Math.random().toString(36).slice(2, 6).toUpperCase();
-
-// Legal status transitions
-const NEXT_STATUS: Record<OrderStatus, OrderStatus[]> = {
-  new: ['making', 'cancelled'],
-  making: ['ready', 'cancelled'],
-  ready: [],
-  cancelled: [],
-};
 
 // GET today's orders (or window via ?from&to)
 router.get('/', async (req: Request, res: Response) => {
@@ -79,23 +72,29 @@ router.post('/', async (req: Request, res: Response) => {
 
     const snapItems: IOrderItem[] = items.map((raw: IOrderItem) => {
       const src = raw.menuItemId ? menuMap.get(raw.menuItemId) : undefined;
-      const nameBn = (src?.nameBn || raw.nameBn || '').toString().trim().slice(0, 80);
-      const priceAt = typeof raw.priceAt === 'number' && raw.priceAt >= 0
-        ? raw.priceAt
-        : (src?.price ?? 0);
-      const qty = Math.max(1, Math.min(999, Math.floor(Number(raw.qty) || 1)));
-      const noteItem = typeof raw.note === 'string' ? raw.note.trim().slice(0, 120) : undefined;
-      return { menuItemId: raw.menuItemId, nameBn, priceAt, qty, note: noteItem };
-    }).filter((i: IOrderItem) => i.nameBn);
+      const merged: IOrderItem = {
+        menuItemId: raw.menuItemId,
+        nameBn: (src?.nameBn || raw.nameBn || ''),
+        priceAt: typeof raw.priceAt === 'number' && raw.priceAt >= 0
+          ? raw.priceAt
+          : (src?.price ?? 0),
+        qty: raw.qty,
+        note: raw.note,
+      };
+      return snapshotItem(merged);
+    }).filter((i: IOrderItem | null): i is IOrderItem => i !== null);
 
     if (snapItems.length === 0) return res.status(400).json({ error: 'no valid items' });
 
-    const total = snapItems.reduce((s, i) => s + i.priceAt * i.qty, 0);
+    if (!isBakiPayable(paymentMethod, entityId)) {
+      return res.status(400).json({ error: 'baki requires entityId' });
+    }
+
+    const total = computeOrderTotal(snapItems);
 
     let linkedEntityId: string | undefined;
     let entityNameForTx: string | undefined;
     if (paymentMethod === 'baki') {
-      if (!entityId) return res.status(400).json({ error: 'baki requires entityId' });
       const ent = await Entity.findOne({ _id: entityId, tenantId }).lean();
       if (!ent) return res.status(400).json({ error: 'entity not found' });
       linkedEntityId = String(ent._id);
@@ -151,8 +150,9 @@ router.patch('/:id/status', async (req: Request, res: Response) => {
     if (!['making', 'ready', 'cancelled'].includes(status)) return res.status(400).json({ error: 'invalid status' });
     const order = await Order.findOne({ _id: req.params.id, tenantId });
     if (!order) return res.status(404).json({ error: 'Order not found' });
-    const allowed = NEXT_STATUS[order.status];
-    if (!allowed.includes(status)) return res.status(400).json({ error: `Cannot go from ${order.status} to ${status}` });
+    if (!isValidStatusTransition(order.status, status)) {
+      return res.status(400).json({ error: `Cannot go from ${order.status} to ${status}` });
+    }
 
     order.status = status;
     if (status === 'cancelled') {
@@ -194,16 +194,12 @@ router.patch('/:id', async (req: Request, res: Response) => {
 
     const { items, note, customerName } = req.body || {};
     if (Array.isArray(items) && items.length > 0) {
-      const snap: IOrderItem[] = items.map((raw: IOrderItem) => ({
-        menuItemId: raw.menuItemId,
-        nameBn: (raw.nameBn || '').toString().trim().slice(0, 80),
-        priceAt: Math.max(0, Number(raw.priceAt) || 0),
-        qty: Math.max(1, Math.min(999, Math.floor(Number(raw.qty) || 1))),
-        note: typeof raw.note === 'string' ? raw.note.trim().slice(0, 120) : undefined,
-      })).filter((i: IOrderItem) => i.nameBn);
+      const snap: IOrderItem[] = items
+        .map((raw: IOrderItem) => snapshotItem(raw))
+        .filter((i: IOrderItem | null): i is IOrderItem => i !== null);
       if (snap.length === 0) return res.status(400).json({ error: 'no valid items' });
       order.items = snap;
-      const newTotal = snap.reduce((s, i) => s + i.priceAt * i.qty, 0);
+      const newTotal = computeOrderTotal(snap);
       // If linked to baki, adjust the paired transaction + entity total
       if (order.linkedTxId && newTotal !== order.total) {
         const delta = newTotal - order.total;

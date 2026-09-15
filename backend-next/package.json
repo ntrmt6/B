@@ -10,7 +10,8 @@
     "seed:subscriptions": "ts-node-dev --transpile-only src/scripts/seedSubscriptions.ts",
     "seed:products": "ts-node-dev --transpile-only src/scripts/seedProducts.ts",
     "seed:products:nflpredicts": "ts-node-dev --transpile-only src/scripts/seedProductsNflpredicts.ts",
-    "validate:products": "node -e \"const s=require('./src/scripts/seedProductsStandalone.js');console.log('✅',s.PRODUCTS.length,'products ready')\""
+    "validate:products": "node -e \"const s=require('./src/scripts/seedProductsStandalone.js');console.log('✅',s.PRODUCTS.length,'products ready')\"",
+    "test": "vitest run"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.965.0",
@@ -57,6 +58,7 @@
     "@types/socket.io": "^3.0.1",
     "@types/uuid": "^9.0.7",
     "ts-node-dev": "^2.0.0",
-    "typescript": "^5.4.5"
+    "typescript": "^5.4.5",
+    "vitest": "^4.1.11"
   }
 }
