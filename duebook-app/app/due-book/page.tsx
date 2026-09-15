@@ -18,7 +18,7 @@ import {
   Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon, CloudOff, Send, Bell,
   MessageSquare, Copy, Users, Upload, ClipboardPaste, Check, Pin, PinOff, ShieldCheck, Camera,
   Lock, Unlock, Package, Menu, ArrowUpDown, Clock, Calculator as CalcIcon, Sparkles, Delete,
-  Wind, Zap, MessageSquareQuote, Compass, Trophy,
+  Wind, Zap, MessageSquareQuote, Compass, Trophy, ShoppingCart,
 } from 'lucide-react';
 import SyncBar from './SyncBar';
 import ReminderInbox from './ReminderInbox';
@@ -953,6 +953,10 @@ export default function DueBookPage() {
 
   useEffect(() => {
     if (!authLoading && !user) window.location.replace('/login');
+    // Employees are routed straight to the kitchen order view; they cannot use the khata.
+    if (!authLoading && user && (user.role === 'employee' || (typeof window !== 'undefined' && localStorage.getItem('duebook_role') === 'employee'))) {
+      window.location.replace('/due-book/orders');
+    }
   }, [authLoading, user]);
 
   useEffect(() => {
@@ -2460,6 +2464,10 @@ export default function DueBookPage() {
                     <button onClick={() => { setShowMenu(false); setShowInventory(true); window.history.pushState({ duebook: 'modal' }, ''); }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700">
                       <Package size={14} className="text-gray-500 dark:text-slate-400" /> Inventory
+                    </button>
+                    <button onClick={() => { setShowMenu(false); router.push('/due-book/orders'); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700">
+                      <ShoppingCart size={14} className="text-orange-500" /> নতুন অর্ডার
                     </button>
                     <button onClick={() => { setShowMenu(false); router.push('/due-book/menu'); }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700">

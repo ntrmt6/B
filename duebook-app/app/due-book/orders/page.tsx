@@ -1,0 +1,697 @@
+'use client';
+
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import Link from 'next/link';
+import toast from 'react-hot-toast';
+import { useAuth } from '@/context/AuthContext';
+import {
+  ChevronLeft, Plus, Minus, Check, X, ShoppingCart, Trash2, Pencil,
+  Clock, ChefHat, CheckCircle2, XCircle, User, Wallet, Smartphone, Package,
+} from 'lucide-react';
+import { listMenuItems, MenuItemDoc } from '@/lib/menuApi';
+import {
+  listOrders, createOrderResilient, editOrder, updateOrderStatus,
+  drainOfflineOrders, offlineOrderCount,
+  OrderDoc, OrderItem, OrderPayment, OrderStatus, CreateOrderPayload,
+} from '@/lib/ordersApi';
+import { getEntitiesOffline } from '@/lib/offlineApi';
+import { joinTenant, getSocket, leaveTenant } from '@/lib/socket';
+import { toBn, formatBdt, formatBnTime } from '@/lib/bn';
+
+interface Entity { _id: string; name: string; phone?: string; type: 'Customer' | 'Supplier' | 'Employee'; }
+
+export default function OrdersPage() {
+  const router = useRouter();
+  const { user, tenantId, loading } = useAuth();
+  const [role, setRole] = useState<'owner' | 'employee'>('owner');
+
+  useEffect(() => {
+    if (!loading && !user) router.replace('/login');
+  }, [loading, user, router]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const stored = localStorage.getItem('duebook_role');
+    if (stored === 'employee' || (user && user.role === 'employee')) setRole('employee');
+    else setRole('owner');
+  }, [user]);
+
+  if (loading || !user) return <div className="min-h-screen flex items-center justify-center">লোড হচ্ছে…</div>;
+  if (!tenantId) return <div className="min-h-screen flex items-center justify-center">দোকান আইডি নেই</div>;
+
+  return role === 'employee'
+    ? <KitchenScreen tenantId={tenantId} />
+    : <OwnerScreen tenantId={tenantId} />;
+}
+
+/* ─────────────── OWNER: create + track orders ─────────────── */
+
+function OwnerScreen({ tenantId }: { tenantId: string }) {
+  const [menu, setMenu] = useState<MenuItemDoc[]>([]);
+  const [entities, setEntities] = useState<Entity[]>([]);
+  const [cart, setCart] = useState<CartLine[]>([]);
+  const [payment, setPayment] = useState<OrderPayment>('nagad');
+  const [customerName, setCustomerName] = useState('');
+  const [selectedEntityId, setSelectedEntityId] = useState('');
+  const [orderNote, setOrderNote] = useState('');
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [today, setToday] = useState<OrderDoc[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [offlineCount, setOfflineCount] = useState(0);
+  const [editingId, setEditingId] = useState<string | null>(null);
+
+  const refreshMenu = useCallback(async () => {
+    const { items } = await listMenuItems(tenantId);
+    setMenu(items.filter(i => i.available));
+  }, [tenantId]);
+
+  const refreshOrders = useCallback(async () => {
+    try { setToday(await listOrders(tenantId)); }
+    catch { /* offline is fine */ }
+  }, [tenantId]);
+
+  useEffect(() => { refreshMenu(); refreshOrders(); }, [refreshMenu, refreshOrders]);
+
+  useEffect(() => {
+    getEntitiesOffline(tenantId).then(r => setEntities(r.data.filter((e: any) => e.type === 'Customer')));
+  }, [tenantId]);
+
+  // Socket live sync
+  useEffect(() => {
+    joinTenant(tenantId);
+    const s = getSocket();
+    const onNew = (o: OrderDoc) => setToday(prev => prev.some(x => x._id === o._id) ? prev : [...prev, o]);
+    const onUpd = (o: OrderDoc) => setToday(prev => prev.map(x => x._id === o._id ? o : x));
+    s.on('order:new', onNew);
+    s.on('order:updated', onUpd);
+    s.on('order:status', onUpd);
+    return () => { s.off('order:new', onNew); s.off('order:updated', onUpd); s.off('order:status', onUpd); leaveTenant(); };
+  }, [tenantId]);
+
+  // Offline drain
+  useEffect(() => {
+    setOfflineCount(offlineOrderCount());
+    const flush = () => drainOfflineOrders().then(r => {
+      setOfflineCount(offlineOrderCount());
+      if (r.synced > 0) { toast.success(`${toBn(r.synced)}টি অর্ডার সিঙ্ক হয়েছে`); refreshOrders(); }
+    });
+    window.addEventListener('online', flush);
+    flush();
+    return () => window.removeEventListener('online', flush);
+  }, [refreshOrders]);
+
+  const grouped = useMemo(() => {
+    const map = new Map<string, MenuItemDoc[]>();
+    for (const it of menu) {
+      const arr = map.get(it.category) || [];
+      arr.push(it);
+      map.set(it.category, arr);
+    }
+    for (const arr of map.values()) arr.sort((a, b) => a.sortOrder - b.sortOrder);
+    return Array.from(map.entries());
+  }, [menu]);
+
+  const total = useMemo(() => cart.reduce((s, l) => s + l.price * l.qty, 0), [cart]);
+  const totalCups = useMemo(() => cart.reduce((s, l) => s + l.qty, 0), [cart]);
+
+  const addToCart = (item: MenuItemDoc) => {
+    setCart(prev => {
+      const idx = prev.findIndex(l => l.menuItemId === item._id && !l.note);
+      if (idx >= 0) {
+        const next = [...prev];
+        next[idx] = { ...next[idx], qty: next[idx].qty + 1 };
+        return next;
+      }
+      return [...prev, { menuItemId: item._id, name: item.nameBn, price: item.price, qty: 1 }];
+    });
+  };
+
+  const changeQty = (idx: number, delta: number) => {
+    setCart(prev => {
+      const next = [...prev];
+      const l = { ...next[idx], qty: next[idx].qty + delta };
+      if (l.qty <= 0) return next.filter((_, i) => i !== idx);
+      next[idx] = l;
+      return next;
+    });
+  };
+
+  const setLineNote = (idx: number, note: string) => {
+    setCart(prev => prev.map((l, i) => i === idx ? { ...l, note } : l));
+  };
+
+  const resetOrder = () => {
+    setCart([]); setPayment('nagad'); setCustomerName(''); setSelectedEntityId(''); setOrderNote('');
+  };
+
+  const submitOrder = async () => {
+    if (cart.length === 0) return;
+    if (payment === 'baki' && !selectedEntityId) {
+      toast.error('বাকি পেমেন্টের জন্য কাস্টমার সিলেক্ট করুন');
+      return;
+    }
+    const payload: CreateOrderPayload = {
+      items: cart.map<OrderItem>(l => ({
+        menuItemId: l.menuItemId,
+        nameBn: l.name,
+        priceAt: l.price,
+        qty: l.qty,
+        note: l.note?.trim() || undefined,
+      })),
+      customerName: customerName.trim() || undefined,
+      entityId: payment === 'baki' ? selectedEntityId : undefined,
+      note: orderNote.trim() || undefined,
+      paymentMethod: payment,
+    };
+    setBusy(true);
+    try {
+      const res = await createOrderResilient(tenantId, payload);
+      if (res.queued) {
+        setOfflineCount(offlineOrderCount());
+        toast.success('ইন্টারনেট নেই — সেভ হয়েছে, পরে সিঙ্ক হবে');
+      } else if (res.order) {
+        setToday(prev => prev.some(x => x._id === res.order!._id) ? prev : [...prev, res.order!]);
+        toast.success(`অর্ডার #${res.order.code} পাঠানো হয়েছে`);
+      }
+      setShowConfirm(false);
+      resetOrder();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || 'অর্ডার ব্যর্থ');
+    } finally { setBusy(false); }
+  };
+
+  const cancelOrder = async (o: OrderDoc) => {
+    if (!confirm(`অর্ডার #${o.code} বাতিল করবেন?`)) return;
+    try {
+      const doc = await updateOrderStatus(tenantId, o._id, 'cancelled');
+      setToday(prev => prev.map(x => x._id === doc._id ? doc : x));
+      toast.success('বাতিল হয়েছে');
+    } catch (e: any) { toast.error(e?.response?.data?.error || 'বাতিল হয়নি'); }
+  };
+
+  const startEdit = (o: OrderDoc) => {
+    if (o.status !== 'new') { toast.error('বানানো শুরু হয়ে গেছে — এডিট করা যাবে না'); return; }
+    setCart(o.items.map(i => ({
+      menuItemId: i.menuItemId,
+      name: i.nameBn,
+      price: i.priceAt,
+      qty: i.qty,
+      note: i.note,
+    })));
+    setPayment(o.paymentMethod);
+    setSelectedEntityId(o.entityId || '');
+    setCustomerName(o.customerName || '');
+    setOrderNote(o.note || '');
+    setEditingId(o._id);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const saveEdit = async () => {
+    if (!editingId) return;
+    setBusy(true);
+    try {
+      const doc = await editOrder(tenantId, editingId, {
+        items: cart.map(l => ({ menuItemId: l.menuItemId, nameBn: l.name, priceAt: l.price, qty: l.qty, note: l.note })),
+        customerName: customerName.trim() || undefined,
+        note: orderNote.trim() || undefined,
+      });
+      setToday(prev => prev.map(x => x._id === doc._id ? doc : x));
+      toast.success('আপডেট হয়েছে');
+      setEditingId(null);
+      resetOrder();
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || 'সেভ হয়নি');
+    } finally { setBusy(false); }
+  };
+
+  return (
+    <div className="min-h-screen bg-white text-neutral-900 dark:bg-neutral-900 dark:text-white pb-40">
+      <header className="sticky top-0 z-20 bg-white/95 dark:bg-neutral-900/95 backdrop-blur border-b border-neutral-200 dark:border-neutral-800">
+        <div className="max-w-3xl mx-auto flex items-center gap-2 px-3 py-3">
+          <Link href="/due-book" className="p-2 -ml-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800" aria-label="ফিরে যান">
+            <ChevronLeft size={22} />
+          </Link>
+          <h1 className="font-bold text-lg">অর্ডার</h1>
+          {offlineCount > 0 && (
+            <span className="ml-auto text-xs bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full">
+              {toBn(offlineCount)}টি সিঙ্ক অপেক্ষমাণ
+            </span>
+          )}
+        </div>
+      </header>
+
+      <main className="max-w-3xl mx-auto px-3 py-3 space-y-4">
+        {editingId && (
+          <div className="rounded-lg bg-amber-50 border border-amber-300 dark:bg-amber-900/20 dark:border-amber-700 px-3 py-2 text-sm flex items-center gap-2">
+            <Pencil size={14} /> অর্ডার এডিট মোড
+            <button onClick={() => { setEditingId(null); resetOrder(); }} className="ml-auto underline">বাতিল</button>
+          </div>
+        )}
+
+        {menu.length === 0 ? (
+          <div className="text-center py-10 text-neutral-500">
+            <Package size={40} className="mx-auto opacity-40 mb-2" />
+            <p>মেনুতে চালু আইটেম নেই।</p>
+            <Link href="/due-book/menu" className="inline-block mt-2 text-sky-500 underline">মেনু বিল্ডারে যান</Link>
+          </div>
+        ) : (
+          <section className="space-y-4">
+            {grouped.map(([cat, list]) => (
+              <div key={cat}>
+                <div className="text-sm font-semibold text-neutral-500 mb-2">{cat}</div>
+                <div className="grid grid-cols-2 gap-2">
+                  {list.map(it => (
+                    <button
+                      key={it._id}
+                      onClick={() => addToCart(it)}
+                      className="group flex flex-col items-start gap-1 p-3 rounded-xl border-2 border-neutral-200 dark:border-neutral-700 hover:border-sky-500 hover:bg-sky-50 dark:hover:bg-sky-900/20 active:scale-95 transition text-left"
+                    >
+                      <div className="text-base font-semibold">{it.nameBn}</div>
+                      <div className="text-sm text-neutral-500">{formatBdt(it.price)}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </section>
+        )}
+
+        {cart.length > 0 && (
+          <section className="rounded-xl border border-neutral-200 dark:border-neutral-800">
+            <div className="px-3 py-2 bg-neutral-50 dark:bg-neutral-800 font-semibold text-sm">কার্ট</div>
+            <ul>
+              {cart.map((l, i) => (
+                <li key={i} className="border-t border-neutral-100 dark:border-neutral-800 first:border-t-0 p-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <div className="font-medium">{l.name}</div>
+                      <div className="text-xs text-neutral-500">{formatBdt(l.price)} × {toBn(l.qty)}</div>
+                    </div>
+                    <button onClick={() => changeQty(i, -1)} className="w-8 h-8 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center"><Minus size={16} /></button>
+                    <div className="w-8 text-center text-lg font-bold tabular-nums">{toBn(l.qty)}</div>
+                    <button onClick={() => changeQty(i, 1)} className="w-8 h-8 rounded-full bg-sky-500 text-white flex items-center justify-center"><Plus size={16} /></button>
+                  </div>
+                  <input
+                    value={l.note || ''}
+                    onChange={e => setLineNote(i, e.target.value)}
+                    placeholder="নোট (কম চিনি, কড়া, ইত্যাদি)"
+                    className="w-full text-sm px-2 py-1 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-transparent"
+                  />
+                </li>
+              ))}
+            </ul>
+            <div className="p-3 border-t border-neutral-100 dark:border-neutral-800 space-y-3">
+              <label className="block">
+                <div className="text-xs font-medium mb-1 text-neutral-500">কাস্টমারের নাম (ঐচ্ছিক)</div>
+                <input
+                  value={customerName}
+                  onChange={e => setCustomerName(e.target.value)}
+                  placeholder="যেমন: রহিম ভাই"
+                  className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-transparent"
+                />
+              </label>
+              <label className="block">
+                <div className="text-xs font-medium mb-1 text-neutral-500">অর্ডার নোট</div>
+                <input
+                  value={orderNote}
+                  onChange={e => setOrderNote(e.target.value)}
+                  placeholder="যেমন: টেবিল ২"
+                  className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-transparent"
+                />
+              </label>
+              <div>
+                <div className="text-xs font-medium mb-1 text-neutral-500">পেমেন্ট</div>
+                <div className="grid grid-cols-3 gap-2">
+                  <PayBtn active={payment === 'nagad'} onClick={() => setPayment('nagad')} icon={<Wallet size={14} />} label="নগদ" />
+                  <PayBtn active={payment === 'bkash'} onClick={() => setPayment('bkash')} icon={<Smartphone size={14} />} label="বিকাশ / নগদ" />
+                  <PayBtn active={payment === 'baki'} onClick={() => setPayment('baki')} icon={<User size={14} />} label="বাকি" />
+                </div>
+              </div>
+              {payment === 'baki' && (
+                <label className="block">
+                  <div className="text-xs font-medium mb-1 text-neutral-500">কাস্টমার (বাকি খাতা)</div>
+                  <select
+                    value={selectedEntityId}
+                    onChange={e => setSelectedEntityId(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-transparent"
+                  >
+                    <option value="">— বাছাই করুন —</option>
+                    {entities.map(e => (
+                      <option key={e._id} value={e._id}>{e.name} {e.phone ? `(${e.phone})` : ''}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* Today's live orders */}
+        {today.length > 0 && (
+          <section>
+            <div className="text-sm font-semibold text-neutral-500 mb-2">আজকের অর্ডার</div>
+            <ul className="space-y-2">
+              {today.slice().reverse().map(o => (
+                <OrderCard key={o._id} o={o} role="owner"
+                  onEdit={o.status === 'new' ? () => startEdit(o) : undefined}
+                  onCancel={o.status === 'new' || o.status === 'making' ? () => cancelOrder(o) : undefined}
+                />
+              ))}
+            </ul>
+          </section>
+        )}
+      </main>
+
+      {cart.length > 0 && (
+        <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur border-t border-neutral-200 dark:border-neutral-800">
+          <div className="max-w-3xl mx-auto p-3 flex items-center gap-3">
+            <div className="flex-1">
+              <div className="text-xs text-neutral-500">{toBn(totalCups)} কাপ</div>
+              <div className="text-2xl font-bold">{formatBdt(total)}</div>
+            </div>
+            {editingId ? (
+              <button
+                onClick={saveEdit}
+                disabled={busy || cart.length === 0}
+                className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white px-5 py-3 rounded-xl font-medium flex items-center gap-2"
+              >
+                {busy ? <Spinner /> : <Check size={18} />}
+                সেভ
+              </button>
+            ) : (
+              <button
+                onClick={() => setShowConfirm(true)}
+                disabled={cart.length === 0}
+                className="bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white px-5 py-3 rounded-xl font-medium flex items-center gap-2"
+              >
+                <ShoppingCart size={18} /> পাঠান
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showConfirm && (
+        <ConfirmModal
+          cart={cart}
+          total={total}
+          totalCups={totalCups}
+          customerName={customerName}
+          note={orderNote}
+          payment={payment}
+          onCancel={() => setShowConfirm(false)}
+          onConfirm={submitOrder}
+          busy={busy}
+        />
+      )}
+    </div>
+  );
+}
+
+interface CartLine { menuItemId?: string; name: string; price: number; qty: number; note?: string; }
+
+function PayBtn({ active, onClick, icon, label }: { active: boolean; onClick: () => void; icon: React.ReactNode; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`flex items-center justify-center gap-1 py-2 rounded-lg border-2 text-sm ${
+        active
+          ? 'border-sky-500 bg-sky-500 text-white'
+          : 'border-neutral-200 dark:border-neutral-700'
+      }`}
+    >{icon} {label}</button>
+  );
+}
+
+function Spinner() {
+  return <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />;
+}
+
+function ConfirmModal({ cart, total, totalCups, customerName, note, payment, onCancel, onConfirm, busy }:
+  { cart: CartLine[]; total: number; totalCups: number; customerName: string; note: string; payment: OrderPayment; onCancel: () => void; onConfirm: () => void; busy: boolean }) {
+  const payLabel = payment === 'nagad' ? 'নগদ' : payment === 'bkash' ? 'বিকাশ / নগদ' : 'বাকি';
+  return (
+    <div className="fixed inset-0 z-40 bg-black/60 flex items-end sm:items-center justify-center p-2">
+      <div className="w-full max-w-md bg-white dark:bg-neutral-900 rounded-2xl overflow-hidden">
+        <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800">
+          <h2 className="text-lg font-bold">অর্ডার নিশ্চিত করুন</h2>
+          <p className="text-xs text-neutral-500 mt-0.5">পাঠানোর আগে ভালো করে দেখে নিন</p>
+        </div>
+        <div className="p-4 space-y-2 max-h-[50vh] overflow-y-auto">
+          {customerName && <div className="text-sm text-neutral-500">কাস্টমার: <span className="text-neutral-800 dark:text-neutral-100 font-medium">{customerName}</span></div>}
+          <ul className="space-y-1">
+            {cart.map((l, i) => (
+              <li key={i} className="flex items-baseline gap-2 py-1 border-b border-neutral-100 dark:border-neutral-800 last:border-b-0">
+                <span className="w-8 text-lg font-bold tabular-nums">{toBn(l.qty)}×</span>
+                <span className="flex-1 text-base">
+                  <span className="font-medium">{l.name}</span>
+                  {l.note && <span className="block text-xs text-neutral-500">📝 {l.note}</span>}
+                </span>
+                <span className="text-base font-medium tabular-nums">{formatBdt(l.price * l.qty)}</span>
+              </li>
+            ))}
+          </ul>
+          {note && <div className="text-sm text-neutral-500">নোট: {note}</div>}
+        </div>
+        <div className="p-4 border-t border-neutral-200 dark:border-neutral-800 space-y-2">
+          <div className="flex items-baseline justify-between">
+            <span className="text-sm text-neutral-500">{toBn(totalCups)} কাপ · {payLabel}</span>
+            <span className="text-2xl font-bold">{formatBdt(total)}</span>
+          </div>
+          <div className="flex gap-2 pt-1">
+            <button onClick={onCancel} className="flex-1 py-3 rounded-lg bg-neutral-100 dark:bg-neutral-800 font-medium">বাতিল</button>
+            <button
+              onClick={onConfirm}
+              disabled={busy}
+              className="flex-1 py-3 rounded-lg bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white font-medium flex items-center justify-center gap-2"
+            >
+              {busy ? <Spinner /> : <Check size={18} />} পাঠান
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ─────────────── EMPLOYEE: kitchen live view ─────────────── */
+
+function KitchenScreen({ tenantId }: { tenantId: string }) {
+  const [orders, setOrders] = useState<OrderDoc[]>([]);
+  const [flash, setFlash] = useState<{ id: string; kind: 'updated' | 'cancelled' } | null>(null);
+  const wakeLockRef = useRef<any>(null);
+  const prevIdsRef = useRef<Set<string>>(new Set());
+
+  const refresh = useCallback(async () => {
+    try { setOrders(await listOrders(tenantId)); }
+    catch { /* offline is fine */ }
+  }, [tenantId]);
+
+  useEffect(() => { refresh(); }, [refresh]);
+
+  useEffect(() => {
+    joinTenant(tenantId);
+    const s = getSocket();
+    const onNew = (o: OrderDoc) => {
+      setOrders(prev => {
+        if (prev.some(x => x._id === o._id)) return prev;
+        // Signal only for genuinely new server-issued orders
+        setTimeout(() => alertNewOrder(), 0);
+        return [...prev, o];
+      });
+    };
+    const onUpd = (o: OrderDoc) => {
+      setOrders(prev => prev.map(x => x._id === o._id ? o : x));
+      setFlash({ id: o._id, kind: o.status === 'cancelled' ? 'cancelled' : 'updated' });
+      try { navigator.vibrate?.(120); } catch {}
+      setTimeout(() => setFlash(null), 2500);
+    };
+    s.on('order:new', onNew);
+    s.on('order:updated', onUpd);
+    s.on('order:status', onUpd);
+    return () => { s.off('order:new', onNew); s.off('order:updated', onUpd); s.off('order:status', onUpd); leaveTenant(); };
+  }, [tenantId]);
+
+  // Wake lock
+  useEffect(() => {
+    (async () => {
+      try {
+        const nav: any = navigator;
+        if (nav?.wakeLock?.request) {
+          wakeLockRef.current = await nav.wakeLock.request('screen');
+        }
+      } catch { /* not supported / user gesture missing */ }
+    })();
+    const onVisibility = async () => {
+      if (document.visibilityState === 'visible') {
+        try {
+          const nav: any = navigator;
+          if (nav?.wakeLock?.request) wakeLockRef.current = await nav.wakeLock.request('screen');
+        } catch {}
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      wakeLockRef.current?.release?.().catch(() => {});
+    };
+  }, []);
+
+  const active = orders.filter(o => o.status === 'new' || o.status === 'making').sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+  const done = orders.filter(o => o.status === 'ready' || o.status === 'cancelled').sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+
+  const advance = async (o: OrderDoc) => {
+    const next = o.status === 'new' ? 'making' : o.status === 'making' ? 'ready' : null;
+    if (!next) return;
+    try {
+      const doc = await updateOrderStatus(tenantId, o._id, next);
+      setOrders(prev => prev.map(x => x._id === doc._id ? doc : x));
+    } catch (e: any) {
+      toast.error(e?.response?.data?.error || 'আপডেট হয়নি');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-neutral-900 text-white">
+      <header className="sticky top-0 z-20 bg-neutral-900/95 backdrop-blur border-b border-neutral-800">
+        <div className="max-w-4xl mx-auto flex items-center gap-2 px-3 py-3">
+          <ChefHat size={22} className="text-orange-400" />
+          <h1 className="font-bold text-lg">রান্নাঘর</h1>
+          <span className="ml-auto text-sm text-neutral-400">{toBn(active.length)} সক্রিয়</span>
+        </div>
+      </header>
+
+      <main className="max-w-4xl mx-auto px-3 py-3 space-y-3">
+        {active.length === 0 && (
+          <div className="text-center py-20 text-neutral-500">
+            <ChefHat size={48} className="mx-auto opacity-30 mb-2" />
+            <p className="text-lg">নতুন অর্ডারের অপেক্ষায়…</p>
+          </div>
+        )}
+        {active.map(o => (
+          <OrderCard
+            key={o._id}
+            o={o}
+            role="employee"
+            flashKind={flash?.id === o._id ? flash.kind : undefined}
+            onAdvance={() => advance(o)}
+          />
+        ))}
+        {done.length > 0 && (
+          <details className="pt-2">
+            <summary className="text-sm text-neutral-400 py-2 cursor-pointer">সম্পন্ন / বাতিল ({toBn(done.length)})</summary>
+            <ul className="space-y-2 mt-2 opacity-70">
+              {done.slice(0, 20).map(o => (
+                <OrderCard key={o._id} o={o} role="employee" flashKind={flash?.id === o._id ? flash.kind : undefined} />
+              ))}
+            </ul>
+          </details>
+        )}
+      </main>
+    </div>
+  );
+}
+
+function alertNewOrder() {
+  try { navigator.vibrate?.([180, 90, 180]); } catch {}
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const now = ctx.currentTime;
+    for (let i = 0; i < 2; i++) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, now + i * 0.35);
+      gain.gain.setValueAtTime(0.0001, now + i * 0.35);
+      gain.gain.exponentialRampToValueAtTime(0.35, now + i * 0.35 + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.35 + 0.28);
+      osc.connect(gain).connect(ctx.destination);
+      osc.start(now + i * 0.35);
+      osc.stop(now + i * 0.35 + 0.3);
+    }
+    setTimeout(() => ctx.close().catch(() => {}), 900);
+  } catch {}
+}
+
+/* ─────────────── Shared order card ─────────────── */
+
+function OrderCard({ o, role, onAdvance, onEdit, onCancel, flashKind }: {
+  o: OrderDoc;
+  role: 'owner' | 'employee';
+  onAdvance?: () => void;
+  onEdit?: () => void;
+  onCancel?: () => void;
+  flashKind?: 'updated' | 'cancelled';
+}) {
+  const isEmployee = role === 'employee';
+  const statusBadge = (() => {
+    switch (o.status) {
+      case 'new': return { label: 'নতুন', cls: 'bg-amber-500 text-white', icon: <Clock size={14} /> };
+      case 'making': return { label: 'বানানো হচ্ছে', cls: 'bg-sky-500 text-white', icon: <ChefHat size={14} /> };
+      case 'ready': return { label: 'তৈরি', cls: 'bg-emerald-500 text-white', icon: <CheckCircle2 size={14} /> };
+      case 'cancelled': return { label: 'বাতিল', cls: 'bg-neutral-500 text-white', icon: <XCircle size={14} /> };
+    }
+  })();
+  const payLabel = o.paymentMethod === 'nagad' ? 'নগদ' : o.paymentMethod === 'bkash' ? 'বিকাশ / নগদ' : 'বাকি';
+  const totalCups = o.items.reduce((s, i) => s + i.qty, 0);
+  const flashCls = flashKind === 'updated' ? 'ring-2 ring-amber-400 animate-pulse'
+    : flashKind === 'cancelled' ? 'ring-2 ring-red-400 animate-pulse' : '';
+
+  return (
+    <li className={`rounded-2xl border ${isEmployee ? 'border-neutral-700 bg-neutral-800' : 'border-neutral-200 dark:border-neutral-800'} ${flashCls} overflow-hidden`}>
+      <div className={`flex items-center justify-between gap-2 px-3 py-2 ${isEmployee ? 'bg-neutral-700/60' : 'bg-neutral-50 dark:bg-neutral-800'}`}>
+        <div className="flex items-center gap-2">
+          <span className="font-bold">#{o.code}</span>
+          {o.customerName && <span className={`text-sm ${isEmployee ? 'text-neutral-300' : 'text-neutral-600 dark:text-neutral-400'}`}>· {o.customerName}</span>}
+        </div>
+        <span className={`inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded-full ${statusBadge.cls}`}>
+          {statusBadge.icon} {statusBadge.label}
+        </span>
+      </div>
+      <ul className={`p-3 space-y-1 ${isEmployee ? 'text-xl' : 'text-base'}`}>
+        {o.items.map((it, i) => (
+          <li key={i} className="flex items-baseline gap-2">
+            <span className={`${isEmployee ? 'w-10 text-2xl' : 'w-8 text-lg'} font-bold tabular-nums`}>{toBn(it.qty)}×</span>
+            <span className="flex-1">
+              <span className="font-medium">{it.nameBn}</span>
+              {it.note && <span className={`block ${isEmployee ? 'text-base' : 'text-xs'} ${isEmployee ? 'text-amber-300' : 'text-amber-600'}`}>📝 {it.note}</span>}
+            </span>
+            {!isEmployee && <span className="text-sm tabular-nums text-neutral-500">{formatBdt(it.priceAt * it.qty)}</span>}
+          </li>
+        ))}
+      </ul>
+      {o.note && (
+        <div className={`px-3 pb-2 text-sm ${isEmployee ? 'text-amber-300' : 'text-amber-700 dark:text-amber-300'}`}>নোট: {o.note}</div>
+      )}
+      <div className={`flex items-center gap-2 px-3 py-2 border-t ${isEmployee ? 'border-neutral-700' : 'border-neutral-100 dark:border-neutral-800'}`}>
+        <span className={`text-xs ${isEmployee ? 'text-neutral-400' : 'text-neutral-500'}`}>{formatBnTime(o.createdAt)} · {toBn(totalCups)} কাপ · {payLabel}</span>
+        <span className={`ml-auto font-bold ${isEmployee ? 'text-lg' : ''}`}>{formatBdt(o.total)}</span>
+      </div>
+      {(onAdvance || onEdit || onCancel) && (
+        <div className={`flex gap-2 p-2 border-t ${isEmployee ? 'border-neutral-700' : 'border-neutral-100 dark:border-neutral-800'}`}>
+          {onAdvance && (o.status === 'new' || o.status === 'making') && (
+            <button
+              onClick={onAdvance}
+              className={`flex-1 py-3 rounded-lg font-bold text-lg ${
+                o.status === 'new' ? 'bg-sky-500 hover:bg-sky-600 text-white' : 'bg-emerald-500 hover:bg-emerald-600 text-white'
+              }`}
+            >
+              {o.status === 'new' ? 'বানানো শুরু' : 'তৈরি'}
+            </button>
+          )}
+          {onEdit && (
+            <button onClick={onEdit} className="px-3 py-2 rounded-lg bg-neutral-100 dark:bg-neutral-800 flex items-center gap-1 text-sm">
+              <Pencil size={14} /> এডিট
+            </button>
+          )}
+          {onCancel && (
+            <button onClick={onCancel} className="px-3 py-2 rounded-lg bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300 flex items-center gap-1 text-sm">
+              <Trash2 size={14} /> বাতিল
+            </button>
+          )}
+        </div>
+      )}
+    </li>
+  );
+}
