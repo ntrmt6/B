@@ -2461,6 +2461,10 @@ export default function DueBookPage() {
                       className="w-full flex items-center gap-2.5 px-3 py-2 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700">
                       <Package size={14} className="text-gray-500 dark:text-slate-400" /> Inventory
                     </button>
+                    <button onClick={() => { setShowMenu(false); router.push('/due-book/menu'); }}
+                      className="w-full flex items-center gap-2.5 px-3 py-2 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700">
+                      <Menu size={14} className="text-emerald-500" /> মেনু বিল্ডার
+                    </button>
                     <button onClick={() => { setShowMenu(false); router.push('/social'); }}
                       className="w-full flex items-center gap-2.5 px-3 py-2 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700">
                       <Users size={14} className="text-fuchsia-500" /> Social Feed
