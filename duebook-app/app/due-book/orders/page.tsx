@@ -314,11 +314,11 @@ function OwnerScreen({ tenantId }: { tenantId: string }) {
                 />
               </label>
               <label className="block">
-                <div className="text-xs font-medium mb-1 text-neutral-500">অর্ডার নোট</div>
+                <div className="text-xs font-medium mb-1 text-neutral-500">বিশেষ নির্দেশনা (ঐচ্ছিক)</div>
                 <input
                   value={orderNote}
                   onChange={e => setOrderNote(e.target.value)}
-                  placeholder="যেমন: টেবিল ২"
+                  placeholder="যেমন: টেবিল ২ / কম চিনি / দ্রুত দিন"
                   className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-transparent"
                 />
               </label>
@@ -595,6 +595,21 @@ function KitchenScreen({ tenantId }: { tenantId: string }) {
     return () => { s.off('order:new', onNew); s.off('order:updated', onUpd); s.off('order:status', onUpd); leaveTenant(); };
   }, [tenantId]);
 
+  // Prime audio + wake lock on first user interaction so alarms actually ring
+  useEffect(() => {
+    const unlock = () => {
+      const ctx = getAudioCtx();
+      if (ctx && ctx.state !== 'running') ctx.resume().catch(() => {});
+    };
+    window.addEventListener('pointerdown', unlock, { once: false });
+    window.addEventListener('keydown', unlock, { once: false });
+    unlock();
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+  }, []);
+
   // Wake lock
   useEffect(() => {
     (async () => {
@@ -675,24 +690,45 @@ function KitchenScreen({ tenantId }: { tenantId: string }) {
   );
 }
 
-function alertNewOrder() {
-  try { navigator.vibrate?.([180, 90, 180]); } catch {}
+let sharedAudioCtx: AudioContext | null = null;
+function getAudioCtx(): AudioContext | null {
   try {
-    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-    const now = ctx.currentTime;
-    for (let i = 0; i < 2; i++) {
+    if (!sharedAudioCtx) {
+      const Ctor = (window.AudioContext || (window as any).webkitAudioContext);
+      if (!Ctor) return null;
+      sharedAudioCtx = new Ctor();
+    }
+    if (sharedAudioCtx.state === 'suspended') sharedAudioCtx.resume().catch(() => {});
+    return sharedAudioCtx;
+  } catch { return null; }
+}
+
+function alertNewOrder() {
+  try { navigator.vibrate?.([250, 120, 250, 120, 400]); } catch {}
+  try {
+    const ctx = getAudioCtx();
+    if (!ctx) return;
+    // Three-chime alarm: two rising bell tones repeated, ~1.4s total, louder than before.
+    const pattern = [
+      { f: 988, t: 0.00 }, // B5
+      { f: 1319, t: 0.22 }, // E6
+      { f: 988, t: 0.55 },
+      { f: 1319, t: 0.77 },
+      { f: 1568, t: 1.10 }, // G6 finale
+    ];
+    const start = ctx.currentTime + 0.02;
+    for (const p of pattern) {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
-      osc.type = 'sine';
-      osc.frequency.setValueAtTime(880, now + i * 0.35);
-      gain.gain.setValueAtTime(0.0001, now + i * 0.35);
-      gain.gain.exponentialRampToValueAtTime(0.35, now + i * 0.35 + 0.02);
-      gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.35 + 0.28);
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(p.f, start + p.t);
+      gain.gain.setValueAtTime(0.0001, start + p.t);
+      gain.gain.exponentialRampToValueAtTime(0.7, start + p.t + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + p.t + 0.28);
       osc.connect(gain).connect(ctx.destination);
-      osc.start(now + i * 0.35);
-      osc.stop(now + i * 0.35 + 0.3);
+      osc.start(start + p.t);
+      osc.stop(start + p.t + 0.32);
     }
-    setTimeout(() => ctx.close().catch(() => {}), 900);
   } catch {}
 }
 
@@ -731,20 +767,32 @@ function OrderCard({ o, role, onAdvance, onEdit, onCancel, flashKind }: {
           {statusBadge.icon} {statusBadge.label}
         </span>
       </div>
-      <ul className={`p-3 space-y-1 ${isEmployee ? 'text-xl' : 'text-base'}`}>
+      <ul className={`p-3 space-y-1 ${isEmployee ? 'text-2xl' : 'text-base'}`}>
         {o.items.map((it, i) => (
           <li key={i} className="flex items-baseline gap-2">
-            <span className={`${isEmployee ? 'w-10 text-2xl' : 'w-8 text-lg'} font-bold tabular-nums`}>{toBn(it.qty)}×</span>
+            <span className={`${isEmployee ? 'w-12 text-3xl' : 'w-8 text-lg'} font-bold tabular-nums`}>{toBn(it.qty)}×</span>
             <span className="flex-1">
               <span className="font-medium">{it.nameBn}</span>
-              {it.note && <span className={`block ${isEmployee ? 'text-base' : 'text-xs'} ${isEmployee ? 'text-amber-300' : 'text-amber-600'}`}>📝 {it.note}</span>}
+              {it.note && (
+                <span className={`block font-semibold ${isEmployee ? 'text-xl mt-0.5' : 'text-xs'} ${isEmployee ? 'text-amber-300' : 'text-amber-600'}`}>
+                  📝 {it.note}
+                </span>
+              )}
             </span>
             {!isEmployee && <span className="text-sm tabular-nums text-neutral-500">{formatBdt(it.priceAt * it.qty)}</span>}
           </li>
         ))}
       </ul>
       {o.note && (
-        <div className={`px-3 pb-2 text-sm ${isEmployee ? 'text-amber-300' : 'text-amber-700 dark:text-amber-300'}`}>নোট: {o.note}</div>
+        <div
+          className={`px-3 pb-2 ${
+            isEmployee
+              ? 'text-2xl font-bold text-amber-300 bg-amber-500/10 border-y border-amber-500/30 py-3 mt-1'
+              : 'text-sm text-amber-700 dark:text-amber-300'
+          }`}
+        >
+          📌 নির্দেশনা: {o.note}
+        </div>
       )}
       <div className={`flex items-center gap-2 px-3 py-2 border-t ${isEmployee ? 'border-neutral-700' : 'border-neutral-100 dark:border-neutral-800'}`}>
         <span className={`text-xs ${isEmployee ? 'text-neutral-400' : 'text-neutral-500'}`}>{formatBnTime(o.createdAt)} · {toBn(totalCups)} কাপ · {payLabel}</span>
