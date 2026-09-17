@@ -18,15 +18,43 @@ export function getSocket(): Socket {
     autoConnect: true,
   });
   socket.on('connect', () => {
+    // Re-join on reconnect so the room subscription is restored.
     if (joinedTid) socket?.emit('join-tenant', joinedTid);
   });
   return socket;
 }
 
-export function joinTenant(tenantId: string) {
+/**
+ * Join a tenant room. Resolves once the server has acknowledged the join
+ * (so the caller can safely refetch and expect subsequent broadcasts).
+ * Falls back to a short delay if the server does not send an ack.
+ */
+export function joinTenant(tenantId: string): Promise<void> {
   const s = getSocket();
   joinedTid = tenantId;
-  if (s.connected) s.emit('join-tenant', tenantId);
+  return new Promise<void>((resolve) => {
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      resolve();
+    };
+    const emitWithAck = () => {
+      try {
+        s.emit('join-tenant', tenantId, () => finish());
+      } catch {
+        finish();
+      }
+    };
+    if (s.connected) {
+      emitWithAck();
+    } else {
+      s.once('connect', emitWithAck);
+    }
+    // Safety timeout: if server doesn't ack (old build, network hiccup),
+    // resolve anyway so callers don't hang forever.
+    setTimeout(finish, 3000);
+  });
 }
 
 export function leaveTenant() {

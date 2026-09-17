@@ -143,20 +143,23 @@ io.on('connection', (socket) => {
   });
   
   // Join tenant-specific room - validate tenantId is not empty/suspicious
-  socket.on('join-tenant', (tenantId: string) => {
+  socket.on('join-tenant', (tenantId: string, ack?: (res: { ok: boolean }) => void) => {
     // Basic validation: only allow joining if a valid tenantId is provided
     if (!tenantId || typeof tenantId !== 'string' || tenantId.length < 2 || tenantId.length > 100) {
       console.warn(`[Socket.IO] Invalid tenant join attempt from ${socket.id}: ${tenantId}`);
+      if (typeof ack === 'function') ack({ ok: false });
       return;
     }
     // Sanitize: only allow alphanumeric, hyphens, underscores
     const sanitized = tenantId.replace(/[^a-zA-Z0-9_-]/g, '');
     if (sanitized !== tenantId) {
       console.warn(`[Socket.IO] Suspicious tenant join from ${socket.id}: ${tenantId}`);
+      if (typeof ack === 'function') ack({ ok: false });
       return;
     }
     socket.join(`tenant:${sanitized}`);
     console.log(`[Socket.IO] Socket ${socket.id} joined tenant:${sanitized}`);
+    if (typeof ack === 'function') ack({ ok: true });
   });
   
   // Leave tenant room

@@ -72,23 +72,38 @@ function OwnerScreen({ tenantId }: { tenantId: string }) {
     catch { /* offline is fine */ }
   }, [tenantId]);
 
-  useEffect(() => { refreshMenu(); refreshOrders(); }, [refreshMenu, refreshOrders]);
+  useEffect(() => { refreshMenu(); }, [refreshMenu]);
 
   useEffect(() => {
     getEntitiesOffline(tenantId).then(r => setEntities(r.data.filter((e: any) => e.type === 'Customer')));
   }, [tenantId]);
 
-  // Socket live sync
+  // Socket live sync — fetch AFTER the tenant room is joined so we can't miss
+  // an order broadcast that lands in the gap between initial fetch and join.
   useEffect(() => {
-    joinTenant(tenantId);
+    let cancelled = false;
+    let firstConnect = true;
     const s = getSocket();
     const onNew = (o: OrderDoc) => setToday(prev => prev.some(x => x._id === o._id) ? prev : [...prev, o]);
     const onUpd = (o: OrderDoc) => setToday(prev => prev.map(x => x._id === o._id ? o : x));
     s.on('order:new', onNew);
     s.on('order:updated', onUpd);
     s.on('order:status', onUpd);
-    return () => { s.off('order:new', onNew); s.off('order:updated', onUpd); s.off('order:status', onUpd); leaveTenant(); };
-  }, [tenantId]);
+    joinTenant(tenantId).then(() => { if (!cancelled) refreshOrders(); });
+    const onConnect = () => {
+      if (firstConnect) { firstConnect = false; return; }
+      joinTenant(tenantId).then(() => { if (!cancelled) refreshOrders(); });
+    };
+    s.on('connect', onConnect);
+    return () => {
+      cancelled = true;
+      s.off('order:new', onNew);
+      s.off('order:updated', onUpd);
+      s.off('order:status', onUpd);
+      s.off('connect', onConnect);
+      leaveTenant();
+    };
+  }, [tenantId, refreshOrders]);
 
   // Offline drain
   useEffect(() => {
@@ -570,10 +585,9 @@ function KitchenScreen({ tenantId }: { tenantId: string }) {
     catch { /* offline is fine */ }
   }, [tenantId]);
 
-  useEffect(() => { refresh(); }, [refresh]);
-
   useEffect(() => {
-    joinTenant(tenantId);
+    let cancelled = false;
+    let firstConnect = true;
     const s = getSocket();
     const onNew = (o: OrderDoc) => {
       setOrders(prev => {
@@ -592,8 +606,22 @@ function KitchenScreen({ tenantId }: { tenantId: string }) {
     s.on('order:new', onNew);
     s.on('order:updated', onUpd);
     s.on('order:status', onUpd);
-    return () => { s.off('order:new', onNew); s.off('order:updated', onUpd); s.off('order:status', onUpd); leaveTenant(); };
-  }, [tenantId]);
+    // Fetch AFTER join so orders placed in the join-ack gap are picked up.
+    joinTenant(tenantId).then(() => { if (!cancelled) refresh(); });
+    const onConnect = () => {
+      if (firstConnect) { firstConnect = false; return; }
+      joinTenant(tenantId).then(() => { if (!cancelled) refresh(); });
+    };
+    s.on('connect', onConnect);
+    return () => {
+      cancelled = true;
+      s.off('order:new', onNew);
+      s.off('order:updated', onUpd);
+      s.off('order:status', onUpd);
+      s.off('connect', onConnect);
+      leaveTenant();
+    };
+  }, [tenantId, refresh]);
 
   // Prime audio + wake lock on first user interaction so alarms actually ring
   useEffect(() => {
