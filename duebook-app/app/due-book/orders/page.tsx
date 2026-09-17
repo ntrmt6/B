@@ -56,7 +56,7 @@ function OwnerScreen({ tenantId }: { tenantId: string }) {
   const [customerName, setCustomerName] = useState('');
   const [selectedEntityId, setSelectedEntityId] = useState('');
   const [orderNote, setOrderNote] = useState('');
-  const [showConfirm, setShowConfirm] = useState(false);
+  const [showCart, setShowCart] = useState(false);
   const [today, setToday] = useState<OrderDoc[]>([]);
   const [busy, setBusy] = useState(false);
   const [offlineCount, setOfflineCount] = useState(0);
@@ -130,6 +130,14 @@ function OwnerScreen({ tenantId }: { tenantId: string }) {
 
   const total = useMemo(() => cart.reduce((s, l) => s + l.price * l.qty, 0), [cart]);
   const totalCups = useMemo(() => cart.reduce((s, l) => s + l.qty, 0), [cart]);
+  const cartQtyByItemId = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const l of cart) {
+      if (!l.menuItemId) continue;
+      m.set(l.menuItemId, (m.get(l.menuItemId) || 0) + l.qty);
+    }
+    return m;
+  }, [cart]);
 
   const addToCart = (item: MenuItemDoc) => {
     setCart(prev => {
@@ -190,7 +198,7 @@ function OwnerScreen({ tenantId }: { tenantId: string }) {
         setToday(prev => prev.some(x => x._id === res.order!._id) ? prev : [...prev, res.order!]);
         toast.success(`অর্ডার #${res.order.code} পাঠানো হয়েছে`);
       }
-      setShowConfirm(false);
+      setShowCart(false);
       resetOrder();
     } catch (e: any) {
       toast.error(e?.response?.data?.error || 'অর্ডার ব্যর্থ');
@@ -220,7 +228,7 @@ function OwnerScreen({ tenantId }: { tenantId: string }) {
     setCustomerName(o.customerName || '');
     setOrderNote(o.note || '');
     setEditingId(o._id);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setShowCart(true);
   };
 
   const saveEdit = async () => {
@@ -235,6 +243,7 @@ function OwnerScreen({ tenantId }: { tenantId: string }) {
       setToday(prev => prev.map(x => x._id === doc._id ? doc : x));
       toast.success('আপডেট হয়েছে');
       setEditingId(null);
+      setShowCart(false);
       resetOrder();
     } catch (e: any) {
       toast.error(e?.response?.data?.error || 'সেভ হয়নি');
@@ -242,7 +251,7 @@ function OwnerScreen({ tenantId }: { tenantId: string }) {
   };
 
   return (
-    <div className="min-h-screen bg-white text-neutral-900 dark:bg-neutral-900 dark:text-white pb-40">
+    <div className="min-h-screen bg-white text-neutral-900 dark:bg-neutral-900 dark:text-white pb-24">
       <header className="sticky top-0 z-20 bg-white/95 dark:bg-neutral-900/95 backdrop-blur border-b border-neutral-200 dark:border-neutral-800">
         <div className="max-w-3xl mx-auto flex items-center gap-2 px-3 py-3">
           <Link href="/due-book" className="p-2 -ml-2 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800" aria-label="ফিরে যান">
@@ -257,7 +266,7 @@ function OwnerScreen({ tenantId }: { tenantId: string }) {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-3 py-3 space-y-4">
+      <main className="max-w-3xl mx-auto px-3 py-3 space-y-3">
         <DailySummaryCard tenantId={tenantId} today={today} />
         {editingId && (
           <div className="rounded-lg bg-amber-50 border border-amber-300 dark:bg-amber-900/20 dark:border-amber-700 px-3 py-2 text-sm flex items-center gap-2">
@@ -273,94 +282,37 @@ function OwnerScreen({ tenantId }: { tenantId: string }) {
             <Link href="/due-book/menu" className="inline-block mt-2 text-sky-500 underline">মেনু বিল্ডারে যান</Link>
           </div>
         ) : (
-          <section className="space-y-4">
+          <section className="space-y-3">
             {grouped.map(([cat, list]) => (
               <div key={cat}>
-                <div className="text-sm font-semibold text-neutral-500 mb-2">{cat}</div>
-                <div className="grid grid-cols-2 gap-2">
-                  {list.map(it => (
-                    <button
-                      key={it._id}
-                      onClick={() => addToCart(it)}
-                      className="group flex flex-col items-start gap-1 p-3 rounded-xl border-2 border-neutral-200 dark:border-neutral-700 hover:border-sky-500 hover:bg-sky-50 dark:hover:bg-sky-900/20 active:scale-95 transition text-left"
-                    >
-                      <div className="text-base font-semibold">{it.nameBn}</div>
-                      <div className="text-sm text-neutral-500">{formatBdt(it.price)}</div>
-                    </button>
-                  ))}
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-neutral-500 mb-1.5">{cat}</div>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-1.5">
+                  {list.map(it => {
+                    const qty = cartQtyByItemId.get(it._id) || 0;
+                    const inCart = qty > 0;
+                    return (
+                      <button
+                        key={it._id}
+                        onClick={() => addToCart(it)}
+                        className={`relative flex flex-col items-start gap-0.5 p-2 rounded-lg border-2 active:scale-95 transition text-left min-h-[54px] ${
+                          inCart
+                            ? 'border-sky-500 bg-sky-50 dark:bg-sky-900/30'
+                            : 'border-neutral-200 dark:border-neutral-700 hover:border-sky-400'
+                        }`}
+                      >
+                        <div className="text-sm font-semibold leading-tight line-clamp-2">{it.nameBn}</div>
+                        <div className="text-[11px] text-neutral-500 tabular-nums">{formatBdt(it.price)}</div>
+                        {inCart && (
+                          <span className="absolute -top-1.5 -right-1.5 min-w-[22px] h-[22px] px-1 rounded-full bg-sky-500 text-white text-[11px] font-bold flex items-center justify-center tabular-nums shadow">
+                            {toBn(qty)}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             ))}
-          </section>
-        )}
-
-        {cart.length > 0 && (
-          <section className="rounded-xl border border-neutral-200 dark:border-neutral-800">
-            <div className="px-3 py-2 bg-neutral-50 dark:bg-neutral-800 font-semibold text-sm">কার্ট</div>
-            <ul>
-              {cart.map((l, i) => (
-                <li key={i} className="border-t border-neutral-100 dark:border-neutral-800 first:border-t-0 p-3 space-y-2">
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1">
-                      <div className="font-medium">{l.name}</div>
-                      <div className="text-xs text-neutral-500">{formatBdt(l.price)} × {toBn(l.qty)}</div>
-                    </div>
-                    <button onClick={() => changeQty(i, -1)} className="w-8 h-8 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center"><Minus size={16} /></button>
-                    <div className="w-8 text-center text-lg font-bold tabular-nums">{toBn(l.qty)}</div>
-                    <button onClick={() => changeQty(i, 1)} className="w-8 h-8 rounded-full bg-sky-500 text-white flex items-center justify-center"><Plus size={16} /></button>
-                  </div>
-                  <input
-                    value={l.note || ''}
-                    onChange={e => setLineNote(i, e.target.value)}
-                    placeholder="নোট (কম চিনি, কড়া, ইত্যাদি)"
-                    className="w-full text-sm px-2 py-1 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-transparent"
-                  />
-                </li>
-              ))}
-            </ul>
-            <div className="p-3 border-t border-neutral-100 dark:border-neutral-800 space-y-3">
-              <label className="block">
-                <div className="text-xs font-medium mb-1 text-neutral-500">কাস্টমারের নাম (ঐচ্ছিক)</div>
-                <input
-                  value={customerName}
-                  onChange={e => setCustomerName(e.target.value)}
-                  placeholder="যেমন: রহিম ভাই"
-                  className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-transparent"
-                />
-              </label>
-              <label className="block">
-                <div className="text-xs font-medium mb-1 text-neutral-500">বিশেষ নির্দেশনা (ঐচ্ছিক)</div>
-                <input
-                  value={orderNote}
-                  onChange={e => setOrderNote(e.target.value)}
-                  placeholder="যেমন: টেবিল ২ / কম চিনি / দ্রুত দিন"
-                  className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-transparent"
-                />
-              </label>
-              <div>
-                <div className="text-xs font-medium mb-1 text-neutral-500">পেমেন্ট</div>
-                <div className="grid grid-cols-3 gap-2">
-                  <PayBtn active={payment === 'nagad'} onClick={() => setPayment('nagad')} icon={<Wallet size={14} />} label="নগদ" />
-                  <PayBtn active={payment === 'bkash'} onClick={() => setPayment('bkash')} icon={<Smartphone size={14} />} label="বিকাশ / নগদ" />
-                  <PayBtn active={payment === 'baki'} onClick={() => setPayment('baki')} icon={<User size={14} />} label="বাকি" />
-                </div>
-              </div>
-              {payment === 'baki' && (
-                <label className="block">
-                  <div className="text-xs font-medium mb-1 text-neutral-500">কাস্টমার (বাকি খাতা)</div>
-                  <select
-                    value={selectedEntityId}
-                    onChange={e => setSelectedEntityId(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-transparent"
-                  >
-                    <option value="">— বাছাই করুন —</option>
-                    {entities.map(e => (
-                      <option key={e._id} value={e._id}>{e.name} {e.phone ? `(${e.phone})` : ''}</option>
-                    ))}
-                  </select>
-                </label>
-              )}
-            </div>
           </section>
         )}
 
@@ -381,44 +333,41 @@ function OwnerScreen({ tenantId }: { tenantId: string }) {
       </main>
 
       {cart.length > 0 && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur border-t border-neutral-200 dark:border-neutral-800">
-          <div className="max-w-3xl mx-auto p-3 flex items-center gap-3">
-            <div className="flex-1">
-              <div className="text-xs text-neutral-500">{toBn(totalCups)} কাপ</div>
-              <div className="text-2xl font-bold">{formatBdt(total)}</div>
+        <button
+          onClick={() => setShowCart(true)}
+          className="fixed bottom-0 left-0 right-0 z-30 bg-white/95 dark:bg-neutral-900/95 backdrop-blur border-t border-neutral-200 dark:border-neutral-800"
+        >
+          <div className="max-w-3xl mx-auto p-2.5 flex items-center gap-3">
+            <div className="flex-1 text-left">
+              <div className="text-[11px] text-neutral-500 leading-tight">{toBn(totalCups)} কাপ · {toBn(cart.length)} আইটেম</div>
+              <div className="text-xl font-bold leading-tight">{formatBdt(total)}</div>
             </div>
-            {editingId ? (
-              <button
-                onClick={saveEdit}
-                disabled={busy || cart.length === 0}
-                className="bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-white px-5 py-3 rounded-xl font-medium flex items-center gap-2"
-              >
-                {busy ? <Spinner /> : <Check size={18} />}
-                সেভ
-              </button>
-            ) : (
-              <button
-                onClick={() => setShowConfirm(true)}
-                disabled={cart.length === 0}
-                className="bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white px-5 py-3 rounded-xl font-medium flex items-center gap-2"
-              >
-                <ShoppingCart size={18} /> পাঠান
-              </button>
-            )}
+            <div className={`${editingId ? 'bg-emerald-500' : 'bg-sky-500'} text-white px-4 py-2.5 rounded-xl font-semibold flex items-center gap-1.5 text-base`}>
+              <ShoppingCart size={16} /> {editingId ? 'সেভ' : 'পাঠান'}
+            </div>
           </div>
-        </div>
+        </button>
       )}
 
-      {showConfirm && (
-        <ConfirmModal
+      {showCart && (
+        <CartModal
           cart={cart}
+          entities={entities}
+          payment={payment}
+          setPayment={setPayment}
+          customerName={customerName}
+          setCustomerName={setCustomerName}
+          selectedEntityId={selectedEntityId}
+          setSelectedEntityId={setSelectedEntityId}
+          orderNote={orderNote}
+          setOrderNote={setOrderNote}
+          changeQty={changeQty}
+          setLineNote={setLineNote}
           total={total}
           totalCups={totalCups}
-          customerName={customerName}
-          note={orderNote}
-          payment={payment}
-          onCancel={() => setShowConfirm(false)}
-          onConfirm={submitOrder}
+          isEditing={!!editingId}
+          onClose={() => setShowCart(false)}
+          onSubmit={editingId ? saveEdit : submitOrder}
           busy={busy}
         />
       )}
@@ -525,45 +474,119 @@ function Spinner() {
   return <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />;
 }
 
-function ConfirmModal({ cart, total, totalCups, customerName, note, payment, onCancel, onConfirm, busy }:
-  { cart: CartLine[]; total: number; totalCups: number; customerName: string; note: string; payment: OrderPayment; onCancel: () => void; onConfirm: () => void; busy: boolean }) {
+function CartModal({
+  cart, entities, payment, setPayment,
+  customerName, setCustomerName,
+  selectedEntityId, setSelectedEntityId,
+  orderNote, setOrderNote,
+  changeQty, setLineNote,
+  total, totalCups, isEditing,
+  onClose, onSubmit, busy,
+}: {
+  cart: CartLine[];
+  entities: Entity[];
+  payment: OrderPayment;
+  setPayment: (p: OrderPayment) => void;
+  customerName: string;
+  setCustomerName: (v: string) => void;
+  selectedEntityId: string;
+  setSelectedEntityId: (v: string) => void;
+  orderNote: string;
+  setOrderNote: (v: string) => void;
+  changeQty: (idx: number, delta: number) => void;
+  setLineNote: (idx: number, note: string) => void;
+  total: number;
+  totalCups: number;
+  isEditing: boolean;
+  onClose: () => void;
+  onSubmit: () => void;
+  busy: boolean;
+}) {
   const payLabel = payment === 'nagad' ? 'নগদ' : payment === 'bkash' ? 'বিকাশ / নগদ' : 'বাকি';
+  const canSubmit = cart.length > 0 && !(payment === 'baki' && !selectedEntityId);
+  const [showNoteIdx, setShowNoteIdx] = useState<number | null>(null);
   return (
-    <div className="fixed inset-0 z-40 bg-black/60 flex items-end sm:items-center justify-center p-2">
-      <div className="w-full max-w-md bg-white dark:bg-neutral-900 rounded-2xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800">
-          <h2 className="text-lg font-bold">অর্ডার নিশ্চিত করুন</h2>
-          <p className="text-xs text-neutral-500 mt-0.5">পাঠানোর আগে ভালো করে দেখে নিন</p>
+    <div className="fixed inset-0 z-40 bg-black/60 flex items-end sm:items-center justify-center">
+      <div className="w-full max-w-md bg-white dark:bg-neutral-900 sm:rounded-2xl rounded-t-2xl overflow-hidden max-h-[92vh] flex flex-col">
+        <div className="px-4 py-3 border-b border-neutral-200 dark:border-neutral-800 flex items-center gap-2">
+          <h2 className="text-lg font-bold flex-1">{isEditing ? 'অর্ডার এডিট' : 'কার্ট'}</h2>
+          <button onClick={onClose} className="p-1.5 rounded-lg hover:bg-neutral-100 dark:hover:bg-neutral-800" aria-label="বন্ধ"><X size={20} /></button>
         </div>
-        <div className="p-4 space-y-2 max-h-[50vh] overflow-y-auto">
-          {customerName && <div className="text-sm text-neutral-500">কাস্টমার: <span className="text-neutral-800 dark:text-neutral-100 font-medium">{customerName}</span></div>}
-          <ul className="space-y-1">
+        <div className="p-3 space-y-3 overflow-y-auto flex-1">
+          <ul className="space-y-1.5">
             {cart.map((l, i) => (
-              <li key={i} className="flex items-baseline gap-2 py-1 border-b border-neutral-100 dark:border-neutral-800 last:border-b-0">
-                <span className="w-8 text-lg font-bold tabular-nums">{toBn(l.qty)}×</span>
-                <span className="flex-1 text-base">
-                  <span className="font-medium">{l.name}</span>
-                  {l.note && <span className="block text-xs text-neutral-500">📝 {l.note}</span>}
-                </span>
-                <span className="text-base font-medium tabular-nums">{formatBdt(l.price * l.qty)}</span>
+              <li key={i} className="rounded-lg border border-neutral-100 dark:border-neutral-800 p-2">
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium truncate">{l.name}</div>
+                    <div className="text-[11px] text-neutral-500 tabular-nums">{formatBdt(l.price)} × {toBn(l.qty)} = {formatBdt(l.price * l.qty)}</div>
+                  </div>
+                  <button onClick={() => changeQty(i, -1)} className="w-8 h-8 rounded-full bg-neutral-100 dark:bg-neutral-800 flex items-center justify-center"><Minus size={16} /></button>
+                  <div className="w-6 text-center text-lg font-bold tabular-nums">{toBn(l.qty)}</div>
+                  <button onClick={() => changeQty(i, 1)} className="w-8 h-8 rounded-full bg-sky-500 text-white flex items-center justify-center"><Plus size={16} /></button>
+                </div>
+                {showNoteIdx === i || l.note ? (
+                  <input
+                    autoFocus={showNoteIdx === i}
+                    value={l.note || ''}
+                    onChange={e => setLineNote(i, e.target.value)}
+                    onBlur={() => setShowNoteIdx(null)}
+                    placeholder="নোট (কম চিনি, কড়া…)"
+                    className="mt-1.5 w-full text-xs px-2 py-1 rounded border border-neutral-200 dark:border-neutral-700 bg-transparent"
+                  />
+                ) : (
+                  <button onClick={() => setShowNoteIdx(i)} className="mt-1 text-[11px] text-sky-500 hover:underline">+ নোট যোগ করুন</button>
+                )}
               </li>
             ))}
           </ul>
-          {note && <div className="text-sm text-neutral-500">নোট: {note}</div>}
+
+          <div className="grid grid-cols-3 gap-2">
+            <PayBtn active={payment === 'nagad'} onClick={() => setPayment('nagad')} icon={<Wallet size={14} />} label="নগদ" />
+            <PayBtn active={payment === 'bkash'} onClick={() => setPayment('bkash')} icon={<Smartphone size={14} />} label="বিকাশ" />
+            <PayBtn active={payment === 'baki'} onClick={() => setPayment('baki')} icon={<User size={14} />} label="বাকি" />
+          </div>
+
+          {payment === 'baki' && (
+            <select
+              value={selectedEntityId}
+              onChange={e => setSelectedEntityId(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-transparent"
+            >
+              <option value="">— বাকি খাতার কাস্টমার বাছাই —</option>
+              {entities.map(e => (
+                <option key={e._id} value={e._id}>{e.name} {e.phone ? `(${e.phone})` : ''}</option>
+              ))}
+            </select>
+          )}
+
+          <input
+            value={customerName}
+            onChange={e => setCustomerName(e.target.value)}
+            placeholder="কাস্টমারের নাম (ঐচ্ছিক)"
+            className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-transparent"
+          />
+
+          <input
+            value={orderNote}
+            onChange={e => setOrderNote(e.target.value)}
+            placeholder="বিশেষ নির্দেশনা (টেবিল, দ্রুত…)"
+            className="w-full px-3 py-2 rounded-lg border border-neutral-200 dark:border-neutral-700 bg-transparent"
+          />
         </div>
-        <div className="p-4 border-t border-neutral-200 dark:border-neutral-800 space-y-2">
+        <div className="p-3 border-t border-neutral-200 dark:border-neutral-800 space-y-2">
           <div className="flex items-baseline justify-between">
             <span className="text-sm text-neutral-500">{toBn(totalCups)} কাপ · {payLabel}</span>
             <span className="text-2xl font-bold">{formatBdt(total)}</span>
           </div>
-          <div className="flex gap-2 pt-1">
-            <button onClick={onCancel} className="flex-1 py-3 rounded-lg bg-neutral-100 dark:bg-neutral-800 font-medium">বাতিল</button>
+          <div className="flex gap-2">
+            <button onClick={onClose} className="flex-1 py-3 rounded-lg bg-neutral-100 dark:bg-neutral-800 font-medium">আরও যোগ</button>
             <button
-              onClick={onConfirm}
-              disabled={busy}
-              className="flex-1 py-3 rounded-lg bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white font-medium flex items-center justify-center gap-2"
+              onClick={onSubmit}
+              disabled={busy || !canSubmit}
+              className={`flex-1 py-3 rounded-lg ${isEditing ? 'bg-emerald-500 hover:bg-emerald-600' : 'bg-sky-500 hover:bg-sky-600'} disabled:opacity-50 text-white font-medium flex items-center justify-center gap-2`}
             >
-              {busy ? <Spinner /> : <Check size={18} />} পাঠান
+              {busy ? <Spinner /> : <Check size={18} />} {isEditing ? 'সেভ' : 'পাঠান'}
             </button>
           </div>
         </div>
