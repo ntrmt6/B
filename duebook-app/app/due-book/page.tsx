@@ -2509,6 +2509,12 @@ export default function DueBookPage() {
                       className="w-full flex items-center gap-2.5 px-3 py-2 text-gray-700 dark:text-slate-200 hover:bg-gray-50 dark:hover:bg-slate-700">
                       <Settings size={14} className="text-gray-500 dark:text-slate-400" /> Settings
                     </button>
+                    {user?.role === 'super_admin' && (
+                      <button onClick={() => { setShowMenu(false); router.push('/due-book/admin'); }}
+                        className="w-full flex items-center gap-2.5 px-3 py-2 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-50 dark:hover:bg-emerald-900/30">
+                        <ShieldCheck size={14} className="text-emerald-500" /> Super Admin Panel
+                      </button>
+                    )}
                     <div className="my-1 border-t border-gray-100 dark:border-slate-700" />
                   </>
                 )}
