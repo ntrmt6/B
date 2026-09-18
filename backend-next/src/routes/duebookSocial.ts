@@ -150,6 +150,37 @@ duebookSocialRouter.post('/posts', async (req: Request, res: Response, next: Nex
   }
 });
 
+const updatePostSchema = z.object({
+  text: z.string().max(5000).optional(),
+  images: z.array(z.string()).max(10).optional(),
+  videoUrl: z.string().optional(),
+  thumbnailUrl: z.string().optional(),
+});
+
+duebookSocialRouter.patch('/posts/:id', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    if (!isValidId(req.params.id)) return res.status(400).json({ error: 'Invalid id' });
+    const post = await SocialPost.findById(req.params.id);
+    if (!post) return res.status(404).json({ error: 'Not found' });
+    if (String(post.authorId) !== req.userId) return res.status(403).json({ error: 'Forbidden' });
+    const data = updatePostSchema.parse(req.body);
+    if (data.text !== undefined) post.text = data.text.trim();
+    if (data.images !== undefined) post.images = data.images;
+    if (data.videoUrl !== undefined) post.videoUrl = data.videoUrl;
+    if (data.thumbnailUrl !== undefined) post.thumbnailUrl = data.thumbnailUrl;
+    const hasBody = (post.text && post.text.length > 0) || (post.images && post.images.length > 0) || !!post.videoUrl;
+    if (!hasBody) return res.status(400).json({ error: 'Post needs text, images or a video' });
+    post.editedAt = new Date();
+    await post.save();
+    const author = await User.findById(post.authorId).select('name image bio followerCount followingCount postCount').lean();
+    const liked = req.userId ? !!(await SocialLike.exists({ userId: toObjectId(req.userId), targetType: 'post', targetId: post._id })) : false;
+    res.json({ ...normalizePost(post.toObject()), author: projectAuthor(author), liked });
+  } catch (e) {
+    if (e instanceof z.ZodError) return res.status(400).json({ error: e.errors });
+    next(e);
+  }
+});
+
 duebookSocialRouter.delete('/posts/:id', async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (!isValidId(req.params.id)) return res.status(400).json({ error: 'Invalid id' });

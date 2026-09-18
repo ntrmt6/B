@@ -22,6 +22,7 @@ export interface SocialPost {
   commentCount: number;
   shareCount: number;
   createdAt: string;
+  editedAt?: string;
   author?: SocialAuthor | null;
   liked?: boolean;
 }
@@ -72,6 +73,9 @@ export const social = {
 
   createPost: (body: { kind?: 'post' | 'short'; text?: string; images?: string[]; videoUrl?: string; thumbnailUrl?: string; }) =>
     api.post<SocialPost>(`${base}/posts`, body).then(r => r.data),
+
+  updatePost: (id: string, body: { text?: string; images?: string[]; videoUrl?: string; thumbnailUrl?: string; }) =>
+    api.patch<SocialPost>(`${base}/posts/${id}`, body).then(r => r.data),
 
   deletePost: (id: string) => api.delete(`${base}/posts/${id}`).then(r => r.data),
 

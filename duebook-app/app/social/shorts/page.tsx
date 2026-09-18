@@ -58,38 +58,9 @@ export default function ShortsPage() {
     const io = new IntersectionObserver(
       entries => {
         entries.forEach(ent => {
-          const idx = Number((ent.target as HTMLElement).dataset.idx || '0');
-          const video = videoRefs.current[idx];
-          if (!video) return;
           if (ent.isIntersecting && ent.intersectionRatio > 0.5) {
+            const idx = Number((ent.target as HTMLElement).dataset.idx || '0');
             setActiveIndex(idx);
-            video.currentTime = 0;
-            const tryPlay = () => {
-              const p = video.play();
-              if (!p || typeof p.then !== 'function') return;
-              p.catch(() => {
-                // Autoplay-with-sound is often blocked on mobile until the
-                // user has interacted with the page. Fall back to muted so
-                // the video still plays; user can tap the speaker to unmute.
-                if (!video.muted) {
-                  video.muted = true;
-                  setMuted(true);
-                  const p2 = video.play();
-                  if (p2 && typeof p2.then === 'function') {
-                    p2.catch(() => {
-                      const id = (ent.target as HTMLElement).dataset.postid || '';
-                      if (id) setPausedIds(prev => ({ ...prev, [id]: true }));
-                    });
-                  }
-                } else {
-                  const id = (ent.target as HTMLElement).dataset.postid || '';
-                  if (id) setPausedIds(prev => ({ ...prev, [id]: true }));
-                }
-              });
-            };
-            tryPlay();
-          } else {
-            video.pause();
           }
         });
       },
@@ -99,6 +70,31 @@ export default function ShortsPage() {
     nodes.forEach(n => io.observe(n));
     return () => io.disconnect();
   }, [posts]);
+
+  useEffect(() => {
+    videoRefs.current.forEach((v, i) => {
+      if (!v) return;
+      if (i === activeIndex) return;
+      if (!v.paused) v.pause();
+    });
+    const cur = videoRefs.current[activeIndex];
+    const post = posts[activeIndex];
+    if (!cur || !post) return;
+    cur.currentTime = 0;
+    const markPaused = () => setPausedIds(prev => ({ ...prev, [post._id]: true }));
+    const p = cur.play();
+    if (p && typeof p.then === 'function') {
+      p.catch(() => {
+        if (!cur.muted) {
+          cur.muted = true;
+          setMuted(true);
+          cur.play().catch(markPaused);
+        } else {
+          markPaused();
+        }
+      });
+    }
+  }, [activeIndex, posts]);
 
   async function like(post: SocialPost) {
     if (isGuest) return requireLogin('Like');
@@ -180,17 +176,26 @@ export default function ShortsPage() {
           scrollSnapType: 'y mandatory',
         }}
         className="h-full overflow-y-scroll snap-y snap-mandatory">
-        {posts.map((p, i) => (
+        {posts.map((p, i) => {
+          const dist = Math.abs(i - activeIndex);
+          const nearby = dist <= 1;
+          const preload = dist === 0 ? 'auto' : dist === 1 ? 'metadata' : 'none';
+          return (
           <section key={p._id} data-idx={i} data-postid={p._id}
             style={{ scrollSnapStop: 'always', scrollSnapAlign: 'start' }}
             className="relative h-[100dvh] w-full snap-start flex items-center justify-center bg-black">
-            {p.videoUrl && (
+            {p.thumbnailUrl && (
+              // eslint-disable-next-line @next/next/no-img-element
+              <img src={p.thumbnailUrl} alt="" aria-hidden="true"
+                className="absolute inset-0 w-full h-full object-contain opacity-90" />
+            )}
+            {p.videoUrl && nearby && (
               <video ref={el => { videoRefs.current[i] = el; }}
                 src={p.videoUrl}
                 poster={p.thumbnailUrl}
                 muted={muted}
                 loop
-                preload="metadata"
+                preload={preload}
                 playsInline
                 // eslint-disable-next-line react/no-unknown-property
                 webkit-playsinline="true"
@@ -258,7 +263,8 @@ export default function ShortsPage() {
               </button>
             </div>
           </section>
-        ))}
+          );
+        })}
       </div>
 
       <nav className="fixed bottom-0 inset-x-0 z-30 bg-black/80 backdrop-blur">

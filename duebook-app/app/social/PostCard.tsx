@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { Heart, MessageCircle, Share2, MoreHorizontal, Trash2, Send } from 'lucide-react';
+import { Heart, MessageCircle, Share2, MoreHorizontal, Trash2, Send, Pencil } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { social, socialTimeAgo, SocialPost, SocialComment } from '@/lib/socialApi';
 import { Avatar } from './SocialShell';
@@ -26,9 +26,13 @@ export default function PostCard({ post, currentUserId, onDelete, onChange }: Pr
   const [replyTo, setReplyTo] = useState<string | null>(null);
   const [replyText, setReplyText] = useState('');
   const [showMenu, setShowMenu] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [editText, setEditText] = useState(post.text || '');
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const isGuest = !currentUserId;
   const canDelete = currentUserId && String(currentUserId) === String(post.authorId);
+  const canEdit = canDelete;
 
   function requireLogin(action: string) {
     toast(`${action} করতে সাইন-ইন করুন`, { icon: '🔒' });
@@ -126,6 +130,27 @@ export default function PostCard({ post, currentUserId, onDelete, onChange }: Pr
     } catch { toast.error('Failed'); }
   }
 
+  function startEdit() {
+    setEditText(post.text || '');
+    setEditing(true);
+    setShowMenu(false);
+  }
+
+  async function saveEdit() {
+    const next = editText.trim();
+    if (next === (post.text || '').trim()) { setEditing(false); return; }
+    const hasMedia = (post.images && post.images.length > 0) || !!post.videoUrl;
+    if (!next && !hasMedia) { toast.error('Text or media required'); return; }
+    setSavingEdit(true);
+    try {
+      const updated = await social.updatePost(post._id, { text: next });
+      onChange?.({ ...post, ...updated });
+      setEditing(false);
+      toast.success('Updated');
+    } catch { toast.error('Failed'); }
+    finally { setSavingEdit(false); }
+  }
+
   const roots = comments.filter(c => !c.parentId);
   const repliesOf = (id: string) => comments.filter(c => c.parentId === id);
 
@@ -139,7 +164,10 @@ export default function PostCard({ post, currentUserId, onDelete, onChange }: Pr
           <Link href={`/social/profile/${post.authorId}`} className="block text-[13.5px] font-semibold truncate">
             {post.author?.name || 'Unknown'}
           </Link>
-          <div className="text-[11px] text-gray-500 dark:text-slate-400">{socialTimeAgo(post.createdAt)}</div>
+          <div className="text-[11px] text-gray-500 dark:text-slate-400">
+            {socialTimeAgo(post.createdAt)}
+            {post.editedAt && <span className="ml-1 italic">· edited</span>}
+          </div>
         </div>
         {canDelete && (
           <div className="relative">
@@ -149,6 +177,11 @@ export default function PostCard({ post, currentUserId, onDelete, onChange }: Pr
             </button>
             {showMenu && (
               <div className="absolute right-0 top-9 z-20 w-36 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-lg py-1 text-[13px]">
+                {canEdit && (
+                  <button onClick={startEdit} className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-100 dark:hover:bg-slate-700">
+                    <Pencil size={14} /> Edit
+                  </button>
+                )}
                 <button onClick={doDelete} className="w-full flex items-center gap-2 px-3 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40">
                   <Trash2 size={14} /> Delete
                 </button>
@@ -158,8 +191,24 @@ export default function PostCard({ post, currentUserId, onDelete, onChange }: Pr
         )}
       </header>
 
-      {post.text && (
-        <div className="px-3 pb-2 text-[14px] whitespace-pre-wrap break-words">{post.text}</div>
+      {editing ? (
+        <div className="px-3 pb-2">
+          <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={4}
+            className="w-full bg-gray-100 dark:bg-slate-800 rounded-lg px-3 py-2 text-[14px] outline-none resize-none" />
+          <div className="mt-2 flex justify-end gap-2">
+            <button onClick={() => setEditing(false)} className="px-3 py-1.5 text-[13px] rounded-full bg-gray-100 dark:bg-slate-800">
+              Cancel
+            </button>
+            <button onClick={saveEdit} disabled={savingEdit}
+              className="px-4 py-1.5 text-[13px] font-semibold rounded-full bg-sky-500 text-white disabled:opacity-60">
+              {savingEdit ? 'Saving…' : 'Save'}
+            </button>
+          </div>
+        </div>
+      ) : (
+        post.text && (
+          <div className="px-3 pb-2 text-[14px] whitespace-pre-wrap break-words">{post.text}</div>
+        )
       )}
 
       {post.images.length > 0 && (

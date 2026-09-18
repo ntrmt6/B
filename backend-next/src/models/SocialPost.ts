@@ -12,6 +12,7 @@ export interface ISocialPost extends Document {
   commentCount: number;
   shareCount: number;
   visibility: 'public' | 'followers';
+  editedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,6 +28,7 @@ const SocialPostSchema = new Schema<ISocialPost>({
   commentCount: { type: Number, default: 0 },
   shareCount: { type: Number, default: 0 },
   visibility: { type: String, enum: ['public', 'followers'], default: 'public' },
+  editedAt: { type: Date },
 }, { timestamps: true });
 
 SocialPostSchema.index({ kind: 1, createdAt: -1 });
