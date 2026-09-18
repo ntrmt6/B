@@ -5,6 +5,7 @@ import HomeRedirectGate from './HomeRedirectGate';
 
 const SITE_URL = 'https://duebook.shopbdit.com';
 const APK_URL = '/api/apk-builder/download/duebook';
+const KITCHEN_APK_URL = '/api/apk-builder/download/kitchen';
 
 export const metadata: Metadata = {
   title: 'DueBook — বাকির খাতা, দোকানের হিসাব ও লেনদেন অ্যাপ | ফ্রি ডাউনলোড',
@@ -111,6 +112,7 @@ export default function LandingPage() {
               <a href="#how" className="hover:text-sky-600">কিভাবে চলে</a>
               <a href="#faq" className="hover:text-sky-600">FAQ</a>
               <a href="#download" className="hover:text-sky-600">Download</a>
+              <a href="#kitchen" className="hover:text-orange-600">রান্নাঘর</a>
             </div>
             <div className="flex items-center gap-2">
               <Link href="/login" className="text-sm font-bold text-slate-700 px-3 py-1.5 rounded-lg hover:bg-slate-100">
@@ -297,6 +299,66 @@ export default function LandingPage() {
               <Link href="/login" className="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-slate-900/30 backdrop-blur text-white font-black border-2 border-white/40 active:scale-95 transition">
                 🌐 ওয়েবে চালু করুন
               </Link>
+            </div>
+          </div>
+        </section>
+
+        {/* ─── Kitchen (Ranna Ghor) APK ─── */}
+        <section id="kitchen" className="relative overflow-hidden bg-neutral-900 text-white">
+          <div className="absolute inset-0 bg-gradient-to-br from-orange-600/20 via-neutral-900 to-red-900/20" aria-hidden="true" />
+          <div className="relative max-w-6xl mx-auto px-4 py-14 md:py-20 grid md:grid-cols-2 gap-8 items-center">
+            <div>
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider bg-orange-500/20 text-orange-300 px-2.5 py-1 rounded-full">
+                🍳 রান্নাঘর অ্যাপ · নতুন
+              </span>
+              <h2 className="mt-4 text-2xl md:text-4xl font-black leading-tight">
+                রান্নাঘরের জন্য আলাদা অ্যাপ
+                <span className="block text-orange-300">রিয়েল-টাইম অর্ডার</span>
+              </h2>
+              <p className="mt-4 text-white/80 leading-relaxed">
+                অ্যাপ ইনস্টল করে দোকানের কোড দিয়ে সাইন-ইন করলেই বাবুর্চি লাইভ অর্ডার দেখতে পাবে —
+                অ্যালার্ম, ভাইব্রেশন, নোট ও স্ট্যাটাস আপডেট, সব এক স্ক্রিনে।
+              </p>
+              <ul className="mt-4 text-[13px] text-white/70 space-y-1 font-semibold">
+                <li>✓ নতুন অর্ডার এলে লাউড অ্যালার্ম</li>
+                <li>✓ স্ক্রিন অন থাকে (wake lock)</li>
+                <li>✓ অফলাইনেও চলে</li>
+                <li>✓ new → making → ready এক ট্যাপে</li>
+              </ul>
+              <div className="mt-6 flex flex-wrap gap-3">
+                <a href={KITCHEN_APK_URL} className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-gradient-to-r from-orange-500 to-red-500 text-white font-black shadow-lg shadow-orange-500/30 active:scale-95 transition">
+                  📥 রান্নাঘর APK ডাউনলোড
+                </a>
+                <Link href="/kitchen" className="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-white/10 text-white font-bold border-2 border-white/20 active:scale-95 transition">
+                  🌐 ব্রাউজারে চালান
+                </Link>
+              </div>
+            </div>
+
+            {/* Kitchen phone mock */}
+            <div className="relative mx-auto w-[260px] md:w-[280px] aspect-[9/19] bg-black rounded-[36px] p-2 shadow-2xl shadow-orange-500/20">
+              <div className="w-full h-full bg-neutral-950 rounded-[28px] overflow-hidden relative">
+                <div className="absolute top-0 left-0 right-0 h-10 bg-neutral-900 flex items-center justify-between px-4 text-[10px] font-bold text-orange-300">
+                  <span>9:41</span>
+                  <span>🍳 রান্নাঘর</span>
+                </div>
+                <div className="pt-10 px-2.5 pb-3 h-full flex flex-col gap-2">
+                  {[
+                    { t: '#১০৪ · টেবিল ৩', s: 'new', c: 'bg-red-500' },
+                    { t: '#১০৩ · পার্সেল', s: 'making', c: 'bg-amber-500' },
+                    { t: '#১০২ · টেবিল ১', s: 'making', c: 'bg-amber-500' },
+                    { t: '#১০১ · টেবিল ৪', s: 'ready', c: 'bg-emerald-500' },
+                  ].map((o) => (
+                    <div key={o.t} className="bg-neutral-800 rounded-xl px-3 py-2">
+                      <div className="flex items-center justify-between">
+                        <div className="text-[11px] font-black text-white">{o.t}</div>
+                        <span className={`text-[9px] font-black text-white px-2 py-0.5 rounded-full ${o.c}`}>{o.s}</span>
+                      </div>
+                      <div className="text-[10px] text-neutral-400 mt-1">২× বিরিয়ানি · ১× কোক</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
         </section>

@@ -413,14 +413,22 @@ router.post('/generate', async (req: Request, res: Response) => {
 
 // Direct download for the latest DueBook APK — must be before /:buildId/:filename
 router.get('/download/duebook', (_req: Request, res: Response) => {
-  const downloadsDir = path.join(APK_BUILD_DIR, 'downloads');
+  serveLatestApk(res, 'DueBook', 'DueBook APK not found');
+});
 
+// Direct download for the latest Kitchen (Ranna Ghor) APK
+router.get('/download/kitchen', (_req: Request, res: Response) => {
+  serveLatestApk(res, 'Kitchen', 'Kitchen APK not found');
+});
+
+function serveLatestApk(res: Response, prefix: string, notFoundMsg: string) {
+  const downloadsDir = path.join(APK_BUILD_DIR, 'downloads');
   let latestFile: string | null = null;
   let latestMtime = 0;
 
   if (fs.existsSync(downloadsDir)) {
     for (const file of fs.readdirSync(downloadsDir)) {
-      if (file.startsWith('DueBook') && file.endsWith('.apk')) {
+      if (file.startsWith(prefix) && file.endsWith('.apk')) {
         const stat = fs.statSync(path.join(downloadsDir, file));
         if (stat.mtimeMs > latestMtime) {
           latestMtime = stat.mtimeMs;
@@ -431,13 +439,13 @@ router.get('/download/duebook', (_req: Request, res: Response) => {
   }
 
   if (!latestFile) {
-    return res.status(404).json({ success: false, error: 'DueBook APK not found' });
+    return res.status(404).json({ success: false, error: notFoundMsg });
   }
 
   const filePath = path.join(downloadsDir, latestFile);
   res.setHeader('Content-Type', 'application/vnd.android.package-archive');
   res.download(filePath, latestFile);
-});
+}
 
 router.get('/download/:buildId/:filename', (req: Request, res: Response) => {
   const { filename } = req.params;

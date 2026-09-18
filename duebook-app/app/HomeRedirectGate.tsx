@@ -9,7 +9,9 @@ export default function HomeRedirectGate() {
   const router = useRouter();
 
   useEffect(() => {
-    if (!loading && user) router.replace('/due-book');
+    if (loading || !user) return;
+    const kitchen = typeof window !== 'undefined' && localStorage.getItem('duebook_kitchen_mode') === '1';
+    router.replace(kitchen ? '/due-book/orders' : '/due-book');
   }, [user, loading, router]);
 
   return null;

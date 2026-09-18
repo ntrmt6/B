@@ -45,7 +45,9 @@ export default function LoginPage() {
   const [newPassword, setNewPassword] = useState('');
 
   useEffect(() => {
-    if (!authLoading && user) router.replace('/due-book');
+    if (authLoading || !user) return;
+    const kitchen = typeof window !== 'undefined' && localStorage.getItem('duebook_kitchen_mode') === '1';
+    router.replace(kitchen ? '/due-book/orders' : '/due-book');
   }, [user, authLoading, router]);
 
   const clearError = () => setError('');
