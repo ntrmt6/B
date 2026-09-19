@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { social, SocialPost, socialTimeAgo } from '@/lib/socialApi';
-import { Heart, MessageCircle, Share2, ChevronLeft, Plus, Volume2, VolumeX, Home, Video as VideoIcon, User as UserIcon, Play, LogIn } from 'lucide-react';
+import { Heart, MessageCircle, Share2, ChevronLeft, Plus, Volume2, VolumeX, Home, Video as VideoIcon, User as UserIcon, Play, LogIn, MoreHorizontal, Pencil, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Avatar } from '../SocialShell';
 import PostComposer from '../PostComposer';
@@ -23,6 +23,10 @@ export default function ShortsPage() {
   const [showComposer, setShowComposer] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const [pausedIds, setPausedIds] = useState<Record<string, boolean>>({});
+  const [menuOpenFor, setMenuOpenFor] = useState<string | null>(null);
+  const [editingFor, setEditingFor] = useState<string | null>(null);
+  const [editText, setEditText] = useState('');
+  const [savingEdit, setSavingEdit] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRefs = useRef<(HTMLVideoElement | null)[]>([]);
 
@@ -72,6 +76,8 @@ export default function ShortsPage() {
   }, [posts]);
 
   useEffect(() => {
+    setMenuOpenFor(null);
+    setEditingFor(null);
     videoRefs.current.forEach((v, i) => {
       if (!v) return;
       if (i === activeIndex) return;
@@ -118,6 +124,35 @@ export default function ShortsPage() {
       if (isGuest) return;
       await social.share(post._id);
     } catch {}
+  }
+
+  function startEdit(post: SocialPost) {
+    setEditText(post.text || '');
+    setEditingFor(post._id);
+    setMenuOpenFor(null);
+  }
+
+  async function saveEdit(post: SocialPost) {
+    const next = editText.trim();
+    if (next === (post.text || '').trim()) { setEditingFor(null); return; }
+    setSavingEdit(true);
+    try {
+      const updated = await social.updatePost(post._id, { text: next });
+      setPosts(list => list.map(x => x._id === post._id ? { ...x, ...updated } : x));
+      setEditingFor(null);
+      toast.success('Updated');
+    } catch { toast.error('Failed'); }
+    finally { setSavingEdit(false); }
+  }
+
+  async function deleteShort(post: SocialPost) {
+    if (!confirm('Delete this short?')) return;
+    setMenuOpenFor(null);
+    try {
+      await social.deletePost(post._id);
+      setPosts(list => list.filter(x => x._id !== post._id));
+      toast.success('Deleted');
+    } catch { toast.error('Failed'); }
   }
 
   return (
@@ -178,8 +213,9 @@ export default function ShortsPage() {
         className="h-full overflow-y-scroll snap-y snap-mandatory">
         {posts.map((p, i) => {
           const dist = Math.abs(i - activeIndex);
-          const nearby = dist <= 1;
-          const preload = dist === 0 ? 'auto' : dist === 1 ? 'metadata' : 'none';
+          const nearby = dist <= 2;
+          const preload = dist <= 1 ? 'auto' : 'metadata';
+          const isAuthor = !!user && String(user._id) === String(p.authorId);
           return (
           <section key={p._id} data-idx={i} data-postid={p._id}
             style={{ scrollSnapStop: 'always', scrollSnapAlign: 'start' }}
@@ -199,10 +235,49 @@ export default function ShortsPage() {
                 playsInline
                 // eslint-disable-next-line react/no-unknown-property
                 webkit-playsinline="true"
+                disableRemotePlayback
                 onPlay={() => setPausedIds(prev => ({ ...prev, [p._id]: false }))}
                 onPause={() => setPausedIds(prev => ({ ...prev, [p._id]: true }))}
                 onClick={e => { const v = e.currentTarget; v.paused ? v.play().catch(() => {}) : v.pause(); }}
                 className="absolute inset-0 w-full h-full object-contain" />
+            )}
+            {isAuthor && activeIndex === i && editingFor !== p._id && (
+              <div className="absolute top-14 right-2 z-20">
+                <button onClick={() => setMenuOpenFor(m => m === p._id ? null : p._id)}
+                  title="More" aria-label="More"
+                  className="w-9 h-9 flex items-center justify-center rounded-full bg-black/40">
+                  <MoreHorizontal size={18} />
+                </button>
+                {menuOpenFor === p._id && (
+                  <div className="absolute right-0 top-11 w-36 bg-white text-gray-900 dark:bg-slate-800 dark:text-slate-100 border border-gray-200 dark:border-slate-700 rounded-lg shadow-lg py-1 text-[13px]">
+                    <button onClick={() => startEdit(p)}
+                      className="w-full flex items-center gap-2 px-3 py-2 hover:bg-gray-100 dark:hover:bg-slate-700">
+                      <Pencil size={14} /> Edit caption
+                    </button>
+                    <button onClick={() => deleteShort(p)}
+                      className="w-full flex items-center gap-2 px-3 py-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40">
+                      <Trash2 size={14} /> Delete
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            {editingFor === p._id && (
+              <div className="absolute inset-x-2 top-14 z-30 bg-black/80 border border-white/20 rounded-xl p-3">
+                <textarea value={editText} onChange={e => setEditText(e.target.value)} rows={4}
+                  placeholder="Caption…"
+                  className="w-full bg-white/10 text-white placeholder-white/50 rounded-lg px-3 py-2 text-[14px] outline-none resize-none" />
+                <div className="mt-2 flex justify-end gap-2">
+                  <button onClick={() => setEditingFor(null)}
+                    className="px-3 py-1.5 text-[13px] rounded-full bg-white/10 text-white">
+                    Cancel
+                  </button>
+                  <button onClick={() => saveEdit(p)} disabled={savingEdit}
+                    className="px-4 py-1.5 text-[13px] font-semibold rounded-full bg-sky-500 text-white disabled:opacity-60">
+                    {savingEdit ? 'Saving…' : 'Save'}
+                  </button>
+                </div>
+              </div>
             )}
             {pausedIds[p._id] && (
               <button
