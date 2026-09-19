@@ -172,8 +172,9 @@ export default function PostCard({ post, currentUserId, onDelete, onChange }: Pr
         {canDelete && (
           <div className="relative">
             <button onClick={() => setShowMenu(v => !v)}
-              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 dark:hover:bg-slate-800">
-              <MoreHorizontal size={17} />
+              title="Edit or delete post" aria-label="Edit or delete post"
+              className="w-9 h-9 flex items-center justify-center rounded-full bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-slate-200 hover:bg-gray-200 dark:hover:bg-slate-700">
+              <MoreHorizontal size={18} />
             </button>
             {showMenu && (
               <div className="absolute right-0 top-9 z-20 w-36 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-lg py-1 text-[13px]">
