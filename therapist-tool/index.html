@@ -235,12 +235,18 @@ If you're in immediate danger, please call your local emergency number now. A hu
     fear: 'scaring yourself', anxiety: 'making yourself anxious', depression: 'depressing yourself',
     anger: 'angering yourself', frustration: 'frustrating yourself', rejection: 'rejecting yourself',
     failure: 'failing yourself', shame: 'shaming yourself', guilt: 'guilting yourself',
+    sadness: 'saddening yourself', loneliness: 'isolating yourself', isolation: 'isolating yourself',
+    resentment: 'resenting', hatred: 'hating', pity: 'pitying yourself', joy: 'enjoying',
+    peace: 'settling yourself', calm: 'calming yourself', happiness: 'making yourself happy',
+    worthlessness: 'devaluing yourself', hopelessness: 'losing hope', helplessness: 'stopping yourself',
+    emptiness: 'emptying yourself', numbness: 'numbing yourself',
     confidence: 'trusting yourself', trust: 'trusting', respect: 'respecting', love: 'loving',
     communication: 'communicating', relationship: 'relating', decision: 'deciding',
     understanding: 'understanding', approval: 'approving', support: 'supporting',
     connection: 'connecting', distance: 'distancing', intimacy: 'being intimate',
     control: 'controlling', responsibility: 'responding', commitment: 'committing',
     conflict: 'conflicting', attention: 'attending', freedom: 'choosing freely',
+    attachment: 'attaching', abandonment: 'abandoning yourself', betrayal: 'betraying',
   };
   function toActiveVerb(noun) {
     const n = noun.toLowerCase();
@@ -262,7 +268,7 @@ If you're in immediate danger, please call your local emergency number now. A hu
     },
     {
       type: 'modal_impossibility', priority: 95,
-      test: (t) => t.match(/\b(can'?t|cannot|couldn'?t|impossible|unable|no way|won'?t be able)\b/i),
+      test: (t) => t.match(/\b(can'?t|cannot|couldn'?t|impossible|unable|no way|won'?t|wouldn'?t)\b/i),
       challenge: () => pick([
         "What specific constraint stops you? What prevents you from doing it right now?",
         "If that constraint dissolved this instant, what is the very first action you would take?",
@@ -340,7 +346,7 @@ If you're in immediate danger, please call your local emergency number now. A hu
     },
     {
       type: 'nominalization', priority: 55,
-      test: (t) => t.match(/\b(relationship|communication|confidence|respect|trust|love|freedom|attention|understanding|failure|success|depression|anxiety|fear|anger|shame|guilt|decision|frustration|rejection|approval|control|responsibility|commitment|connection|distance|closeness|intimacy|support|conflict)\b/i),
+      test: (t) => t.match(/\b(relationship|communication|confidence|respect|trust|love|freedom|attention|understanding|failure|success|depression|anxiety|fear|anger|shame|guilt|sadness|loneliness|isolation|resentment|hatred|pity|joy|peace|calm|happiness|worthlessness|hopelessness|helplessness|emptiness|numbness|decision|frustration|rejection|approval|control|responsibility|commitment|connection|distance|closeness|intimacy|support|conflict|attachment|abandonment|betrayal)\b/i),
       challenge: (m) => {
         const noun = m[0].toLowerCase();
         const verb = toActiveVerb(noun);
@@ -364,12 +370,34 @@ If you're in immediate danger, please call your local emergency number now. A hu
     },
     {
       type: 'simple_deletion', priority: 40,
-      test: (t) => t.match(/^\s*i\s+(feel|am|'m)\s+(terrible|awful|bad|lost|broken|empty|numb|done|off|weird|strange|helpless|hopeless|worthless)\b/i),
+      test: (t) => t.match(/\bi\s+(feel|am|'m)\s+(terrible|awful|bad|lost|broken|empty|numb|done|off|weird|strange|helpless|hopeless|worthless|alone|lonely|isolated|invisible|unloved|unseen|misunderstood|sad|depressed|anxious|scared|afraid|angry|frustrated|overwhelmed|exhausted|drained|tired|joyless|hollow|paralyzed|stuck|trapped|resentful|ashamed|guilty|inadequate|useless|stupid|pathetic|small|weak)\b/i),
       challenge: (m) => {
         const state = m[2].toLowerCase();
         return pick([
           `About what specific event or condition?`,
           `You feel ${state} — about what, exactly? What triggered it, and when?`,
+          `${cap(state)} is the label. What specific event is underneath it, right now?`,
+        ]);
+      },
+    },
+    {
+      type: 'presupposition', priority: 38,
+      test: (t) => t.match(/\b(how do i (stop|quit|get over|get rid of|deal with)|why (am i|do i|does (this|it))|i (can'?t|don'?t) stop)\b/i),
+      challenge: () => pick([
+        "That question presupposes it will continue. What if we asked instead: what is the very first small movement out?",
+        "You framed it as a permanent state to escape. Notice: it is a process you are running. When is the process running most intensely?",
+        "Before we ask how to stop — describe the exact moment it starts. What is the trigger, the first internal shift?",
+      ]),
+    },
+    {
+      type: 'self_directed', priority: 42,
+      test: (t) => t.match(/\bi\s+(hate|blame|punish|criticize|reject|abandon|shame|attack|hurt)\s+myself\b/i),
+      challenge: (m) => {
+        const v = m[1].toLowerCase();
+        return pick([
+          `You said you ${v} yourself — notice there are two of you in that sentence. Who is the one doing the ${v.replace(/e$/,'')}ing, and who is receiving it?`,
+          `That is one part of you turned against another. What does the part that ${v}s you want you to know?`,
+          `${cap(v)}ing yourself is an active behavior. In what specific moments today did you do it — and what did you say to yourself in those moments?`,
         ]);
       },
     },
