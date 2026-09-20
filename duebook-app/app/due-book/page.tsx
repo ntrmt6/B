@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import SyncBar from './SyncBar';
 import ReminderInbox from './ReminderInbox';
+import DailyPnlCard from './DailyPnlCard';
 
 const InventoryModal = dynamic(() => import('./InventoryModal'), { ssr: false });
 const QRCodeSVG = dynamic(() => import('qrcode.react').then(m => m.QRCodeSVG), { ssr: false });
@@ -2866,6 +2867,11 @@ export default function DueBookPage() {
             </div>
           ) : (
             <div className="p-2 space-y-1">
+              {tab === 'Customer' && (
+                <div className="mb-1.5">
+                  <DailyPnlCard isDark={isDark} />
+                </div>
+              )}
               {recentEntities.length > 0 && (
                 <div className="mb-1.5">
                   <div className="flex items-center gap-1 px-1 mb-1">
