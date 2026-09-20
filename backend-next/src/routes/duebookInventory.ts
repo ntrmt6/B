@@ -49,7 +49,7 @@ router.post('/items', async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantId(req);
     if (!tenantId) return res.status(400).json({ error: 'Tenant ID required' });
-    const { name, unit, stockQty, buyPrice, sellPrice, lowStockThreshold, notes } = req.body || {};
+    const { name, unit, stockQty, buyPrice, sellPrice, lowStockThreshold, supplierEntityId, notes } = req.body || {};
     if (!name || typeof name !== 'string') return res.status(400).json({ error: 'Name required' });
     const item = await InventoryItem.create({
       tenantId,
@@ -59,6 +59,7 @@ router.post('/items', async (req: Request, res: Response) => {
       buyPrice: Math.max(0, Number(buyPrice) || 0),
       sellPrice: Math.max(0, Number(sellPrice) || 0),
       lowStockThreshold: Math.max(0, Number(lowStockThreshold ?? 5)),
+      supplierEntityId: supplierEntityId || null,
       notes: typeof notes === 'string' ? notes : undefined,
     });
     res.status(201).json(item);
@@ -72,7 +73,7 @@ router.put('/items/:id', async (req: Request, res: Response) => {
   try {
     const tenantId = getTenantId(req);
     if (!tenantId) return res.status(400).json({ error: 'Tenant ID required' });
-    const { name, unit, stockQty, buyPrice, sellPrice, lowStockThreshold, notes } = req.body || {};
+    const { name, unit, stockQty, buyPrice, sellPrice, lowStockThreshold, supplierEntityId, notes } = req.body || {};
     const update: any = {};
     if (typeof name === 'string') update.name = name.trim();
     if (typeof unit === 'string') update.unit = unit.trim();
@@ -80,6 +81,7 @@ router.put('/items/:id', async (req: Request, res: Response) => {
     if (buyPrice !== undefined) update.buyPrice = Math.max(0, Number(buyPrice) || 0);
     if (sellPrice !== undefined) update.sellPrice = Math.max(0, Number(sellPrice) || 0);
     if (lowStockThreshold !== undefined) update.lowStockThreshold = Math.max(0, Number(lowStockThreshold) || 0);
+    if (supplierEntityId !== undefined) update.supplierEntityId = supplierEntityId || null;
     if (notes !== undefined) update.notes = String(notes).slice(0, 500);
     const item = await InventoryItem.findOneAndUpdate({ _id: req.params.id, tenantId }, update, {
       new: true,

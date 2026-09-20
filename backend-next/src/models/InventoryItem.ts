@@ -8,6 +8,7 @@ export interface IInventoryItem extends Document {
   buyPrice: number;
   sellPrice: number;
   lowStockThreshold: number;
+  supplierEntityId?: mongoose.Types.ObjectId | null;
   notes?: string;
   createdAt: Date;
   updatedAt: Date;
@@ -22,6 +23,7 @@ const InventoryItemSchema = new Schema<IInventoryItem>(
     buyPrice: { type: Number, required: true, default: 0, min: 0 },
     sellPrice: { type: Number, required: true, default: 0, min: 0 },
     lowStockThreshold: { type: Number, default: 5, min: 0 },
+    supplierEntityId: { type: Schema.Types.ObjectId, ref: 'Entity', default: null, index: true },
     notes: { type: String, maxlength: 500 },
   },
   { timestamps: true }

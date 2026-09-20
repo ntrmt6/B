@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
-import { X, Plus, Trash2, Pencil, Package, TrendingUp, Target, AlertTriangle, Check } from 'lucide-react';
+import { X, Plus, Trash2, Pencil, Package, TrendingUp, Target, AlertTriangle, Check, Send } from 'lucide-react';
 import api from '@/lib/api';
 
 interface InventoryItem {
@@ -13,6 +13,7 @@ interface InventoryItem {
   buyPrice: number;
   sellPrice: number;
   lowStockThreshold: number;
+  supplierEntityId?: string | null;
   notes?: string;
 }
 
@@ -40,6 +41,7 @@ interface EntityLite {
   _id: string;
   name: string;
   type: 'Customer' | 'Supplier' | 'Employee';
+  phone?: string;
 }
 
 interface Props {
@@ -64,8 +66,16 @@ const todayKey = (): string => {
 };
 
 const emptyDraft = (): Partial<InventoryItem> => ({
-  name: '', unit: '', stockQty: 0, buyPrice: 0, sellPrice: 0, lowStockThreshold: 5, notes: '',
+  name: '', unit: '', stockQty: 0, buyPrice: 0, sellPrice: 0, lowStockThreshold: 5,
+  supplierEntityId: null, notes: '',
 });
+
+const waNumberFromPhone = (phone: string): string => {
+  const d = (phone || '').replace(/\D/g, '');
+  if (!d) return '';
+  if (d.startsWith('0') && d.length === 11) return '880' + d.slice(1);
+  return d;
+};
 
 export default function InventoryModal({ open, onClose, isDark, entities, onSaleRecorded }: Props) {
   const [tab, setTab] = useState<Tab>('items');
@@ -153,6 +163,7 @@ export default function InventoryModal({ open, onClose, isDark, entities, onSale
         buyPrice: Number(draft.buyPrice) || 0,
         sellPrice: Number(draft.sellPrice) || 0,
         lowStockThreshold: Number(draft.lowStockThreshold ?? 5),
+        supplierEntityId: draft.supplierEntityId || null,
         notes: draft.notes || '',
       };
       if (editingId) {
@@ -170,6 +181,75 @@ export default function InventoryModal({ open, onClose, isDark, entities, onSale
       setSaving(false);
     }
   };
+
+  const suggestOrderQty = (it: InventoryItem): number => {
+    const target = Math.max(1, it.lowStockThreshold * 2);
+    return Math.max(1, Math.ceil(target - it.stockQty));
+  };
+
+  const buildReorderText = (supplierName: string, group: InventoryItem[]): string => {
+    const lines: string[] = [];
+    lines.push('আসসালামু আলাইকুম ' + supplierName + ',');
+    lines.push('');
+    lines.push('নিচের পণ্যগুলো লাগবে (স্টক কম):');
+    for (const it of group) {
+      const need = suggestOrderQty(it);
+      const unit = it.unit ? ' ' + it.unit : '';
+      lines.push(`• ${it.name} — ${need}${unit} (স্টকে ${it.stockQty})`);
+    }
+    lines.push('');
+    lines.push('দাম আর ডেলিভারি টাইম জানান, ধন্যবাদ।');
+    return lines.join('\n');
+  };
+
+  const reorderItem = (it: InventoryItem) => {
+    if (!it.supplierEntityId) {
+      toast.error('First set a preferred supplier');
+      return;
+    }
+    const sup = entities.find(e => e._id === it.supplierEntityId);
+    if (!sup) { toast.error('Supplier not found'); return; }
+    const wa = waNumberFromPhone(sup.phone || '');
+    const text = buildReorderText(sup.name, [it]);
+    if (!wa) {
+      navigator.clipboard?.writeText(text).catch(() => {});
+      toast('Supplier has no phone — order copied to clipboard');
+      return;
+    }
+    window.open(`https://wa.me/${wa}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+  };
+
+  const reorderAllLow = () => {
+    const lowItems = items.filter(i => i.stockQty <= i.lowStockThreshold);
+    if (lowItems.length === 0) { toast('No low-stock items'); return; }
+    const withSup = lowItems.filter(i => i.supplierEntityId);
+    if (withSup.length === 0) {
+      toast.error('None of the low items have a supplier set');
+      return;
+    }
+    const groups = new Map<string, InventoryItem[]>();
+    for (const it of withSup) {
+      const key = String(it.supplierEntityId);
+      const arr = groups.get(key) || [];
+      arr.push(it);
+      groups.set(key, arr);
+    }
+    let opened = 0;
+    for (const [supId, group] of groups) {
+      const sup = entities.find(e => e._id === supId);
+      if (!sup) continue;
+      const wa = waNumberFromPhone(sup.phone || '');
+      const text = buildReorderText(sup.name, group);
+      if (!wa) {
+        navigator.clipboard?.writeText(text).catch(() => {});
+        continue;
+      }
+      window.open(`https://wa.me/${wa}?text=${encodeURIComponent(text)}`, '_blank', 'noopener,noreferrer');
+      opened++;
+    }
+    toast.success(`Opened ${opened} WhatsApp draft${opened === 1 ? '' : 's'}`);
+  };
+
   const deleteItem = async (id: string) => {
     if (!confirm('Delete this item? Sales history stays.')) return;
     try {
@@ -306,6 +386,13 @@ export default function InventoryModal({ open, onClose, isDark, entities, onSale
                 <Plus size={14} /> Add Item
               </button>
 
+              {items.some(i => i.stockQty <= i.lowStockThreshold) && (
+                <button onClick={reorderAllLow}
+                  className="w-full py-2 rounded-xl bg-emerald-500 text-white text-[13px] font-bold flex items-center justify-center gap-1.5 active:scale-[0.98] transition-all">
+                  <Send size={13} /> Reorder All Low-Stock via WhatsApp
+                </button>
+              )}
+
               {items.length === 0 && (
                 <div className="text-center text-[12px] text-gray-400 py-8">
                   No items yet. Add your first item to start tracking stock.
@@ -350,6 +437,14 @@ export default function InventoryModal({ open, onClose, isDark, entities, onSale
                         <p className="text-[10px] text-gray-500 dark:text-slate-400 mt-1">
                           Total potential: <span className={`font-bold ${totalUnit >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600'}`}>{fmt(totalUnit)}</span>
                         </p>
+                        {low && (
+                          <button
+                            onClick={() => reorderItem(it)}
+                            className="mt-1.5 inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500 text-white text-[10px] font-bold active:scale-[0.98]"
+                          >
+                            <Send size={10} /> Reorder via WhatsApp
+                          </button>
+                        )}
                       </div>
                       <div className="flex flex-col gap-1">
                         <button onClick={() => openEdit(it)}
@@ -575,6 +670,20 @@ export default function InventoryModal({ open, onClose, isDark, entities, onSale
                 <input type="number" min="0" step="any" value={draft.lowStockThreshold ?? 5}
                   onChange={e => setDraft({ ...draft, lowStockThreshold: Number(e.target.value) })}
                   className="w-full mt-1 border border-gray-200 dark:border-slate-600 dark:bg-slate-900 rounded-lg px-3 py-2 text-[13px] text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400" />
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-gray-500 dark:text-slate-400 uppercase tracking-wide">Preferred Supplier</label>
+                <select
+                  value={draft.supplierEntityId || ''}
+                  onChange={e => setDraft({ ...draft, supplierEntityId: e.target.value || null })}
+                  className="w-full mt-1 border border-gray-200 dark:border-slate-600 dark:bg-slate-900 rounded-lg px-3 py-2 text-[13px] text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400"
+                >
+                  <option value="">— None —</option>
+                  {entities.filter(e => e.type === 'Supplier').map(sup => (
+                    <option key={sup._id} value={sup._id}>{sup.name}{sup.phone ? ` · ${sup.phone}` : ''}</option>
+                  ))}
+                </select>
+                <p className="text-[10px] text-gray-400 mt-0.5">Used when you tap “Reorder via WhatsApp”.</p>
               </div>
               {(draft.buyPrice !== undefined && draft.sellPrice !== undefined) && (
                 <div className="bg-gray-50 dark:bg-slate-900/40 rounded-lg px-3 py-2 flex justify-between text-[11px]">
