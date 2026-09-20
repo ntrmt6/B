@@ -262,6 +262,12 @@ router.get('/duebook/settings', async (req: Request, res: Response) => {
         rewardItemPrice: 0,
         paymentRewardThreshold: 0,
         welcomeMessage: '',
+        bkashNumber: '',
+        bkashType: 'personal',
+        nagadNumber: '',
+        rocketNumber: '',
+        paymentLinkUrl: '',
+        paymentNote: '',
       }
     );
   } catch (error) {
@@ -275,7 +281,11 @@ router.put('/duebook/settings', async (req: Request, res: Response) => {
     const tenantId = getTenantId(req);
     if (!tenantId) return res.status(400).json({ error: 'Tenant ID is required' });
 
-    const { shopName, registrationEnabled, bonusAmount, rewardItemName, rewardItemPrice, paymentRewardThreshold, welcomeMessage, shopLogo } = req.body || {};
+    const {
+      shopName, registrationEnabled, bonusAmount, rewardItemName, rewardItemPrice,
+      paymentRewardThreshold, welcomeMessage, shopLogo,
+      bkashNumber, bkashType, nagadNumber, rocketNumber, paymentLinkUrl, paymentNote,
+    } = req.body || {};
     const update: any = {};
     if (typeof shopName === 'string') update.shopName = shopName.trim().slice(0, 120);
     if (typeof registrationEnabled === 'boolean') update.registrationEnabled = registrationEnabled;
@@ -285,6 +295,12 @@ router.put('/duebook/settings', async (req: Request, res: Response) => {
     if (typeof paymentRewardThreshold === 'number' && paymentRewardThreshold >= 0) update.paymentRewardThreshold = paymentRewardThreshold;
     if (typeof welcomeMessage === 'string') update.welcomeMessage = welcomeMessage.trim().slice(0, 300);
     if (typeof shopLogo === 'string' && shopLogo.length <= 300000) update.shopLogo = shopLogo;
+    if (typeof bkashNumber === 'string') update.bkashNumber = bkashNumber.trim().slice(0, 20);
+    if (typeof bkashType === 'string' && ['personal', 'merchant', 'agent'].includes(bkashType)) update.bkashType = bkashType;
+    if (typeof nagadNumber === 'string') update.nagadNumber = nagadNumber.trim().slice(0, 20);
+    if (typeof rocketNumber === 'string') update.rocketNumber = rocketNumber.trim().slice(0, 20);
+    if (typeof paymentLinkUrl === 'string') update.paymentLinkUrl = paymentLinkUrl.trim().slice(0, 500);
+    if (typeof paymentNote === 'string') update.paymentNote = paymentNote.trim().slice(0, 200);
 
     const settings = await DueBookSettings.findOneAndUpdate(
       { tenantId },

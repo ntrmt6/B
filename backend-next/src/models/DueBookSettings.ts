@@ -1,5 +1,7 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export type BkashType = 'personal' | 'merchant' | 'agent';
+
 export interface IDueBookSettings extends Document {
   tenantId: string;
   shopName: string;
@@ -11,6 +13,12 @@ export interface IDueBookSettings extends Document {
   welcomeMessage: string;
   shopLogo: string;
   dailyAttendanceRate: number;
+  bkashNumber: string;
+  bkashType: BkashType;
+  nagadNumber: string;
+  rocketNumber: string;
+  paymentLinkUrl: string;
+  paymentNote: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -27,6 +35,16 @@ const DueBookSettingsSchema = new Schema<IDueBookSettings>(
     welcomeMessage: { type: String, trim: true, maxlength: 300, default: '' },
     shopLogo: { type: String, default: '' },
     dailyAttendanceRate: { type: Number, default: 0, min: 0 },
+    bkashNumber: { type: String, trim: true, maxlength: 20, default: '' },
+    bkashType: {
+      type: String,
+      enum: ['personal', 'merchant', 'agent'],
+      default: 'personal',
+    },
+    nagadNumber: { type: String, trim: true, maxlength: 20, default: '' },
+    rocketNumber: { type: String, trim: true, maxlength: 20, default: '' },
+    paymentLinkUrl: { type: String, trim: true, maxlength: 500, default: '' },
+    paymentNote: { type: String, trim: true, maxlength: 200, default: '' },
   },
   { timestamps: true }
 );

@@ -24,12 +24,48 @@ interface PendingTx {
   notes?: string;
 }
 
+interface PaymentInfo {
+  bkashNumber?: string;
+  bkashType?: 'personal' | 'merchant' | 'agent';
+  nagadNumber?: string;
+  rocketNumber?: string;
+  paymentLinkUrl?: string;
+  paymentNote?: string;
+}
+
+const buildPaymentSection = (p?: PaymentInfo): string[] => {
+  if (!p) return [];
+  const lines: string[] = [];
+  const bkash = p.bkashNumber?.trim();
+  const nagad = p.nagadNumber?.trim();
+  const rocket = p.rocketNumber?.trim();
+  const link = p.paymentLinkUrl?.trim();
+  const note = p.paymentNote?.trim();
+  if (!bkash && !nagad && !rocket && !link) return [];
+
+  const action = (kind: 'personal' | 'merchant' | 'agent') => {
+    if (kind === 'merchant') return 'Payment';
+    if (kind === 'agent') return 'Cash Out';
+    return 'Send Money';
+  };
+
+  lines.push('', `💳 *Pay via:*`);
+  if (bkash) lines.push(`• bKash (${action(p.bkashType || 'personal')}): ${bkash}`);
+  if (nagad) lines.push(`• Nagad: ${nagad}`);
+  if (rocket) lines.push(`• Rocket: ${rocket}`);
+  if (link) lines.push(`• Pay online: ${link}`);
+  if (note) lines.push(note);
+  else lines.push(`টাকা পাঠানোর পর স্ক্রিনশট পাঠিয়ে দিন। 🙏`);
+  return lines;
+};
+
 const buildMessage = (
   entityName: string,
   totalDue: number,
   shopName: string,
   daysOverdue: number,
   txs: PendingTx[],
+  payment?: PaymentInfo,
 ): string => {
   const header = shopName?.trim() || 'DueBook';
   const line = '━━━━━━━━━━━━━━━━━━';
@@ -65,9 +101,9 @@ const buildMessage = (
     sorted.length > 1
       ? `Your balance has been growing. Kindly clear at your earliest convenience.`
       : `Kindly clear at your earliest convenience.`,
-    ``,
-    `Thank you! 🙏`,
   );
+  parts.push(...buildPaymentSection(payment));
+  parts.push(``, `Thank you! 🙏`);
   return parts.join('\n');
 };
 
@@ -150,8 +186,18 @@ export const generateForTenant = async (
     .select('name phone')
     .lean();
 
-  const shopDoc = await DueBookSettings.findOne({ tenantId }).select('shopName').lean();
+  const shopDoc = await DueBookSettings.findOne({ tenantId })
+    .select('shopName bkashNumber bkashType nagadNumber rocketNumber paymentLinkUrl paymentNote')
+    .lean();
   const shopName = shopDoc?.shopName || '';
+  const payment: PaymentInfo = {
+    bkashNumber: shopDoc?.bkashNumber,
+    bkashType: shopDoc?.bkashType,
+    nagadNumber: shopDoc?.nagadNumber,
+    rocketNumber: shopDoc?.rocketNumber,
+    paymentLinkUrl: shopDoc?.paymentLinkUrl,
+    paymentNote: shopDoc?.paymentNote,
+  };
 
   const cooldownMs = settings.cooldownDays * 86_400_000;
   const recentlySent = await ReminderQueue.find({
@@ -198,6 +244,7 @@ export const generateForTenant = async (
       shopName,
       overdue,
       bucket.txs,
+      payment,
     );
 
     try {

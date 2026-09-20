@@ -49,6 +49,7 @@ interface Transaction {
 interface CatalogItem { id: string; name: string; price: number; }
 interface CartItem { item: CatalogItem; qty: number; }
 type Labels = { Customer: string; Supplier: string; Employee: string };
+type BkashType = 'personal' | 'merchant' | 'agent';
 interface RegSettings {
   shopName: string;
   registrationEnabled: boolean;
@@ -58,6 +59,12 @@ interface RegSettings {
   paymentRewardThreshold: number;
   welcomeMessage: string;
   shopLogo: string;
+  bkashNumber: string;
+  bkashType: BkashType;
+  nagadNumber: string;
+  rocketNumber: string;
+  paymentLinkUrl: string;
+  paymentNote: string;
 }
 type FieldType = 'text' | 'textarea' | 'number' | 'date' | 'time' | 'select';
 interface TemplateField {
@@ -86,7 +93,6 @@ const RECENT_KEY = 'duebook_recent_entities';
 const SORT_KEY = 'duebook_entity_sort';
 const RECENT_MAX = 20;
 const RECENT_SHOW = 5;
-const PAYMENT_NUMBER = '01798923162';
 const OVERDUE_WARNING_DAYS = 7;
 const OVERDUE_CRITICAL_DAYS = 11;
 
@@ -320,11 +326,40 @@ const netPending = (
     0,
   );
 
+interface PaymentInfo {
+  bkashNumber?: string;
+  bkashType?: BkashType;
+  nagadNumber?: string;
+  rocketNumber?: string;
+  paymentLinkUrl?: string;
+  paymentNote?: string;
+}
+
+const buildPaymentLines = (p?: PaymentInfo): string[] => {
+  if (!p) return [];
+  const bkash = p.bkashNumber?.trim();
+  const nagad = p.nagadNumber?.trim();
+  const rocket = p.rocketNumber?.trim();
+  const link = p.paymentLinkUrl?.trim();
+  const note = p.paymentNote?.trim();
+  if (!bkash && !nagad && !rocket && !link) return [];
+  const action = (kind: BkashType = 'personal') =>
+    kind === 'merchant' ? 'Payment' : kind === 'agent' ? 'Cash Out' : 'Send Money';
+  const out: string[] = ['', '💳 *Pay via:*'];
+  if (bkash) out.push(`• bKash (${action(p.bkashType)}): ${bkash}`);
+  if (nagad) out.push(`• Nagad: ${nagad}`);
+  if (rocket) out.push(`• Rocket: ${rocket}`);
+  if (link) out.push(`• Pay online: ${link}`);
+  out.push(note || 'টাকা পাঠানোর পর স্ক্রিনশট পাঠিয়ে দিন। 🙏');
+  return out;
+};
+
 const buildDueReminder = (
   entityName: string,
   totalDue: number,
   shopName: string,
   pendingTxs?: { amount: number; direction: 'INCOME' | 'EXPENSE'; transactionDate: string; notes?: string; status: string }[],
+  payment?: PaymentInfo,
 ) => {
   const header = shopName?.trim() || 'DueBook';
   const line = '━━━━━━━━━━━━━━━━━━';
@@ -365,9 +400,7 @@ const buildDueReminder = (
       ? `Your balance has been growing. Kindly clear at your earliest convenience.`
       : `Kindly clear at your earliest convenience.`,
   );
-  parts.push(``);
-  parts.push(`পেমেন্ট করতে বিকাশ/নগদে Send Money করুন: ${PAYMENT_NUMBER}`);
-  parts.push(`টাকা পাঠানোর পর স্ক্রিনশট পাঠিয়ে দিন।`);
+  parts.push(...buildPaymentLines(payment));
   parts.push(``);
   parts.push(`Thank you! 🙏`);
 
@@ -531,12 +564,13 @@ interface EntityRowProps {
   isPinned: boolean;
   labelFor: string;
   shopName: string;
+  payment?: PaymentInfo;
   onSelect: (e: Entity) => void;
   onTogglePin: (id: string) => void;
 }
 
 const EntityRow = memo(function EntityRow({
-  entity, isPinned, labelFor, shopName, onSelect, onTogglePin,
+  entity, isPinned, labelFor, shopName, payment, onSelect, onTogglePin,
 }: EntityRowProps) {
   const net = (entity.totalOwedToMe || 0) - (entity.totalIOweThemNumber || 0);
   const total = (entity.totalOwedToMe || 0) + (entity.totalIOweThemNumber || 0);
@@ -544,7 +578,7 @@ const EntityRow = memo(function EntityRow({
     ? waUrl(
         entity.phone,
         net > 0
-          ? buildDueReminder(entity.name, net, shopName)
+          ? buildDueReminder(entity.name, net, shopName, undefined, payment)
           : `Hi ${entity.name}, we miss you at our shop! Come by soon for a special offer.`
       )
     : '';
@@ -714,7 +748,14 @@ export default function DueBookPage() {
   const [coachLang, setCoachLang] = useState<'bn' | 'en'>('bn');
 
   /* registration settings (self-registration + welcome bonus) */
-  const DEFAULT_REG: RegSettings = { shopName: '', registrationEnabled: false, bonusAmount: 0, rewardItemName: '', rewardItemPrice: 0, paymentRewardThreshold: 0, welcomeMessage: '', shopLogo: '' };
+  const DEFAULT_REG: RegSettings = {
+    shopName: '', registrationEnabled: false, bonusAmount: 0,
+    rewardItemName: '', rewardItemPrice: 0, paymentRewardThreshold: 0,
+    welcomeMessage: '', shopLogo: '',
+    bkashNumber: '', bkashType: 'personal',
+    nagadNumber: '', rocketNumber: '',
+    paymentLinkUrl: '', paymentNote: '',
+  };
   const [regSettings, setRegSettings] = useState<RegSettings>(DEFAULT_REG);
   const [draftReg, setDraftReg] = useState<RegSettings>(DEFAULT_REG);
   const [regSaving, setRegSaving] = useState(false);
@@ -1002,6 +1043,12 @@ export default function DueBookPage() {
           paymentRewardThreshold: Number(s.paymentRewardThreshold) || 0,
           welcomeMessage: s.welcomeMessage || '',
           shopLogo: s.shopLogo || '',
+          bkashNumber: s.bkashNumber || '',
+          bkashType: (s.bkashType as BkashType) || 'personal',
+          nagadNumber: s.nagadNumber || '',
+          rocketNumber: s.rocketNumber || '',
+          paymentLinkUrl: s.paymentLinkUrl || '',
+          paymentNote: s.paymentNote || '',
         });
       } catch { /* ignore */ }
     })();
@@ -1310,6 +1357,12 @@ export default function DueBookPage() {
         paymentRewardThreshold: Number(draftReg.paymentRewardThreshold) || 0,
         welcomeMessage: draftReg.welcomeMessage,
         shopLogo: draftReg.shopLogo,
+        bkashNumber: draftReg.bkashNumber?.trim() || '',
+        bkashType: draftReg.bkashType || 'personal',
+        nagadNumber: draftReg.nagadNumber?.trim() || '',
+        rocketNumber: draftReg.rocketNumber?.trim() || '',
+        paymentLinkUrl: draftReg.paymentLinkUrl?.trim() || '',
+        paymentNote: draftReg.paymentNote?.trim() || '',
       });
       setRegSettings({
         ...draftReg,
@@ -1754,7 +1807,14 @@ export default function DueBookPage() {
   ) => {
     const totalDue = (entity.totalOwedToMe || 0) - (entity.totalIOweThemNumber || 0);
     if (totalDue <= 0) { toast('No pending due for this customer'); return; }
-    const msg = buildDueReminder(entity.name, totalDue, regSettings.shopName || '', pendingTxs);
+    const msg = buildDueReminder(entity.name, totalDue, regSettings.shopName || '', pendingTxs, {
+      bkashNumber: regSettings.bkashNumber,
+      bkashType: regSettings.bkashType,
+      nagadNumber: regSettings.nagadNumber,
+      rocketNumber: regSettings.rocketNumber,
+      paymentLinkUrl: regSettings.paymentLinkUrl,
+      paymentNote: regSettings.paymentNote,
+    });
     await shareText(msg, entity.phone, 'Reminder copied');
   };
 
@@ -2761,6 +2821,14 @@ export default function DueBookPage() {
                   isPinned={pinned.has(entity._id)}
                   labelFor={labels[entity.type]}
                   shopName={regSettings.shopName || ''}
+                  payment={{
+                    bkashNumber: regSettings.bkashNumber,
+                    bkashType: regSettings.bkashType,
+                    nagadNumber: regSettings.nagadNumber,
+                    rocketNumber: regSettings.rocketNumber,
+                    paymentLinkUrl: regSettings.paymentLinkUrl,
+                    paymentNote: regSettings.paymentNote,
+                  }}
                   onSelect={stableSelectEntity}
                   onTogglePin={stableTogglePin}
                 />
@@ -4043,6 +4111,63 @@ export default function DueBookPage() {
                         rows={2}
                         className="mt-0.5 w-full border border-gray-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-[13px] text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400 resize-none"
                       />
+                    </div>
+
+                    <div className="rounded-lg bg-pink-50 dark:bg-pink-900/20 p-2.5 space-y-2">
+                      <p className="text-[11px] font-semibold text-pink-700 dark:text-pink-400 uppercase tracking-wide">Payment Methods (in WhatsApp reminders)</p>
+                      <div className="grid grid-cols-[1fr_auto] gap-2">
+                        <input
+                          type="tel"
+                          inputMode="numeric"
+                          value={draftReg.bkashNumber}
+                          onChange={e => setDraftReg(p => ({ ...p, bkashNumber: e.target.value }))}
+                          placeholder="bKash number (01…)"
+                          className="w-full min-w-0 border border-pink-200 dark:border-pink-800 rounded-lg px-2.5 py-1.5 text-[12px] text-gray-900 dark:text-slate-100 bg-white dark:bg-slate-700 outline-none focus:border-pink-400"
+                        />
+                        <select
+                          value={draftReg.bkashType}
+                          onChange={e => setDraftReg(p => ({ ...p, bkashType: e.target.value as BkashType }))}
+                          className="border border-pink-200 dark:border-pink-800 rounded-lg px-2 py-1.5 text-[12px] text-gray-900 dark:text-slate-100 bg-white dark:bg-slate-700 outline-none focus:border-pink-400"
+                        >
+                          <option value="personal">Personal</option>
+                          <option value="merchant">Merchant</option>
+                          <option value="agent">Agent</option>
+                        </select>
+                      </div>
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        value={draftReg.nagadNumber}
+                        onChange={e => setDraftReg(p => ({ ...p, nagadNumber: e.target.value }))}
+                        placeholder="Nagad number (optional)"
+                        className="w-full border border-pink-200 dark:border-pink-800 rounded-lg px-2.5 py-1.5 text-[12px] text-gray-900 dark:text-slate-100 bg-white dark:bg-slate-700 outline-none focus:border-pink-400"
+                      />
+                      <input
+                        type="tel"
+                        inputMode="numeric"
+                        value={draftReg.rocketNumber}
+                        onChange={e => setDraftReg(p => ({ ...p, rocketNumber: e.target.value }))}
+                        placeholder="Rocket number (optional)"
+                        className="w-full border border-pink-200 dark:border-pink-800 rounded-lg px-2.5 py-1.5 text-[12px] text-gray-900 dark:text-slate-100 bg-white dark:bg-slate-700 outline-none focus:border-pink-400"
+                      />
+                      <input
+                        type="url"
+                        value={draftReg.paymentLinkUrl}
+                        onChange={e => setDraftReg(p => ({ ...p, paymentLinkUrl: e.target.value }))}
+                        placeholder="Online payment link (SSLCommerz/PortWallet — optional)"
+                        className="w-full border border-pink-200 dark:border-pink-800 rounded-lg px-2.5 py-1.5 text-[12px] text-gray-900 dark:text-slate-100 bg-white dark:bg-slate-700 outline-none focus:border-pink-400"
+                      />
+                      <input
+                        type="text"
+                        value={draftReg.paymentNote}
+                        onChange={e => setDraftReg(p => ({ ...p, paymentNote: e.target.value }))}
+                        placeholder="Extra note (e.g. Ref: shop name)"
+                        maxLength={200}
+                        className="w-full border border-pink-200 dark:border-pink-800 rounded-lg px-2.5 py-1.5 text-[12px] text-gray-900 dark:text-slate-100 bg-white dark:bg-slate-700 outline-none focus:border-pink-400"
+                      />
+                      <p className="text-[10px] text-pink-600 dark:text-pink-400/80">
+                        These appear at the bottom of every WhatsApp payment reminder so customers can pay right away.
+                      </p>
                     </div>
                   </div>
 
