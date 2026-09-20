@@ -2,6 +2,7 @@ import { Router, Request, Response } from 'express';
 import { Attendance } from '../models/Attendance';
 import { DueBookSettings } from '../models/DueBookSettings';
 import { Device } from '../models/Device';
+import { EmployeeAdvance } from '../models/EmployeeAdvance';
 import { duebookAuth } from '../middleware/duebookRoleAuth';
 
 const router = Router();
@@ -199,16 +200,135 @@ router.get('/report', async (req: Request, res: Response) => {
       }
     }
 
-    const employees = Array.from(groups.values()).sort((a, b) => a.label.localeCompare(b.label, 'bn'));
+    const advances = await EmployeeAdvance.find({ tenantId, month: label }).lean();
+    const advByDevice = new Map<string, number>();
+    for (const a of advances) {
+      advByDevice.set(a.deviceId, (advByDevice.get(a.deviceId) || 0) + (a.amount || 0));
+    }
+
+    const employees = Array.from(groups.values())
+      .map((e) => {
+        const adv = advByDevice.get(e.deviceId) || 0;
+        return { ...e, advances: adv, netSalary: Math.max(0, e.totalSalary - adv) };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label, 'bn'));
     const totals = {
       days: employees.reduce((s, e) => s + e.days, 0),
       salary: employees.reduce((s, e) => s + e.totalSalary, 0),
+      advances: employees.reduce((s, e) => s + e.advances, 0),
+      netSalary: employees.reduce((s, e) => s + e.netSalary, 0),
     };
 
     res.json({ month: label, employees, totals });
   } catch (err) {
     console.error('attendance report error:', err);
     res.status(500).json({ error: 'Error loading report' });
+  }
+});
+
+// ============ EMPLOYEE ADVANCES (owner only) ============
+
+// GET all advances for a month
+router.get('/advances', async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantId(req);
+    if (!tenantId) return res.status(400).json({ error: 'Tenant ID is required' });
+    if (getRole(req) !== 'owner') return res.status(403).json({ error: 'Owner only' });
+    const { label } = monthRangeDhaka(req.query.month as string | undefined);
+    const rows = await EmployeeAdvance.find({ tenantId, month: label })
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json({ month: label, advances: rows });
+  } catch (err) {
+    console.error('advances get error:', err);
+    res.status(500).json({ error: 'Error loading advances' });
+  }
+});
+
+// POST create advance for the given (or current) month
+router.post('/advances', async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantId(req);
+    if (!tenantId) return res.status(400).json({ error: 'Tenant ID is required' });
+    if (getRole(req) !== 'owner') return res.status(403).json({ error: 'Owner only' });
+
+    const deviceId = String(req.body?.deviceId || '').trim();
+    const amount = Number(req.body?.amount);
+    const note = typeof req.body?.note === 'string' ? req.body.note.trim().slice(0, 200) : '';
+    const requestedMonth = typeof req.body?.month === 'string' ? req.body.month : undefined;
+    if (!deviceId) return res.status(400).json({ error: 'deviceId required' });
+    if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({ error: 'amount must be > 0' });
+
+    const device = await Device.findOne({ _id: deviceId, tenantId }).lean();
+    if (!device) return res.status(404).json({ error: 'Employee not found' });
+
+    const { label } = monthRangeDhaka(requestedMonth);
+    const doc = await EmployeeAdvance.create({
+      tenantId,
+      deviceId,
+      employeeLabel: device.label || 'কর্মচারী',
+      month: label,
+      amount: Math.round(amount * 100) / 100,
+      note,
+    });
+    res.status(201).json(doc);
+  } catch (err) {
+    console.error('advances post error:', err);
+    res.status(500).json({ error: 'Error saving advance' });
+  }
+});
+
+// DELETE advance
+router.delete('/advances/:id', async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantId(req);
+    if (!tenantId) return res.status(400).json({ error: 'Tenant ID is required' });
+    if (getRole(req) !== 'owner') return res.status(403).json({ error: 'Owner only' });
+    const result = await EmployeeAdvance.deleteOne({ _id: req.params.id, tenantId });
+    if (result.deletedCount === 0) return res.status(404).json({ error: 'Not found' });
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('advances delete error:', err);
+    res.status(500).json({ error: 'Error deleting advance' });
+  }
+});
+
+// GET single-employee payslip data (owner only)
+router.get('/payslip', async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantId(req);
+    if (!tenantId) return res.status(400).json({ error: 'Tenant ID is required' });
+    if (getRole(req) !== 'owner') return res.status(403).json({ error: 'Owner only' });
+    const deviceId = String(req.query.deviceId || '').trim();
+    if (!deviceId) return res.status(400).json({ error: 'deviceId required' });
+
+    const device = await Device.findOne({ _id: deviceId, tenantId }).lean();
+    if (!device) return res.status(404).json({ error: 'Employee not found' });
+
+    const { from, to, label } = monthRangeDhaka(req.query.month as string | undefined);
+    const [rows, advances, settings] = await Promise.all([
+      Attendance.find({ tenantId, deviceId, date: { $gte: from, $lte: to } }).sort({ date: 1 }).lean(),
+      EmployeeAdvance.find({ tenantId, deviceId, month: label }).sort({ createdAt: 1 }).lean(),
+      DueBookSettings.findOne({ tenantId }).lean(),
+    ]);
+
+    const gross = rows.reduce((s, r) => s + (r.dailyRate || 0), 0);
+    const advTotal = advances.reduce((s, a) => s + (a.amount || 0), 0);
+    const net = Math.max(0, gross - advTotal);
+
+    res.json({
+      month: label,
+      shopName: settings?.shopName || '',
+      shopLogo: settings?.shopLogo || '',
+      employee: { deviceId, label: device.label || 'কর্মচারী' },
+      days: rows.length,
+      rows,
+      advances,
+      totals: { gross, advances: advTotal, net },
+    });
+  } catch (err) {
+    console.error('payslip error:', err);
+    res.status(500).json({ error: 'Error loading payslip' });
   }
 });
 
