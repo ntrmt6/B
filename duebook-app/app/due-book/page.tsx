@@ -18,7 +18,7 @@ import {
   Minus, Pencil, Settings, Moon, Sun, MessageCircle, Gift, QrCode as QrIcon, CloudOff, Send, Bell,
   MessageSquare, Copy, Users, Upload, ClipboardPaste, Check, Pin, PinOff, ShieldCheck, Camera,
   Lock, Unlock, Package, Menu, ArrowUpDown, Clock, Calculator as CalcIcon, Sparkles, Delete,
-  Wind, Zap, MessageSquareQuote, Compass, Trophy, ShoppingCart,
+  Wind, Zap, MessageSquareQuote, Compass, Trophy, ShoppingCart, Mic,
 } from 'lucide-react';
 import SyncBar from './SyncBar';
 import ReminderInbox from './ReminderInbox';
@@ -733,6 +733,9 @@ export default function DueBookPage() {
     error?: string; hint?: string;
   }>(null);
   const [aiSaving, setAiSaving] = useState(false);
+  const [aiVoiceLang, setAiVoiceLang] = useState<'bn-BD' | 'en-US'>('bn-BD');
+  const [aiListening, setAiListening] = useState(false);
+  const aiRecogRef = useRef<any>(null);
 
   /* Situation Coach — real-time action guide */
   const [showCoach, setShowCoach] = useState(false);
@@ -2352,6 +2355,64 @@ export default function DueBookPage() {
     } finally { setAiLoading(false); }
   };
 
+  const toggleAiVoice = () => {
+    if (aiListening && aiRecogRef.current) {
+      try { aiRecogRef.current.stop(); } catch { /* ignore */ }
+      return;
+    }
+    const SR: any =
+      (typeof window !== 'undefined' &&
+        ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition)) ||
+      null;
+    if (!SR) {
+      toast.error('Voice input needs Chrome/Edge on Android or desktop');
+      return;
+    }
+    const rec = new SR();
+    rec.lang = aiVoiceLang;
+    rec.interimResults = true;
+    rec.continuous = false;
+    rec.maxAlternatives = 1;
+    let finalText = '';
+    rec.onstart = () => setAiListening(true);
+    rec.onerror = (e: any) => {
+      const err = e?.error || 'error';
+      if (err === 'not-allowed' || err === 'service-not-allowed') {
+        toast.error('Microphone permission denied');
+      } else if (err === 'no-speech') {
+        toast('Didn\'t catch that. Try again.', { icon: '🎙️' });
+      } else if (err !== 'aborted') {
+        toast.error(`Voice error: ${err}`);
+      }
+    };
+    rec.onresult = (e: any) => {
+      let interim = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const r = e.results[i];
+        if (r.isFinal) finalText += r[0].transcript;
+        else interim += r[0].transcript;
+      }
+      const combined = (finalText + interim).trim();
+      if (combined) {
+        setAiText(combined);
+        if (aiParsed) setAiParsed(null);
+      }
+    };
+    rec.onend = () => {
+      setAiListening(false);
+      aiRecogRef.current = null;
+      if (finalText.trim()) setAiText(prev => (finalText.trim() || prev));
+    };
+    aiRecogRef.current = rec;
+    try {
+      rec.start();
+    } catch (err) {
+      setAiListening(false);
+      aiRecogRef.current = null;
+      toast.error('Could not start voice input');
+    }
+  };
+
   const confirmAi = async () => {
     if (!aiParsed?.ok || !tenantId) return;
     const { entityId, entityName, amount, direction, note } = aiParsed;
@@ -3415,20 +3476,63 @@ export default function DueBookPage() {
 
             <div className="px-4 pb-5 space-y-3">
               <div>
-                <textarea value={aiText}
-                  onChange={e => { setAiText(e.target.value); if (aiParsed) setAiParsed(null); }}
-                  placeholder="e.g. Rahim 500 taka add to due&#10;or: supplier Karim ke 1200 tk dilam"
-                  rows={3}
-                  className="w-full border-2 border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2 text-[13px] outline-none focus:border-fuchsia-400 bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 resize-none"
-                />
-                <div className="flex flex-wrap gap-1 mt-1.5">
-                  {['add 500 to Rahim due', 'Karim 1200 tk paba', 'supplier ke 800 dilam'].map(sug => (
-                    <button key={sug} onClick={() => setAiText(sug)}
-                      className="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-slate-700 text-[10px] text-gray-600 dark:text-slate-300 active:bg-gray-200">
-                      {sug}
-                    </button>
-                  ))}
+                <div className="relative">
+                  <textarea value={aiText}
+                    onChange={e => { setAiText(e.target.value); if (aiParsed) setAiParsed(null); }}
+                    placeholder="e.g. Rahim 500 taka add to due&#10;or: supplier Karim ke 1200 tk dilam&#10;বলুন: রহিমকে ৫০০ টাকা দিলাম"
+                    rows={3}
+                    className="w-full border-2 border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2 pr-12 text-[13px] outline-none focus:border-fuchsia-400 bg-white dark:bg-slate-700 text-gray-900 dark:text-slate-100 resize-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={toggleAiVoice}
+                    aria-label={aiListening ? 'Stop voice input' : 'Start voice input'}
+                    className={`absolute top-2 right-2 w-9 h-9 flex items-center justify-center rounded-full shadow-md text-white active:scale-95 transition ${
+                      aiListening
+                        ? 'bg-red-500 animate-pulse'
+                        : 'bg-gradient-to-br from-fuchsia-500 to-indigo-500'
+                    }`}
+                  >
+                    <Mic size={16} />
+                  </button>
                 </div>
+                <div className="flex items-center justify-between mt-1.5 gap-2">
+                  <div className="flex flex-wrap gap-1">
+                    {['add 500 to Rahim due', 'Karim 1200 tk paba', 'supplier ke 800 dilam'].map(sug => (
+                      <button key={sug} onClick={() => setAiText(sug)}
+                        className="px-2 py-0.5 rounded-full bg-gray-100 dark:bg-slate-700 text-[10px] text-gray-600 dark:text-slate-300 active:bg-gray-200">
+                        {sug}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => setAiVoiceLang('bn-BD')}
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                        aiVoiceLang === 'bn-BD'
+                          ? 'bg-fuchsia-500 text-white'
+                          : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300'
+                      }`}
+                    >
+                      🎙️ বাংলা
+                    </button>
+                    <button
+                      onClick={() => setAiVoiceLang('en-US')}
+                      className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                        aiVoiceLang === 'en-US'
+                          ? 'bg-fuchsia-500 text-white'
+                          : 'bg-gray-100 dark:bg-slate-700 text-gray-600 dark:text-slate-300'
+                      }`}
+                    >
+                      EN
+                    </button>
+                  </div>
+                </div>
+                {aiListening && (
+                  <p className="text-[11px] text-fuchsia-600 dark:text-fuchsia-400 mt-1 font-semibold">
+                    🎙️ Listening… speak now
+                  </p>
+                )}
               </div>
 
               {!aiParsed && (
