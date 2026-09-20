@@ -268,6 +268,11 @@ router.get('/duebook/settings', async (req: Request, res: Response) => {
         rocketNumber: '',
         paymentLinkUrl: '',
         paymentNote: '',
+        shopLatitude: null,
+        shopLongitude: null,
+        attendanceRadiusMeters: 150,
+        attendanceRequireGeofence: false,
+        attendanceRequireSelfie: false,
       }
     );
   } catch (error) {
@@ -285,6 +290,8 @@ router.put('/duebook/settings', async (req: Request, res: Response) => {
       shopName, registrationEnabled, bonusAmount, rewardItemName, rewardItemPrice,
       paymentRewardThreshold, welcomeMessage, shopLogo,
       bkashNumber, bkashType, nagadNumber, rocketNumber, paymentLinkUrl, paymentNote,
+      shopLatitude, shopLongitude, attendanceRadiusMeters,
+      attendanceRequireGeofence, attendanceRequireSelfie,
     } = req.body || {};
     const update: any = {};
     if (typeof shopName === 'string') update.shopName = shopName.trim().slice(0, 120);
@@ -301,6 +308,13 @@ router.put('/duebook/settings', async (req: Request, res: Response) => {
     if (typeof rocketNumber === 'string') update.rocketNumber = rocketNumber.trim().slice(0, 20);
     if (typeof paymentLinkUrl === 'string') update.paymentLinkUrl = paymentLinkUrl.trim().slice(0, 500);
     if (typeof paymentNote === 'string') update.paymentNote = paymentNote.trim().slice(0, 200);
+    if (shopLatitude === null) update.shopLatitude = null;
+    else if (typeof shopLatitude === 'number' && shopLatitude >= -90 && shopLatitude <= 90) update.shopLatitude = shopLatitude;
+    if (shopLongitude === null) update.shopLongitude = null;
+    else if (typeof shopLongitude === 'number' && shopLongitude >= -180 && shopLongitude <= 180) update.shopLongitude = shopLongitude;
+    if (typeof attendanceRadiusMeters === 'number' && attendanceRadiusMeters >= 20 && attendanceRadiusMeters <= 5000) update.attendanceRadiusMeters = Math.round(attendanceRadiusMeters);
+    if (typeof attendanceRequireGeofence === 'boolean') update.attendanceRequireGeofence = attendanceRequireGeofence;
+    if (typeof attendanceRequireSelfie === 'boolean') update.attendanceRequireSelfie = attendanceRequireSelfie;
 
     const settings = await DueBookSettings.findOneAndUpdate(
       { tenantId },

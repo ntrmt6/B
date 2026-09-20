@@ -13,6 +13,11 @@ export interface IDueBookSettings extends Document {
   welcomeMessage: string;
   shopLogo: string;
   dailyAttendanceRate: number;
+  shopLatitude: number | null;
+  shopLongitude: number | null;
+  attendanceRadiusMeters: number;
+  attendanceRequireGeofence: boolean;
+  attendanceRequireSelfie: boolean;
   bkashNumber: string;
   bkashType: BkashType;
   nagadNumber: string;
@@ -35,6 +40,11 @@ const DueBookSettingsSchema = new Schema<IDueBookSettings>(
     welcomeMessage: { type: String, trim: true, maxlength: 300, default: '' },
     shopLogo: { type: String, default: '' },
     dailyAttendanceRate: { type: Number, default: 0, min: 0 },
+    shopLatitude: { type: Number, default: null },
+    shopLongitude: { type: Number, default: null },
+    attendanceRadiusMeters: { type: Number, default: 150, min: 20, max: 5000 },
+    attendanceRequireGeofence: { type: Boolean, default: false },
+    attendanceRequireSelfie: { type: Boolean, default: false },
     bkashNumber: { type: String, trim: true, maxlength: 20, default: '' },
     bkashType: {
       type: String,

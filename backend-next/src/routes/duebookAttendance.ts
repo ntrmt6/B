@@ -55,6 +55,25 @@ router.get('/config', async (req: Request, res: Response) => {
   }
 });
 
+// GET the geofence/selfie policy (owner + employee)
+router.get('/policy', async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantId(req);
+    if (!tenantId) return res.status(400).json({ error: 'Tenant ID is required' });
+    const s = await DueBookSettings.findOne({ tenantId }).lean();
+    res.json({
+      requireGeofence: !!s?.attendanceRequireGeofence,
+      requireSelfie: !!s?.attendanceRequireSelfie,
+      shopLatitude: s?.shopLatitude ?? null,
+      shopLongitude: s?.shopLongitude ?? null,
+      radiusMeters: s?.attendanceRadiusMeters || 150,
+    });
+  } catch (err) {
+    console.error('attendance policy get error:', err);
+    res.status(500).json({ error: 'Error loading policy' });
+  }
+});
+
 // PUT daily rate (owner only)
 router.put('/config', async (req: Request, res: Response) => {
   try {
@@ -76,6 +95,18 @@ router.put('/config', async (req: Request, res: Response) => {
   }
 });
 
+// Haversine distance in meters between two lat/lng points
+const distanceMeters = (a: { lat: number; lng: number }, b: { lat: number; lng: number }): number => {
+  const R = 6371000;
+  const toRad = (x: number) => (x * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const s =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+};
+
 // POST mark today's attendance (employee only — the device marks itself)
 router.post('/mark', async (req: Request, res: Response) => {
   try {
@@ -92,6 +123,54 @@ router.post('/mark', async (req: Request, res: Response) => {
     const rate = settings?.dailyAttendanceRate || 0;
     const date = todayDhaka();
 
+    const latitudeRaw = req.body?.latitude;
+    const longitudeRaw = req.body?.longitude;
+    const selfieRaw = req.body?.selfie;
+    const latitude =
+      typeof latitudeRaw === 'number' && latitudeRaw >= -90 && latitudeRaw <= 90
+        ? latitudeRaw
+        : null;
+    const longitude =
+      typeof longitudeRaw === 'number' && longitudeRaw >= -180 && longitudeRaw <= 180
+        ? longitudeRaw
+        : null;
+    const selfie =
+      typeof selfieRaw === 'string' && selfieRaw.startsWith('data:image/') && selfieRaw.length <= 250000
+        ? selfieRaw
+        : '';
+
+    let distance: number | null = null;
+    if (
+      settings?.attendanceRequireGeofence &&
+      typeof settings.shopLatitude === 'number' &&
+      typeof settings.shopLongitude === 'number'
+    ) {
+      if (latitude === null || longitude === null) {
+        return res.status(400).json({ error: 'Location required. Please enable GPS.' });
+      }
+      distance = distanceMeters(
+        { lat: settings.shopLatitude, lng: settings.shopLongitude },
+        { lat: latitude, lng: longitude }
+      );
+      const radius = settings.attendanceRadiusMeters || 150;
+      if (distance > radius) {
+        return res.status(403).json({
+          error: `You are ${Math.round(distance)}m away from the shop. Please move closer (≤${radius}m).`,
+          distanceMeters: Math.round(distance),
+          radiusMeters: radius,
+        });
+      }
+    } else if (latitude !== null && longitude !== null && typeof settings?.shopLatitude === 'number' && typeof settings?.shopLongitude === 'number') {
+      distance = distanceMeters(
+        { lat: settings.shopLatitude, lng: settings.shopLongitude },
+        { lat: latitude, lng: longitude }
+      );
+    }
+
+    if (settings?.attendanceRequireSelfie && !selfie) {
+      return res.status(400).json({ error: 'Selfie required. Please enable the camera.' });
+    }
+
     try {
       const doc = await Attendance.create({
         tenantId,
@@ -100,6 +179,10 @@ router.post('/mark', async (req: Request, res: Response) => {
         date,
         markedAt: new Date(),
         dailyRate: rate,
+        latitude,
+        longitude,
+        distanceMeters: distance !== null ? Math.round(distance) : null,
+        selfie,
       });
       return res.status(201).json({ ok: true, attendance: doc, alreadyMarked: false });
     } catch (e: any) {

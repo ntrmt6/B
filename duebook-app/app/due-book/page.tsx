@@ -65,6 +65,11 @@ interface RegSettings {
   rocketNumber: string;
   paymentLinkUrl: string;
   paymentNote: string;
+  shopLatitude: number | null;
+  shopLongitude: number | null;
+  attendanceRadiusMeters: number;
+  attendanceRequireGeofence: boolean;
+  attendanceRequireSelfie: boolean;
 }
 type FieldType = 'text' | 'textarea' | 'number' | 'date' | 'time' | 'select';
 interface TemplateField {
@@ -758,6 +763,9 @@ export default function DueBookPage() {
     bkashNumber: '', bkashType: 'personal',
     nagadNumber: '', rocketNumber: '',
     paymentLinkUrl: '', paymentNote: '',
+    shopLatitude: null, shopLongitude: null,
+    attendanceRadiusMeters: 150,
+    attendanceRequireGeofence: false, attendanceRequireSelfie: false,
   };
   const [regSettings, setRegSettings] = useState<RegSettings>(DEFAULT_REG);
   const [draftReg, setDraftReg] = useState<RegSettings>(DEFAULT_REG);
@@ -1052,6 +1060,11 @@ export default function DueBookPage() {
           rocketNumber: s.rocketNumber || '',
           paymentLinkUrl: s.paymentLinkUrl || '',
           paymentNote: s.paymentNote || '',
+          shopLatitude: typeof s.shopLatitude === 'number' ? s.shopLatitude : null,
+          shopLongitude: typeof s.shopLongitude === 'number' ? s.shopLongitude : null,
+          attendanceRadiusMeters: Number(s.attendanceRadiusMeters) || 150,
+          attendanceRequireGeofence: !!s.attendanceRequireGeofence,
+          attendanceRequireSelfie: !!s.attendanceRequireSelfie,
         });
       } catch { /* ignore */ }
     })();
@@ -1366,6 +1379,11 @@ export default function DueBookPage() {
         rocketNumber: draftReg.rocketNumber?.trim() || '',
         paymentLinkUrl: draftReg.paymentLinkUrl?.trim() || '',
         paymentNote: draftReg.paymentNote?.trim() || '',
+        shopLatitude: draftReg.shopLatitude,
+        shopLongitude: draftReg.shopLongitude,
+        attendanceRadiusMeters: Number(draftReg.attendanceRadiusMeters) || 150,
+        attendanceRequireGeofence: !!draftReg.attendanceRequireGeofence,
+        attendanceRequireSelfie: !!draftReg.attendanceRequireSelfie,
       });
       setRegSettings({
         ...draftReg,
@@ -4271,6 +4289,72 @@ export default function DueBookPage() {
                       />
                       <p className="text-[10px] text-pink-600 dark:text-pink-400/80">
                         These appear at the bottom of every WhatsApp payment reminder so customers can pay right away.
+                      </p>
+                    </div>
+
+                    <div className="rounded-lg bg-sky-50 dark:bg-sky-900/20 p-2.5 space-y-2">
+                      <p className="text-[11px] font-semibold text-sky-700 dark:text-sky-400 uppercase tracking-wide">Attendance Policy</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[12px] text-gray-700 dark:text-slate-200">Require GPS inside shop</span>
+                        <button
+                          onClick={() => setDraftReg(p => ({ ...p, attendanceRequireGeofence: !p.attendanceRequireGeofence }))}
+                          className={`relative w-11 h-6 rounded-full transition-colors ${draftReg.attendanceRequireGeofence ? 'bg-sky-500' : 'bg-gray-200 dark:bg-slate-600'}`}
+                        >
+                          <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${draftReg.attendanceRequireGeofence ? 'translate-x-5' : 'translate-x-0'}`} />
+                        </button>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[12px] text-gray-700 dark:text-slate-200">Require selfie</span>
+                        <button
+                          onClick={() => setDraftReg(p => ({ ...p, attendanceRequireSelfie: !p.attendanceRequireSelfie }))}
+                          className={`relative w-11 h-6 rounded-full transition-colors ${draftReg.attendanceRequireSelfie ? 'bg-sky-500' : 'bg-gray-200 dark:bg-slate-600'}`}
+                        >
+                          <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${draftReg.attendanceRequireSelfie ? 'translate-x-5' : 'translate-x-0'}`} />
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 items-end">
+                        <div className="col-span-2">
+                          <label className="text-[10px] font-semibold text-gray-500 dark:text-slate-400">Shop coordinates</label>
+                          <div className="text-[11px] text-gray-800 dark:text-slate-200 tabular-nums">
+                            {draftReg.shopLatitude != null && draftReg.shopLongitude != null
+                              ? `${draftReg.shopLatitude.toFixed(5)}, ${draftReg.shopLongitude.toFixed(5)}`
+                              : <span className="text-gray-400">Not set</span>}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            if (typeof navigator === 'undefined' || !navigator.geolocation) {
+                              toast.error('GPS not supported');
+                              return;
+                            }
+                            navigator.geolocation.getCurrentPosition(
+                              (pos) => {
+                                setDraftReg(p => ({ ...p, shopLatitude: pos.coords.latitude, shopLongitude: pos.coords.longitude }));
+                                toast.success('অবস্থান সেট হয়েছে');
+                              },
+                              (err) => toast.error(err.message || 'GPS ব্যর্থ'),
+                              { enableHighAccuracy: true, timeout: 12000 },
+                            );
+                          }}
+                          className="py-1.5 rounded-lg bg-sky-500 text-white text-[11px] font-bold"
+                        >
+                          Use my location
+                        </button>
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-semibold text-gray-500 dark:text-slate-400">Radius (meters)</label>
+                        <input
+                          type="number"
+                          inputMode="numeric"
+                          min={20}
+                          max={5000}
+                          value={draftReg.attendanceRadiusMeters}
+                          onChange={e => setDraftReg(p => ({ ...p, attendanceRadiusMeters: Math.max(20, Math.min(5000, parseInt(e.target.value, 10) || 150)) }))}
+                          className="w-full border border-sky-200 dark:border-sky-800 rounded-lg px-2.5 py-1.5 text-[12px] text-gray-900 dark:text-slate-100 bg-white dark:bg-slate-700 outline-none focus:border-sky-400"
+                        />
+                      </div>
+                      <p className="text-[10px] text-sky-600 dark:text-sky-400/80">
+                        Employees marking attendance must be within the radius. Selfie is stored on the record for owner review.
                       </p>
                     </div>
                   </div>

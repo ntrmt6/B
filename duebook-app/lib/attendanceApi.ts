@@ -69,8 +69,25 @@ export async function setAttendanceConfig(dailyAttendanceRate: number): Promise<
   return r.data;
 }
 
-export async function markAttendance(): Promise<{ ok: boolean; attendance: AttendanceRow; alreadyMarked: boolean }> {
-  const r = await api.post('/duebook/attendance/mark', {});
+export async function markAttendance(payload?: {
+  latitude?: number | null;
+  longitude?: number | null;
+  selfie?: string;
+}): Promise<{ ok: boolean; attendance: AttendanceRow; alreadyMarked: boolean }> {
+  const r = await api.post('/duebook/attendance/mark', payload || {});
+  return r.data;
+}
+
+export interface AttendancePolicy {
+  requireGeofence: boolean;
+  requireSelfie: boolean;
+  shopLatitude: number | null;
+  shopLongitude: number | null;
+  radiusMeters: number;
+}
+
+export async function getAttendancePolicy(): Promise<AttendancePolicy> {
+  const r = await api.get('/duebook/attendance/policy');
   return r.data;
 }
 
