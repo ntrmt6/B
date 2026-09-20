@@ -71,7 +71,20 @@ export const authenticateToken = async (
     req.userId = decoded.userId;
     req.userRole = decoded.role;
     req.tenantId = decoded.tenantId;
-    
+
+    // Multi-shop switch: allow an X-Tenant-Id override iff it appears in the
+    // user's tenantIds list. Prevents tenant hopping to unrelated shops.
+    const overrideHeader = req.headers['x-tenant-id'];
+    const override = typeof overrideHeader === 'string' ? overrideHeader.trim() : '';
+    if (
+      override &&
+      /^[a-zA-Z0-9_-]{1,100}$/.test(override) &&
+      Array.isArray(user.tenantIds) &&
+      user.tenantIds.includes(override)
+    ) {
+      req.tenantId = override;
+    }
+
     next();
   } catch (error) {
     if (error instanceof jwt.TokenExpiredError) {

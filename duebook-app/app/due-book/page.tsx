@@ -23,6 +23,7 @@ import {
 import SyncBar from './SyncBar';
 import ReminderInbox from './ReminderInbox';
 import DailyPnlCard from './DailyPnlCard';
+import ShopSwitcher from './ShopSwitcher';
 
 const InventoryModal = dynamic(() => import('./InventoryModal'), { ssr: false });
 const QRCodeSVG = dynamic(() => import('qrcode.react').then(m => m.QRCodeSVG), { ssr: false });
@@ -2568,6 +2569,7 @@ export default function DueBookPage() {
                   </div>
                 )}
               </div>
+              <ShopSwitcher currentTenantId={tenantId || ''} currentShopName={regSettings.shopName} />
               <ReminderInbox isDark={isDark} />
               <button onClick={() => { setNewType(tab); setShowAddEntity(true); window.history.pushState({ duebook: 'modal' }, ''); }}
                 className="w-7 h-7 flex items-center justify-center rounded-lg bg-sky-500 text-white">

@@ -12,6 +12,7 @@ export interface IUser extends Document {
   role: 'customer' | 'admin' | 'tenant_admin' | 'super_admin' | 'staff';
   roleId?: mongoose.Types.ObjectId;
   tenantId?: string;
+  tenantIds?: string[];
   isActive: boolean;
   provider?: 'local' | 'google' | 'facebook';
   providerId?: string;
@@ -44,6 +45,7 @@ const UserSchema = new Schema<IUser>({
   },
   roleId: { type: Schema.Types.ObjectId, ref: 'Role' },
   tenantId: { type: String, index: true },
+  tenantIds: { type: [String], default: [], index: true },
   isActive: { type: Boolean, default: true },
     provider: { type: String, enum: ['local', 'google', 'facebook'], default: 'local' },
   providerId: { type: String },
