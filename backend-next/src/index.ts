@@ -27,6 +27,7 @@ import { duebookSocialRouter } from './routes/duebookSocial';
 import duebookMenuRouter from './routes/duebookMenu';
 import duebookOrdersRouter from './routes/duebookOrders';
 import duebookPairRouter from './routes/duebookPair';
+import duebookAttendanceRouter from './routes/duebookAttendance';
 import reminderRoutes from './routes/reminderRoutes';
 import { startReminderScheduler } from './services/reminderScheduler';
 import publicDueViewRouter from './routes/publicDueView';
@@ -307,6 +308,7 @@ app.use('/api/duebook/social', duebookSocialRouter);
 app.use('/api/duebook/menu', duebookMenuRouter);
 app.use('/api/duebook/orders', duebookOrdersRouter);
 app.use('/api/duebook/pair', duebookPairRouter);
+app.use('/api/duebook/attendance', duebookAttendanceRouter);
 app.use('/api', dueListRoutes);
 app.use('/api', reminderRoutes);
 

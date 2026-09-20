@@ -10,6 +10,7 @@ export interface IDueBookSettings extends Document {
   paymentRewardThreshold: number;
   welcomeMessage: string;
   shopLogo: string;
+  dailyAttendanceRate: number;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -25,6 +26,7 @@ const DueBookSettingsSchema = new Schema<IDueBookSettings>(
     paymentRewardThreshold: { type: Number, default: 0, min: 0 },
     welcomeMessage: { type: String, trim: true, maxlength: 300, default: '' },
     shopLogo: { type: String, default: '' },
+    dailyAttendanceRate: { type: Number, default: 0, min: 0 },
   },
   { timestamps: true }
 );

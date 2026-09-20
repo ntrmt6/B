@@ -8,7 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import {
   ChevronLeft, Plus, Minus, Check, X, ShoppingCart, Trash2, Pencil,
   Clock, ChefHat, CheckCircle2, XCircle, User, Wallet, Smartphone, Package,
-  BarChart3, Coffee,
+  BarChart3, Coffee, CalendarCheck,
 } from 'lucide-react';
 import { listMenuItems, MenuItemDoc } from '@/lib/menuApi';
 import {
@@ -706,7 +706,13 @@ function KitchenScreen({ tenantId }: { tenantId: string }) {
         <div className="max-w-4xl mx-auto flex items-center gap-2 px-3 py-3">
           <ChefHat size={22} className="text-orange-400" />
           <h1 className="font-bold text-lg">রান্নাঘর</h1>
-          <span className="ml-auto text-sm text-neutral-400">{toBn(active.length)} সক্রিয়</span>
+          <Link
+            href="/due-book/attendance"
+            className="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-semibold"
+          >
+            <CalendarCheck size={16} /> হাজিরা
+          </Link>
+          <span className="text-sm text-neutral-400">{toBn(active.length)} সক্রিয়</span>
         </div>
       </header>
 
