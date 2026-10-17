@@ -1,5 +1,6 @@
 import api from './api';
-import { enqueue, list as listQueue, realId } from './offlineQueue';
+import { db, hasIDB, type EntityRow, type TxRow } from './db';
+import { enqueue, list as listQueue, realId, remove as removeQueue } from './offlineQueue';
 
 interface Entity {
   _id: string;
@@ -25,78 +26,217 @@ interface Transaction {
   _qid?: string;
 }
 
-const CACHE_PREFIX = 'duebook_cache_';
-const ck = {
-  entities: (tid: string) => `${CACHE_PREFIX}entities__${tid}`,
-  tx: (tid: string, eid: string) => `${CACHE_PREFIX}tx__${tid}__${eid}`,
-  pendingTx: (tid: string, eid: string) => `${CACHE_PREFIX}pendingtx__${tid}__${eid}`,
-  pendingEntities: (tid: string) => `${CACHE_PREFIX}pendingent__${tid}`,
-};
-
-function readCache<T>(key: string, fallback: T): T {
-  if (typeof window === 'undefined') return fallback;
-  try { const raw = localStorage.getItem(key); return raw ? (JSON.parse(raw) as T) : fallback; }
-  catch { return fallback; }
-}
-function writeCache<T>(key: string, value: T) {
-  try { localStorage.setItem(key, JSON.stringify(value)); } catch {}
-}
-
+const LEGACY_PREFIX = 'duebook_cache_';
 const isNetworkErr = (err: unknown) => !(err as { response?: unknown })?.response;
 const isOffline = () => typeof navigator !== 'undefined' && navigator.onLine === false;
 const tempId = (prefix: string) => `temp_${prefix}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 
 export const isTempId = (id: string | undefined | null) => typeof id === 'string' && id.startsWith('temp_');
 
+/* ─────────────── Legacy localStorage → Dexie migration (one-time) ─────────────── */
+
+const migratedTenants = new Set<string>();
+async function migrateLegacy(tid: string) {
+  if (!hasIDB() || typeof localStorage === 'undefined') return;
+  if (migratedTenants.has(tid)) return;
+  migratedTenants.add(tid);
+  try {
+    const entKey = `${LEGACY_PREFIX}entities__${tid}`;
+    const pendEntKey = `${LEGACY_PREFIX}pendingent__${tid}`;
+    const entRaw = localStorage.getItem(entKey);
+    const pendEntRaw = localStorage.getItem(pendEntKey);
+    const rows: EntityRow[] = [];
+    if (entRaw) {
+      try {
+        const list: Entity[] = JSON.parse(entRaw);
+        for (const e of list) rows.push({ ...e, tenantId: tid, _pending: false });
+      } catch {}
+      localStorage.removeItem(entKey);
+    }
+    if (pendEntRaw) {
+      try {
+        const list: Entity[] = JSON.parse(pendEntRaw);
+        for (const e of list) rows.push({ ...e, tenantId: tid, _pending: true });
+      } catch {}
+      localStorage.removeItem(pendEntKey);
+    }
+    if (rows.length) await db().entities.bulkPut(rows);
+
+    // Transactions were keyed per-entity; sweep any legacy keys for this tid.
+    const txKeys: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (!k) continue;
+      if (k.startsWith(`${LEGACY_PREFIX}tx__${tid}__`) || k.startsWith(`${LEGACY_PREFIX}pendingtx__${tid}__`)) {
+        txKeys.push(k);
+      }
+    }
+    const txRows: TxRow[] = [];
+    for (const k of txKeys) {
+      const raw = localStorage.getItem(k);
+      if (!raw) continue;
+      try {
+        const list: Transaction[] = JSON.parse(raw);
+        const pending = k.includes('pendingtx__');
+        const entityId = k.split('__').pop() || '';
+        for (const t of list) {
+          txRows.push({
+            _id: t._id,
+            tenantId: tid,
+            entityId: t.entityId || entityId,
+            amount: t.amount,
+            direction: t.direction,
+            transactionDate: t.transactionDate,
+            notes: t.notes,
+            status: t.status,
+            photo: t.photo,
+            _pending: pending || t._pending,
+            _qid: t._qid,
+          });
+        }
+      } catch {}
+      localStorage.removeItem(k);
+    }
+    if (txRows.length) await db().transactions.bulkPut(txRows);
+  } catch {}
+}
+
 /* ─────────────── READS ─────────────── */
 
 export interface ReadResult<T> { data: T; offline: boolean; }
 
+async function readCachedEntities(tid: string): Promise<Entity[]> {
+  if (!hasIDB()) return [];
+  const rows = await db().entities.where({ tenantId: tid }).toArray();
+  return rows.map(({ tenantId: _t, ...rest }) => rest as Entity);
+}
+
+async function writeFreshEntities(tid: string, list: Entity[]) {
+  if (!hasIDB()) return;
+  await db().transaction('rw', db().entities, async () => {
+    // Keep locally-pending rows (either temp ids not yet mapped, or edits still queued).
+    const existingPending = await db().entities
+      .where({ tenantId: tid })
+      .filter(r => r._pending === true && isTempId(r._id) && !realId(r._id))
+      .toArray();
+    await db().entities.where({ tenantId: tid }).delete();
+    const serverRows: EntityRow[] = list.map(e => ({ ...e, tenantId: tid, _pending: false }));
+    await db().entities.bulkPut([...serverRows, ...existingPending]);
+  });
+}
+
 export async function getEntitiesOffline(tid: string): Promise<ReadResult<Entity[]>> {
-  const pending = readCache<Entity[]>(ck.pendingEntities(tid), []);
+  await migrateLegacy(tid);
+  const cached = await readCachedEntities(tid);
+
+  // Local-first: if we have cache, resolve immediately and refresh in background.
+  if (cached.length > 0) {
+    void refreshEntitiesInBackground(tid);
+    return { data: cached, offline: isOffline() };
+  }
+
+  // Cold start: no cache yet, fetch synchronously.
   try {
     const r = await api.get('/entities', { headers: { 'X-Tenant-Id': tid } });
     const list: Entity[] = r.data?.entities || r.data || [];
-    writeCache(ck.entities(tid), list);
-    // Drop synced-pending entries (whose temp id has resolved)
-    const stillPending = pending.filter(p => isTempId(p._id) && !realId(p._id));
-    writeCache(ck.pendingEntities(tid), stillPending);
-    return { data: [...list, ...stillPending], offline: false };
+    await writeFreshEntities(tid, list);
+    return { data: list, offline: false };
   } catch (err) {
-    if (isNetworkErr(err)) {
-      const cached = readCache<Entity[]>(ck.entities(tid), []);
-      return { data: [...cached, ...pending], offline: true };
-    }
+    if (isNetworkErr(err)) return { data: [], offline: true };
     throw err;
   }
+}
+
+async function refreshEntitiesInBackground(tid: string) {
+  if (isOffline()) return;
+  try {
+    const r = await api.get('/entities', { headers: { 'X-Tenant-Id': tid } });
+    const list: Entity[] = r.data?.entities || r.data || [];
+    await writeFreshEntities(tid, list);
+  } catch {}
+}
+
+async function readCachedTx(tid: string, entityId: string): Promise<Transaction[]> {
+  if (!hasIDB()) return [];
+  const rows = await db().transactions.where({ tenantId: tid, entityId }).toArray();
+  return rows.map(({ tenantId: _t, ...rest }) => rest as Transaction);
+}
+
+async function writeFreshTx(tid: string, entityId: string, list: Transaction[]) {
+  if (!hasIDB()) return;
+  const queueIds = new Set(listQueue().map(q => q.id));
+  await db().transaction('rw', db().transactions, async () => {
+    const pending = await db().transactions
+      .where({ tenantId: tid, entityId })
+      .filter(r => r._pending === true && !!r._qid && queueIds.has(r._qid))
+      .toArray();
+    await db().transactions.where({ tenantId: tid, entityId }).delete();
+    const serverRows: TxRow[] = list.map(t => ({
+      _id: t._id,
+      tenantId: tid,
+      entityId: t.entityId || entityId,
+      amount: t.amount,
+      direction: t.direction,
+      transactionDate: t.transactionDate,
+      notes: t.notes,
+      status: t.status,
+      photo: t.photo,
+      _pending: false,
+    }));
+    await db().transactions.bulkPut([...serverRows, ...pending]);
+  });
 }
 
 export async function getTxOffline(tid: string, entityId: string): Promise<ReadResult<Transaction[]>> {
-  const pending = readCache<Transaction[]>(ck.pendingTx(tid, entityId), []);
+  await migrateLegacy(tid);
+  const cached = await readCachedTx(tid, entityId);
+
   if (isTempId(entityId)) {
-    // Cannot fetch from server; only pending local items
-    return { data: pending, offline: true };
+    // Parent not synced yet — only local rows exist.
+    return { data: cached, offline: true };
   }
+
+  if (cached.length > 0) {
+    void refreshTxInBackground(tid, entityId);
+    return { data: cached, offline: isOffline() };
+  }
+
   try {
     const r = await api.get('/transactions', { params: { entityId }, headers: { 'X-Tenant-Id': tid } });
     const list: Transaction[] = r.data?.transactions || r.data || [];
-    writeCache(ck.tx(tid, entityId), list);
-    // Drop pending tx whose queue item has drained (server list now holds the real record).
-    // Legacy pending items without _qid are also dropped — server fetch succeeded, so they're stale.
-    const queueIds = new Set(listQueue().map(q => q.id));
-    const stillPending = pending.filter(p => p._qid && queueIds.has(p._qid));
-    if (stillPending.length !== pending.length) writeCache(ck.pendingTx(tid, entityId), stillPending);
-    return { data: [...list, ...stillPending], offline: false };
+    await writeFreshTx(tid, entityId, list);
+    return { data: list, offline: false };
   } catch (err) {
-    if (isNetworkErr(err)) {
-      const cached = readCache<Transaction[]>(ck.tx(tid, entityId), []);
-      return { data: [...cached, ...pending], offline: true };
-    }
+    if (isNetworkErr(err)) return { data: [], offline: true };
     throw err;
   }
 }
 
+async function refreshTxInBackground(tid: string, entityId: string) {
+  if (isOffline()) return;
+  try {
+    const r = await api.get('/transactions', { params: { entityId }, headers: { 'X-Tenant-Id': tid } });
+    const list: Transaction[] = r.data?.transactions || r.data || [];
+    await writeFreshTx(tid, entityId, list);
+  } catch {}
+}
+
 /* ─────────────── MUTATIONS ─────────────── */
+
+async function putEntityRow(tid: string, e: Entity, pending: boolean) {
+  if (!hasIDB()) return;
+  await db().entities.put({ ...e, tenantId: tid, _pending: pending });
+}
+
+async function bumpEntityTotalsDexie(tid: string, entityId: string, dir: 'INCOME' | 'EXPENSE', amt: number) {
+  if (!hasIDB()) return;
+  const row = await db().entities.get(entityId);
+  if (!row || row.tenantId !== tid) return;
+  const next: EntityRow = { ...row };
+  if (dir === 'INCOME') next.totalOwedToMe = (next.totalOwedToMe || 0) + amt;
+  else next.totalIOweThemNumber = (next.totalIOweThemNumber || 0) + amt;
+  await db().entities.put(next);
+}
 
 interface CreateEntityPayload { name: string; phone: string; type: Entity['type']; profilePicture?: string; }
 export async function createEntityOffline(tid: string, payload: CreateEntityPayload): Promise<{ entity: Entity; queued: boolean }> {
@@ -104,6 +244,7 @@ export async function createEntityOffline(tid: string, payload: CreateEntityPayl
     try {
       const r = await api.post('/entities', payload, { headers: { 'X-Tenant-Id': tid } });
       const entity: Entity = r.data?.entity || r.data;
+      await putEntityRow(tid, entity, false);
       return { entity, queued: false };
     } catch (err) {
       if (!isNetworkErr(err)) throw err;
@@ -116,8 +257,7 @@ export async function createEntityOffline(tid: string, payload: CreateEntityPayl
     profilePicture: payload.profilePicture || '',
     _pending: true,
   };
-  const pending = readCache<Entity[]>(ck.pendingEntities(tid), []);
-  writeCache(ck.pendingEntities(tid), [...pending, optimistic]);
+  await putEntityRow(tid, optimistic, true);
   enqueue({
     type: 'create-entity', method: 'POST', url: '/entities',
     body: payload, tenantId: tid,
@@ -142,51 +282,27 @@ export async function addTxOffline(tid: string, payload: AddTxPayload): Promise<
       if (!isNetworkErr(err)) throw err;
     }
   }
-  // Optimistic local tx
   const q = enqueue({
     type: 'add-tx', method: 'POST', url: '/transactions',
     body: payload, tenantId: tid,
     label: `${payload.direction === 'INCOME' ? 'They owe' : 'I owe'} Tk ${payload.amount}${payload.entityName ? ' — ' + payload.entityName : ''}`,
   });
-  const optimistic: Transaction = {
+  const optimistic: TxRow = {
     _id: tempId('tx'),
+    tenantId: tid,
+    entityId: payload.entityId,
     amount: payload.amount,
     direction: payload.direction,
     transactionDate: payload.transactionDate,
     notes: payload.notes,
     status: 'Pending',
-    entityId: payload.entityId,
     photo: payload.photo,
     _pending: true,
     _qid: q.id,
   };
-  const pKey = ck.pendingTx(tid, payload.entityId);
-  writeCache(pKey, [...readCache<Transaction[]>(pKey, []), optimistic]);
-  // Bump cached entity totals so summary reflects pending changes
-  bumpEntityTotals(tid, payload.entityId, payload.direction, payload.amount);
+  if (hasIDB()) await db().transactions.put(optimistic);
+  await bumpEntityTotalsDexie(tid, payload.entityId, payload.direction, payload.amount);
   return { queued: true };
-}
-
-function bumpEntityTotals(tid: string, entityId: string, dir: 'INCOME' | 'EXPENSE', amt: number) {
-  const cached = readCache<Entity[]>(ck.entities(tid), []);
-  const idx = cached.findIndex(e => e._id === entityId);
-  if (idx >= 0) {
-    const e = { ...cached[idx] };
-    if (dir === 'INCOME') e.totalOwedToMe = (e.totalOwedToMe || 0) + amt;
-    else e.totalIOweThemNumber = (e.totalIOweThemNumber || 0) + amt;
-    cached[idx] = e;
-    writeCache(ck.entities(tid), cached);
-    return;
-  }
-  const pending = readCache<Entity[]>(ck.pendingEntities(tid), []);
-  const pIdx = pending.findIndex(e => e._id === entityId);
-  if (pIdx >= 0) {
-    const e = { ...pending[pIdx] };
-    if (dir === 'INCOME') e.totalOwedToMe = (e.totalOwedToMe || 0) + amt;
-    else e.totalIOweThemNumber = (e.totalIOweThemNumber || 0) + amt;
-    pending[pIdx] = e;
-    writeCache(ck.pendingEntities(tid), pending);
-  }
 }
 
 export async function patchTxStatusOffline(tid: string, txId: string, status: 'Pending' | 'Paid'): Promise<{ queued: boolean }> {
@@ -196,10 +312,18 @@ export async function patchTxStatusOffline(tid: string, txId: string, status: 'P
   if (!isOffline()) {
     try {
       await api.patch(`/transactions/${txId}`, { status }, { headers: { 'X-Tenant-Id': tid } });
+      if (hasIDB()) {
+        const row = await db().transactions.get(txId);
+        if (row) await db().transactions.put({ ...row, status });
+      }
       return { queued: false };
     } catch (err) {
       if (!isNetworkErr(err)) throw err;
     }
+  }
+  if (hasIDB()) {
+    const row = await db().transactions.get(txId);
+    if (row) await db().transactions.put({ ...row, status, _pending: true });
   }
   enqueue({
     type: 'patch-tx', method: 'PATCH', url: `/transactions/${txId}`,
@@ -211,21 +335,12 @@ export async function patchTxStatusOffline(tid: string, txId: string, status: 'P
 
 export async function deleteTxOffline(tid: string, txId: string, entityId?: string): Promise<{ queued: boolean }> {
   if (isTempId(txId)) {
-    // Not yet synced — remove from local pending cache and drop the queued add-tx (if any)
-    if (entityId) {
-      const pKey = ck.pendingTx(tid, entityId);
-      const pending = readCache<Transaction[]>(pKey, []);
-      const target = pending.find(t => t._id === txId);
-      const next = pending.filter(t => t._id !== txId);
-      writeCache(pKey, next);
-      if (target?._qid) {
-        // Remove the queued create so it never hits the server
-        const { remove } = await import('./offlineQueue');
-        remove(target._qid);
-      }
-      // Reverse the optimistic entity total bump
-      if (target) {
-        bumpEntityTotals(tid, entityId, target.direction, -target.amount);
+    if (hasIDB()) {
+      const row = await db().transactions.get(txId);
+      await db().transactions.delete(txId);
+      if (row?._qid) removeQueue(row._qid);
+      if (row && entityId) {
+        await bumpEntityTotalsDexie(tid, entityId, row.direction, -row.amount);
       }
     }
     return { queued: false };
@@ -233,11 +348,13 @@ export async function deleteTxOffline(tid: string, txId: string, entityId?: stri
   if (!isOffline()) {
     try {
       await api.delete(`/transactions/${txId}`, { headers: { 'X-Tenant-Id': tid } });
+      if (hasIDB()) await db().transactions.delete(txId);
       return { queued: false };
     } catch (err) {
       if (!isNetworkErr(err)) throw err;
     }
   }
+  if (hasIDB()) await db().transactions.delete(txId);
   enqueue({
     type: 'delete-tx', method: 'DELETE', url: `/transactions/${txId}`,
     tenantId: tid,
@@ -251,10 +368,18 @@ export async function patchEntityOffline(tid: string, id: string, payload: { nam
   if (!isOffline()) {
     try {
       await api.put(`/entities/${id}`, payload, { headers: { 'X-Tenant-Id': tid } });
+      if (hasIDB()) {
+        const row = await db().entities.get(id);
+        if (row) await db().entities.put({ ...row, ...payload });
+      }
       return { queued: false };
     } catch (err) {
       if (!isNetworkErr(err)) throw err;
     }
+  }
+  if (hasIDB()) {
+    const row = await db().entities.get(id);
+    if (row) await db().entities.put({ ...row, ...payload, _pending: true });
   }
   enqueue({
     type: 'patch-entity', method: 'PUT', url: `/entities/${id}`,
@@ -269,10 +394,18 @@ export async function deleteEntityOffline(tid: string, id: string, name: string)
   if (!isOffline()) {
     try {
       await api.delete(`/entities/${id}`, { headers: { 'X-Tenant-Id': tid } });
+      if (hasIDB()) {
+        await db().entities.delete(id);
+        await db().transactions.where({ tenantId: tid, entityId: id }).delete();
+      }
       return { queued: false };
     } catch (err) {
       if (!isNetworkErr(err)) throw err;
     }
+  }
+  if (hasIDB()) {
+    await db().entities.delete(id);
+    await db().transactions.where({ tenantId: tid, entityId: id }).delete();
   }
   enqueue({
     type: 'delete-entity', method: 'DELETE', url: `/entities/${id}`,
@@ -282,15 +415,5 @@ export async function deleteEntityOffline(tid: string, id: string, name: string)
   return { queued: true };
 }
 
-/* Clean cached pending items whose queue entries have all synced. */
-export function pruneSyncedPending(tid: string) {
-  // Remove pending tx entries whose corresponding queue items are gone.
-  // (This is a best-effort cleanup — after a successful refetch the cached
-  // list already has the server-side rows, so purging pending is safe.)
-  const keys: string[] = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (k && k.startsWith(`${CACHE_PREFIX}pendingtx__${tid}__`)) keys.push(k);
-  }
-  keys.forEach(k => localStorage.removeItem(k));
-}
+/* Legacy no-op kept for callers that still invoke it. */
+export function pruneSyncedPending(_tid: string) { /* handled implicitly by Dexie refresh */ }
