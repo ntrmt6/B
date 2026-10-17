@@ -1,5 +1,9 @@
 import api from './api';
 import { db, hasIDB } from './db';
+import {
+  putQueueNative, deleteQueueNative, replaceQueueNative, readQueueNative,
+  putTempMapNative, readTempMapNative, isNative,
+} from './nativeSqlite';
 
 export interface QueueItem {
   id: string;
@@ -40,6 +44,27 @@ async function bootstrap(): Promise<void> {
     ]);
     mirror = rows;
     tempMap = Object.fromEntries(mapRows.map(r => [r.tempId, r.realId]));
+
+    // If running natively and Dexie is empty, hydrate from the SQLite mirror.
+    // Handles fresh WebView reinstalls where IndexedDB is wiped but native storage survived.
+    if (isNative() && mirror.length === 0) {
+      try {
+        const nativeQ = await readQueueNative();
+        if (nativeQ.length) {
+          mirror = nativeQ;
+          await db().queue.bulkPut(nativeQ);
+        }
+      } catch {}
+    }
+    if (isNative() && Object.keys(tempMap).length === 0) {
+      try {
+        const nativeMap = await readTempMapNative();
+        if (nativeMap.length) {
+          tempMap = Object.fromEntries(nativeMap.map(r => [r.tempId, r.realId]));
+          await db().tempMap.bulkPut(nativeMap);
+        }
+      } catch {}
+    }
 
     // One-time migration from localStorage
     if (typeof localStorage !== 'undefined') {
@@ -83,22 +108,23 @@ export function ready(): Promise<void> {
 if (typeof window !== 'undefined') { void ready(); }
 
 function persistQueue(items: QueueItem[]) {
-  if (!hasIDB()) return;
-  // Replace entire table — small size, infrequent.
-  void db().transaction('rw', db().queue, async () => {
-    await db().queue.clear();
-    if (items.length) await db().queue.bulkPut(items);
-  }).catch(() => {});
+  if (hasIDB()) {
+    void db().transaction('rw', db().queue, async () => {
+      await db().queue.clear();
+      if (items.length) await db().queue.bulkPut(items);
+    }).catch(() => {});
+  }
+  void replaceQueueNative(items);
 }
 
 function persistSingle(item: QueueItem) {
-  if (!hasIDB()) return;
-  void db().queue.put(item).catch(() => {});
+  if (hasIDB()) void db().queue.put(item).catch(() => {});
+  void putQueueNative(item);
 }
 
 function removePersist(id: string) {
-  if (!hasIDB()) return;
-  void db().queue.delete(id).catch(() => {});
+  if (hasIDB()) void db().queue.delete(id).catch(() => {});
+  void deleteQueueNative(id);
 }
 
 export function subscribe(l: Listener) { listeners.add(l); return () => { listeners.delete(l); }; }
@@ -151,6 +177,7 @@ export function realId(id: string | undefined | null): string | null {
 function setTempMapping(tempKey: string, realKey: string) {
   tempMap = { ...tempMap, [tempKey]: realKey };
   if (hasIDB()) void db().tempMap.put({ tempId: tempKey, realId: realKey }).catch(() => {});
+  void putTempMapNative({ tempId: tempKey, realId: realKey });
 }
 
 function rewriteQueuedRefs(tempKey: string, realKey: string) {

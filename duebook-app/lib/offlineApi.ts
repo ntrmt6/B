@@ -1,6 +1,11 @@
 import api from './api';
 import { db, hasIDB, type EntityRow, type TxRow } from './db';
 import { enqueue, list as listQueue, realId, remove as removeQueue } from './offlineQueue';
+import {
+  putEntityNative, deleteEntityNative, replaceEntitiesNative, readEntitiesNative,
+  putTxNative, deleteTxNative, replaceTxNative, readTxNative,
+  isNative,
+} from './nativeSqlite';
 
 interface Entity {
   _id: string;
@@ -106,23 +111,38 @@ async function migrateLegacy(tid: string) {
 export interface ReadResult<T> { data: T; offline: boolean; }
 
 async function readCachedEntities(tid: string): Promise<Entity[]> {
-  if (!hasIDB()) return [];
-  const rows = await db().entities.where({ tenantId: tid }).toArray();
+  if (!hasIDB()) {
+    if (isNative()) {
+      const rows = await readEntitiesNative(tid);
+      return rows.map(({ tenantId: _t, ...rest }) => rest as Entity);
+    }
+    return [];
+  }
+  let rows = await db().entities.where({ tenantId: tid }).toArray();
+  // Fresh install under Capacitor — Dexie is empty but SQLite may still have data.
+  if (rows.length === 0 && isNative()) {
+    const nativeRows = await readEntitiesNative(tid);
+    if (nativeRows.length) {
+      await db().entities.bulkPut(nativeRows);
+      rows = nativeRows;
+    }
+  }
   return rows.map(({ tenantId: _t, ...rest }) => rest as Entity);
 }
 
 async function writeFreshEntities(tid: string, list: Entity[]) {
-  if (!hasIDB()) return;
-  await db().transaction('rw', db().entities, async () => {
-    // Keep locally-pending rows (either temp ids not yet mapped, or edits still queued).
-    const existingPending = await db().entities
-      .where({ tenantId: tid })
-      .filter(r => r._pending === true && isTempId(r._id) && !realId(r._id))
-      .toArray();
-    await db().entities.where({ tenantId: tid }).delete();
-    const serverRows: EntityRow[] = list.map(e => ({ ...e, tenantId: tid, _pending: false }));
-    await db().entities.bulkPut([...serverRows, ...existingPending]);
-  });
+  const serverRows: EntityRow[] = list.map(e => ({ ...e, tenantId: tid, _pending: false }));
+  if (hasIDB()) {
+    await db().transaction('rw', db().entities, async () => {
+      const existingPending = await db().entities
+        .where({ tenantId: tid })
+        .filter(r => r._pending === true && isTempId(r._id) && !realId(r._id))
+        .toArray();
+      await db().entities.where({ tenantId: tid }).delete();
+      await db().entities.bulkPut([...serverRows, ...existingPending]);
+    });
+  }
+  void replaceEntitiesNative(tid, serverRows);
 }
 
 export async function getEntitiesOffline(tid: string): Promise<ReadResult<Entity[]>> {
@@ -157,34 +177,49 @@ async function refreshEntitiesInBackground(tid: string) {
 }
 
 async function readCachedTx(tid: string, entityId: string): Promise<Transaction[]> {
-  if (!hasIDB()) return [];
-  const rows = await db().transactions.where({ tenantId: tid, entityId }).toArray();
+  if (!hasIDB()) {
+    if (isNative()) {
+      const rows = await readTxNative(tid, entityId);
+      return rows.map(({ tenantId: _t, ...rest }) => rest as Transaction);
+    }
+    return [];
+  }
+  let rows = await db().transactions.where({ tenantId: tid, entityId }).toArray();
+  if (rows.length === 0 && isNative()) {
+    const nativeRows = await readTxNative(tid, entityId);
+    if (nativeRows.length) {
+      await db().transactions.bulkPut(nativeRows);
+      rows = nativeRows;
+    }
+  }
   return rows.map(({ tenantId: _t, ...rest }) => rest as Transaction);
 }
 
 async function writeFreshTx(tid: string, entityId: string, list: Transaction[]) {
-  if (!hasIDB()) return;
   const queueIds = new Set(listQueue().map(q => q.id));
-  await db().transaction('rw', db().transactions, async () => {
-    const pending = await db().transactions
-      .where({ tenantId: tid, entityId })
-      .filter(r => r._pending === true && !!r._qid && queueIds.has(r._qid))
-      .toArray();
-    await db().transactions.where({ tenantId: tid, entityId }).delete();
-    const serverRows: TxRow[] = list.map(t => ({
-      _id: t._id,
-      tenantId: tid,
-      entityId: t.entityId || entityId,
-      amount: t.amount,
-      direction: t.direction,
-      transactionDate: t.transactionDate,
-      notes: t.notes,
-      status: t.status,
-      photo: t.photo,
-      _pending: false,
-    }));
-    await db().transactions.bulkPut([...serverRows, ...pending]);
-  });
+  const serverRows: TxRow[] = list.map(t => ({
+    _id: t._id,
+    tenantId: tid,
+    entityId: t.entityId || entityId,
+    amount: t.amount,
+    direction: t.direction,
+    transactionDate: t.transactionDate,
+    notes: t.notes,
+    status: t.status,
+    photo: t.photo,
+    _pending: false,
+  }));
+  if (hasIDB()) {
+    await db().transaction('rw', db().transactions, async () => {
+      const pending = await db().transactions
+        .where({ tenantId: tid, entityId })
+        .filter(r => r._pending === true && !!r._qid && queueIds.has(r._qid))
+        .toArray();
+      await db().transactions.where({ tenantId: tid, entityId }).delete();
+      await db().transactions.bulkPut([...serverRows, ...pending]);
+    });
+  }
+  void replaceTxNative(tid, entityId, serverRows);
 }
 
 export async function getTxOffline(tid: string, entityId: string): Promise<ReadResult<Transaction[]>> {
@@ -224,8 +259,9 @@ async function refreshTxInBackground(tid: string, entityId: string) {
 /* ─────────────── MUTATIONS ─────────────── */
 
 async function putEntityRow(tid: string, e: Entity, pending: boolean) {
-  if (!hasIDB()) return;
-  await db().entities.put({ ...e, tenantId: tid, _pending: pending });
+  const row: EntityRow = { ...e, tenantId: tid, _pending: pending };
+  if (hasIDB()) await db().entities.put(row);
+  void putEntityNative(row);
 }
 
 async function bumpEntityTotalsDexie(tid: string, entityId: string, dir: 'INCOME' | 'EXPENSE', amt: number) {
@@ -236,6 +272,7 @@ async function bumpEntityTotalsDexie(tid: string, entityId: string, dir: 'INCOME
   if (dir === 'INCOME') next.totalOwedToMe = (next.totalOwedToMe || 0) + amt;
   else next.totalIOweThemNumber = (next.totalIOweThemNumber || 0) + amt;
   await db().entities.put(next);
+  void putEntityNative(next);
 }
 
 interface CreateEntityPayload { name: string; phone: string; type: Entity['type']; profilePicture?: string; }
@@ -301,6 +338,7 @@ export async function addTxOffline(tid: string, payload: AddTxPayload): Promise<
     _qid: q.id,
   };
   if (hasIDB()) await db().transactions.put(optimistic);
+  void putTxNative(optimistic);
   await bumpEntityTotalsDexie(tid, payload.entityId, payload.direction, payload.amount);
   return { queued: true };
 }
@@ -314,7 +352,11 @@ export async function patchTxStatusOffline(tid: string, txId: string, status: 'P
       await api.patch(`/transactions/${txId}`, { status }, { headers: { 'X-Tenant-Id': tid } });
       if (hasIDB()) {
         const row = await db().transactions.get(txId);
-        if (row) await db().transactions.put({ ...row, status });
+        if (row) {
+          const next = { ...row, status };
+          await db().transactions.put(next);
+          void putTxNative(next);
+        }
       }
       return { queued: false };
     } catch (err) {
@@ -323,7 +365,11 @@ export async function patchTxStatusOffline(tid: string, txId: string, status: 'P
   }
   if (hasIDB()) {
     const row = await db().transactions.get(txId);
-    if (row) await db().transactions.put({ ...row, status, _pending: true });
+    if (row) {
+      const next = { ...row, status, _pending: true };
+      await db().transactions.put(next);
+      void putTxNative(next);
+    }
   }
   enqueue({
     type: 'patch-tx', method: 'PATCH', url: `/transactions/${txId}`,
@@ -338,6 +384,7 @@ export async function deleteTxOffline(tid: string, txId: string, entityId?: stri
     if (hasIDB()) {
       const row = await db().transactions.get(txId);
       await db().transactions.delete(txId);
+      void deleteTxNative(txId);
       if (row?._qid) removeQueue(row._qid);
       if (row && entityId) {
         await bumpEntityTotalsDexie(tid, entityId, row.direction, -row.amount);
@@ -349,12 +396,14 @@ export async function deleteTxOffline(tid: string, txId: string, entityId?: stri
     try {
       await api.delete(`/transactions/${txId}`, { headers: { 'X-Tenant-Id': tid } });
       if (hasIDB()) await db().transactions.delete(txId);
+      void deleteTxNative(txId);
       return { queued: false };
     } catch (err) {
       if (!isNetworkErr(err)) throw err;
     }
   }
   if (hasIDB()) await db().transactions.delete(txId);
+  void deleteTxNative(txId);
   enqueue({
     type: 'delete-tx', method: 'DELETE', url: `/transactions/${txId}`,
     tenantId: tid,
@@ -370,7 +419,11 @@ export async function patchEntityOffline(tid: string, id: string, payload: { nam
       await api.put(`/entities/${id}`, payload, { headers: { 'X-Tenant-Id': tid } });
       if (hasIDB()) {
         const row = await db().entities.get(id);
-        if (row) await db().entities.put({ ...row, ...payload });
+        if (row) {
+          const next = { ...row, ...payload };
+          await db().entities.put(next);
+          void putEntityNative(next);
+        }
       }
       return { queued: false };
     } catch (err) {
@@ -379,7 +432,11 @@ export async function patchEntityOffline(tid: string, id: string, payload: { nam
   }
   if (hasIDB()) {
     const row = await db().entities.get(id);
-    if (row) await db().entities.put({ ...row, ...payload, _pending: true });
+    if (row) {
+      const next = { ...row, ...payload, _pending: true };
+      await db().entities.put(next);
+      void putEntityNative(next);
+    }
   }
   enqueue({
     type: 'patch-entity', method: 'PUT', url: `/entities/${id}`,
@@ -398,6 +455,7 @@ export async function deleteEntityOffline(tid: string, id: string, name: string)
         await db().entities.delete(id);
         await db().transactions.where({ tenantId: tid, entityId: id }).delete();
       }
+      void deleteEntityNative(id);
       return { queued: false };
     } catch (err) {
       if (!isNetworkErr(err)) throw err;
@@ -407,6 +465,7 @@ export async function deleteEntityOffline(tid: string, id: string, name: string)
     await db().entities.delete(id);
     await db().transactions.where({ tenantId: tid, entityId: id }).delete();
   }
+  void deleteEntityNative(id);
   enqueue({
     type: 'delete-entity', method: 'DELETE', url: `/entities/${id}`,
     tenantId: tid,

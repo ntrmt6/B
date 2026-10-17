@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>DueBook</title>
+    <style>html,body{margin:0;background:#0f172a;color:#fff;font-family:system-ui,sans-serif}
+      .wrap{display:flex;align-items:center;justify-content:center;height:100vh;flex-direction:column;gap:12px}
+      .dot{width:10px;height:10px;background:#22d3ee;border-radius:50%;animation:p 1s infinite}
+      @keyframes p{50%{opacity:.3}}</style>
+  </head>
+  <body>
+    <div class="wrap"><div class="dot"></div><div>Loading DueBook…</div></div>
+    <script>
+      // Capacitor loads the real app from the configured server.url.
+      // This file is only the fallback payload bundled into the APK.
+      location.replace("https://duebook.shopbdit.com/");
+    </script>
+  </body>
+</html>
