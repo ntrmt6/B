@@ -1,0 +1,4 @@
+.venv/
+drafts.db
+__pycache__/
+*.pyc

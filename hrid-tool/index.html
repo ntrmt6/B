@@ -12,7 +12,6 @@
   body { font-family: 'Inter', sans-serif; background: #f3f4f6; }
   .serif { font-family: 'Cormorant Garamond', serif; }
 
-  /* A4 preview sizing */
   .a4 {
     width: 210mm;
     min-height: 297mm;
@@ -45,107 +44,157 @@
   }
   .logo-slot img { width: 100%; height: 100%; object-fit: contain; }
 
-  /* ensure pdf page break between options */
   .page-break { page-break-before: always; break-before: page; }
+
+  .tab-btn.active { background: #ca8a04; color: white; }
 
   @media (max-width: 900px) {
     .a4 { width: 100%; padding: 24px; min-height: auto; }
   }
+
+  /* Toast */
+  #toast {
+    position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+    background: #111827; color: white; padding: 10px 18px; border-radius: 8px;
+    font-size: 14px; opacity: 0; pointer-events: none; transition: opacity .2s;
+    z-index: 1000;
+  }
+  #toast.show { opacity: 1; }
 </style>
 </head>
 <body class="min-h-screen">
 
-<div class="max-w-[1500px] mx-auto p-4 lg:p-8 grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6">
+<div class="max-w-[1500px] mx-auto p-4 lg:p-8 grid grid-cols-1 lg:grid-cols-[440px_1fr] gap-6">
 
-  <!-- ============ FORM ============ -->
+  <!-- ============ LEFT PANEL ============ -->
   <aside class="bg-white rounded-xl shadow p-5 lg:sticky lg:top-4 lg:self-start lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto">
-    <div class="flex items-center justify-between mb-4">
-      <h1 class="text-xl font-semibold">Proposal Builder</h1>
-      <button id="btnPdf" class="bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-semibold px-4 py-2 rounded-lg shadow">
-        Download PDF
+
+    <!-- Tabs -->
+    <div class="flex gap-2 mb-5">
+      <button data-tab="builder" class="tab-btn active flex-1 text-sm font-semibold px-3 py-2 rounded-lg bg-gray-200 text-gray-700">
+        Builder
+      </button>
+      <button data-tab="history" class="tab-btn flex-1 text-sm font-semibold px-3 py-2 rounded-lg bg-gray-200 text-gray-700">
+        History
       </button>
     </div>
 
-    <section class="mb-6">
-      <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">Branding</h2>
-      <label class="block text-xs text-gray-600 mb-1">Hotel Logo</label>
-      <input type="file" accept="image/*" data-img="logo" class="block w-full text-sm" />
+    <!-- =================== BUILDER TAB =================== -->
+    <section id="tab-builder">
+
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <div class="text-xs text-gray-500 uppercase tracking-wide">Status</div>
+          <div id="draftStatus" class="text-sm font-semibold text-gray-800">New draft</div>
+        </div>
+        <button id="btnNew" class="text-xs font-semibold text-yellow-700 border border-yellow-600 px-3 py-1.5 rounded">
+          + New
+        </button>
+      </div>
+
+      <div class="flex gap-2 mb-5">
+        <button id="btnSave" class="flex-1 bg-gray-800 hover:bg-black text-white text-sm font-semibold px-3 py-2 rounded-lg shadow">
+          Save Draft
+        </button>
+        <button id="btnPdf" class="flex-1 bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-semibold px-3 py-2 rounded-lg shadow">
+          Save &amp; Download PDF
+        </button>
+      </div>
+
+      <div class="mb-5">
+        <label class="block text-xs text-gray-600 mb-1">Draft Title</label>
+        <input type="text" data-bind="docTitle" value="VIP Dessert Proposal"
+               class="w-full border rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-500" />
+      </div>
+
+      <div class="mb-6">
+        <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">Branding</h2>
+        <label class="block text-xs text-gray-600 mb-1">Hotel Logo</label>
+        <input type="file" accept="image/*" data-img="logo" class="block w-full text-sm" />
+      </div>
+
+      <!-- Option 1 -->
+      <section class="mb-6 border-t pt-4">
+        <h2 class="text-sm font-semibold text-yellow-700 uppercase tracking-wide mb-3">Option 1</h2>
+
+        <label class="block text-xs text-gray-600 mb-1">Dessert Name</label>
+        <input type="text" data-bind="opt1Name" value="Golden Date &amp; Saffron Royale"
+               class="w-full border rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-500" />
+
+        <label class="block text-xs text-gray-600 mb-1 mt-3">Dessert Image</label>
+        <input type="file" accept="image/*" data-img="opt1" class="block w-full text-sm" />
+
+        <label class="block text-xs text-gray-600 mb-1 mt-3">Flavor Profile</label>
+        <textarea rows="2" data-bind="opt1Flavor"
+          class="w-full border rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-500">Rich Medjool date caramel balanced with saffron-infused Arabic coffee cream and a hint of cardamom.</textarea>
+
+        <label class="block text-xs text-gray-600 mb-1 mt-3">Key Components</label>
+        <input type="text" data-bind="opt1C1" value="Saffron-infused white chocolate cremeux"
+               class="w-full border rounded-md px-3 py-2 text-sm mb-2 outline-none focus:ring-2 focus:ring-yellow-500" />
+        <input type="text" data-bind="opt1C2" value="Date &amp; pistachio praline crunch"
+               class="w-full border rounded-md px-3 py-2 text-sm mb-2 outline-none focus:ring-2 focus:ring-yellow-500" />
+        <input type="text" data-bind="opt1C3" value="24k gold leaf and edible rose petals"
+               class="w-full border rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-500" />
+
+        <label class="block text-xs text-gray-600 mb-1 mt-3">Presentation &amp; Theme</label>
+        <textarea rows="2" data-bind="opt1Theme"
+          class="w-full border rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-500">Served on a hand-painted brass tray, decorated with gold leaf and dried rose petals — a tribute to Qatari heritage.</textarea>
+
+        <label class="block text-xs text-gray-600 mb-1 mt-3">Ideal For</label>
+        <input type="text" data-bind="opt1Ideal" value="Royal receptions, diplomatic dinners, Eid celebrations"
+               class="w-full border rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-500" />
+      </section>
+
+      <!-- Option 2 -->
+      <section class="mb-6 border-t pt-4">
+        <h2 class="text-sm font-semibold text-yellow-700 uppercase tracking-wide mb-3">Option 2</h2>
+
+        <label class="block text-xs text-gray-600 mb-1">Dessert Name</label>
+        <input type="text" data-bind="opt2Name" value="Pistachio Rose Pearl"
+               class="w-full border rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-500" />
+
+        <label class="block text-xs text-gray-600 mb-1 mt-3">Dessert Image</label>
+        <input type="file" accept="image/*" data-img="opt2" class="block w-full text-sm" />
+
+        <label class="block text-xs text-gray-600 mb-1 mt-3">Flavor Profile</label>
+        <textarea rows="2" data-bind="opt2Flavor"
+          class="w-full border rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-500">Delicate rose water mousse encasing a molten pistachio heart, finished with a crisp almond tuile.</textarea>
+
+        <label class="block text-xs text-gray-600 mb-1 mt-3">Key Components</label>
+        <input type="text" data-bind="opt2C1" value="Persian rose water mousse dome"
+               class="w-full border rounded-md px-3 py-2 text-sm mb-2 outline-none focus:ring-2 focus:ring-yellow-500" />
+        <input type="text" data-bind="opt2C2" value="Molten pistachio ganache core"
+               class="w-full border rounded-md px-3 py-2 text-sm mb-2 outline-none focus:ring-2 focus:ring-yellow-500" />
+        <input type="text" data-bind="opt2C3" value="Crystallised rose petal garnish"
+               class="w-full border rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-500" />
+
+        <label class="block text-xs text-gray-600 mb-1 mt-3">Presentation &amp; Theme</label>
+        <textarea rows="2" data-bind="opt2Theme"
+          class="w-full border rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-500">Presented on a mirror-polished plate, dusted with gold powder and a swirl of raspberry coulis.</textarea>
+
+        <label class="block text-xs text-gray-600 mb-1 mt-3">Ideal For</label>
+        <input type="text" data-bind="opt2Ideal" value="Gala dinners, VIP weddings, exclusive tasting menus"
+               class="w-full border rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-500" />
+      </section>
     </section>
 
-    <!-- Option 1 -->
-    <section class="mb-6 border-t pt-4">
-      <h2 class="text-sm font-semibold text-yellow-700 uppercase tracking-wide mb-3">Option 1</h2>
-
-      <label class="block text-xs text-gray-600 mb-1 mt-2">Dessert Name</label>
-      <input type="text" data-bind="opt1Name" value="Golden Date & Saffron Royale"
-             class="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-yellow-500 outline-none" />
-
-      <label class="block text-xs text-gray-600 mb-1 mt-3">Dessert Image</label>
-      <input type="file" accept="image/*" data-img="opt1" class="block w-full text-sm" />
-
-      <label class="block text-xs text-gray-600 mb-1 mt-3">Flavor Profile</label>
-      <textarea rows="2" data-bind="opt1Flavor"
-        class="w-full border rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-yellow-500 outline-none">Rich Medjool date caramel balanced with saffron-infused Arabic coffee cream and a hint of cardamom.</textarea>
-
-      <label class="block text-xs text-gray-600 mb-1 mt-3">Key Components</label>
-      <input type="text" data-bind="opt1C1" value="Saffron-infused white chocolate cremeux"
-             class="w-full border rounded-md px-3 py-2 text-sm mb-2 outline-none focus:ring-2 focus:ring-yellow-500" />
-      <input type="text" data-bind="opt1C2" value="Date & pistachio praline crunch"
-             class="w-full border rounded-md px-3 py-2 text-sm mb-2 outline-none focus:ring-2 focus:ring-yellow-500" />
-      <input type="text" data-bind="opt1C3" value="24k gold leaf and edible rose petals"
-             class="w-full border rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-500" />
-
-      <label class="block text-xs text-gray-600 mb-1 mt-3">Presentation & Theme</label>
-      <textarea rows="2" data-bind="opt1Theme"
-        class="w-full border rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-500">Served on a hand-painted brass tray, decorated with gold leaf and dried rose petals — a tribute to Qatari heritage.</textarea>
-
-      <label class="block text-xs text-gray-600 mb-1 mt-3">Ideal For</label>
-      <input type="text" data-bind="opt1Ideal" value="Royal receptions, diplomatic dinners, Eid celebrations"
-             class="w-full border rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-500" />
+    <!-- =================== HISTORY TAB =================== -->
+    <section id="tab-history" class="hidden">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-semibold text-gray-700 uppercase tracking-wide">Saved drafts</h2>
+        <button id="btnRefreshHistory" class="text-xs text-yellow-700 font-semibold">Refresh</button>
+      </div>
+      <div id="historyList" class="space-y-2">
+        <div class="text-sm text-gray-400 italic">Loading…</div>
+      </div>
     </section>
 
-    <!-- Option 2 -->
-    <section class="mb-4 border-t pt-4">
-      <h2 class="text-sm font-semibold text-yellow-700 uppercase tracking-wide mb-3">Option 2</h2>
-
-      <label class="block text-xs text-gray-600 mb-1 mt-2">Dessert Name</label>
-      <input type="text" data-bind="opt2Name" value="Pistachio Rose Pearl"
-             class="w-full border rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-500" />
-
-      <label class="block text-xs text-gray-600 mb-1 mt-3">Dessert Image</label>
-      <input type="file" accept="image/*" data-img="opt2" class="block w-full text-sm" />
-
-      <label class="block text-xs text-gray-600 mb-1 mt-3">Flavor Profile</label>
-      <textarea rows="2" data-bind="opt2Flavor"
-        class="w-full border rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-500">Delicate rose water mousse encasing a molten pistachio heart, finished with a crisp almond tuile.</textarea>
-
-      <label class="block text-xs text-gray-600 mb-1 mt-3">Key Components</label>
-      <input type="text" data-bind="opt2C1" value="Persian rose water mousse dome"
-             class="w-full border rounded-md px-3 py-2 text-sm mb-2 outline-none focus:ring-2 focus:ring-yellow-500" />
-      <input type="text" data-bind="opt2C2" value="Molten pistachio ganache core"
-             class="w-full border rounded-md px-3 py-2 text-sm mb-2 outline-none focus:ring-2 focus:ring-yellow-500" />
-      <input type="text" data-bind="opt2C3" value="Crystallised rose petal garnish"
-             class="w-full border rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-500" />
-
-      <label class="block text-xs text-gray-600 mb-1 mt-3">Presentation & Theme</label>
-      <textarea rows="2" data-bind="opt2Theme"
-        class="w-full border rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-500">Presented on a mirror-polished plate, dusted with gold powder and a swirl of raspberry coulis.</textarea>
-
-      <label class="block text-xs text-gray-600 mb-1 mt-3">Ideal For</label>
-      <input type="text" data-bind="opt2Ideal" value="Gala dinners, VIP weddings, exclusive tasting menus"
-             class="w-full border rounded-md px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-yellow-500" />
-    </section>
-
-    <button id="btnPdf2" class="w-full bg-yellow-600 hover:bg-yellow-700 text-white text-sm font-semibold px-4 py-3 rounded-lg shadow mt-2">
-      Download PDF
-    </button>
   </aside>
 
   <!-- ============ PREVIEW (A4) ============ -->
   <main>
     <div id="a4" class="a4">
 
-      <!-- Header -->
       <header class="flex flex-col items-center text-center border-b border-gray-200 pb-5 mb-6">
         <div class="flex items-center justify-center gap-4 mb-3">
           <div id="logoSlot" class="logo-slot">Logo</div>
@@ -162,7 +211,6 @@
         </p>
       </header>
 
-      <!-- Option 1 -->
       <section class="mb-10">
         <h2 class="serif text-2xl font-semibold headline mb-1">
           Option 1 — <span id="v_opt1Name"></span>
@@ -201,7 +249,6 @@
         </table>
       </section>
 
-      <!-- Option 2 -->
       <section class="page-break mb-10">
         <h2 class="serif text-2xl font-semibold headline mb-1">
           Option 2 — <span id="v_opt2Name"></span>
@@ -240,7 +287,6 @@
         </table>
       </section>
 
-      <!-- Footer -->
       <footer class="border-t border-gray-200 pt-4 mt-6 text-center">
         <p class="text-sm font-semibold text-gray-800">
           Created by: Senior Pastry Chef | Alwadi Hotel Doha – MGallery Collection
@@ -253,9 +299,20 @@
   </main>
 </div>
 
+<div id="toast"></div>
+
 <script>
-  // --- Real-time text binding ---
-  document.querySelectorAll('[data-bind]').forEach(el => {
+  const API = '/hrid/api';
+
+  // ---- app state ----
+  const state = {
+    currentId: null,       // null = new draft, else editing existing
+    images: { logo: '', opt1: '', opt2: '' }, // data URLs
+  };
+
+  // ---- real-time text binding ----
+  const bindEls = document.querySelectorAll('[data-bind]');
+  bindEls.forEach(el => {
     const key = el.dataset.bind;
     const target = document.getElementById('v_' + key);
     const sync = () => { if (target) target.textContent = el.value; };
@@ -263,39 +320,206 @@
     sync();
   });
 
-  // --- Image uploads ---
-  function wireImage(inputKey, slotEl, { logo = false } = {}) {
-    const input = document.querySelector(`[data-img="${inputKey}"]`);
-    input.addEventListener('change', e => {
-      const file = e.target.files?.[0];
-      if (!file) return;
-      const url = URL.createObjectURL(file);
-      slotEl.innerHTML = '';
-      const img = document.createElement('img');
-      img.src = url;
-      if (logo) img.style.objectFit = 'contain';
-      slotEl.appendChild(img);
+  // ---- image upload → data URL → preview ----
+  function fileToDataURL(file) {
+    return new Promise((res, rej) => {
+      const r = new FileReader();
+      r.onload = () => res(r.result);
+      r.onerror = rej;
+      r.readAsDataURL(file);
     });
   }
-  wireImage('logo', document.getElementById('logoSlot'), { logo: true });
-  wireImage('opt1', document.getElementById('imgOpt1'));
-  wireImage('opt2', document.getElementById('imgOpt2'));
 
-  // --- PDF generation ---
+  function paintImage(key, dataUrl) {
+    state.images[key] = dataUrl || '';
+    const slot = key === 'logo' ? document.getElementById('logoSlot')
+               : document.getElementById('img' + key.replace('opt', 'Opt'));
+    if (!dataUrl) {
+      slot.innerHTML = key === 'logo' ? 'Logo' : '<span class="text-sm">Dessert image preview</span>';
+      return;
+    }
+    slot.innerHTML = '';
+    const img = document.createElement('img');
+    img.src = dataUrl;
+    if (key === 'logo') img.style.objectFit = 'contain';
+    slot.appendChild(img);
+  }
+
+  document.querySelectorAll('[data-img]').forEach(input => {
+    input.addEventListener('change', async e => {
+      const file = e.target.files?.[0];
+      if (!file) return;
+      const url = await fileToDataURL(file);
+      paintImage(input.dataset.img, url);
+    });
+  });
+
+  // ---- collect / apply form state ----
+  function collectDraft() {
+    const data = { images: { ...state.images }, fields: {} };
+    bindEls.forEach(el => { data.fields[el.dataset.bind] = el.value; });
+    return data;
+  }
+
+  function applyDraft(data) {
+    const fields = data?.fields || {};
+    bindEls.forEach(el => {
+      if (fields[el.dataset.bind] !== undefined) {
+        el.value = fields[el.dataset.bind];
+        el.dispatchEvent(new Event('input'));
+      }
+    });
+    const imgs = data?.images || {};
+    ['logo', 'opt1', 'opt2'].forEach(k => paintImage(k, imgs[k] || ''));
+    document.querySelectorAll('input[type=file][data-img]').forEach(i => (i.value = ''));
+  }
+
+  // ---- toast ----
+  const toast = (msg) => {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => t.classList.remove('show'), 1800);
+  };
+
+  // ---- tabs ----
+  document.querySelectorAll('.tab-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.tab-btn').forEach(x => x.classList.remove('active'));
+      b.classList.add('active');
+      const target = b.dataset.tab;
+      document.getElementById('tab-builder').classList.toggle('hidden', target !== 'builder');
+      document.getElementById('tab-history').classList.toggle('hidden', target !== 'history');
+      if (target === 'history') loadHistory();
+    });
+  });
+
+  // ---- status label ----
+  function setStatus() {
+    document.getElementById('draftStatus').textContent =
+      state.currentId ? `Editing draft #${state.currentId}` : 'New draft';
+  }
+
+  // ---- CRUD ----
+  async function saveDraft() {
+    const title = document.querySelector('[data-bind="docTitle"]').value || 'Untitled proposal';
+    const body = { title, data: collectDraft() };
+    const url = state.currentId ? `${API}/drafts/${state.currentId}` : `${API}/drafts`;
+    const method = state.currentId ? 'PUT' : 'POST';
+    const res = await fetch(url, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) { toast('Save failed'); return false; }
+    const json = await res.json();
+    state.currentId = json.id || state.currentId;
+    setStatus();
+    toast('Saved');
+    return true;
+  }
+
+  async function loadHistory() {
+    const list = document.getElementById('historyList');
+    list.innerHTML = '<div class="text-sm text-gray-400 italic">Loading…</div>';
+    try {
+      const res = await fetch(`${API}/drafts`);
+      const items = await res.json();
+      if (!items.length) {
+        list.innerHTML = '<div class="text-sm text-gray-400 italic">No saved drafts yet.</div>';
+        return;
+      }
+      list.innerHTML = '';
+      items.forEach(d => {
+        const row = document.createElement('div');
+        row.className = 'border rounded-lg px-3 py-2 flex items-center justify-between gap-2';
+        row.innerHTML = `
+          <div class="min-w-0">
+            <div class="text-sm font-semibold text-gray-900 truncate">${escapeHtml(d.title)}</div>
+            <div class="text-[11px] text-gray-500">#${d.id} · ${formatDate(d.updated_at)}</div>
+          </div>
+          <div class="flex gap-1 shrink-0">
+            <button data-act="load" data-id="${d.id}" class="text-xs font-semibold text-white bg-yellow-600 hover:bg-yellow-700 px-2 py-1 rounded">Edit</button>
+            <button data-act="del" data-id="${d.id}" class="text-xs font-semibold text-white bg-red-600 hover:bg-red-700 px-2 py-1 rounded">Delete</button>
+          </div>`;
+        list.appendChild(row);
+      });
+      list.querySelectorAll('button').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = +btn.dataset.id;
+          if (btn.dataset.act === 'load') loadDraft(id);
+          else deleteDraft(id);
+        });
+      });
+    } catch (e) {
+      list.innerHTML = '<div class="text-sm text-red-600">Failed to load history.</div>';
+    }
+  }
+
+  async function loadDraft(id) {
+    const res = await fetch(`${API}/drafts/${id}`);
+    if (!res.ok) { toast('Load failed'); return; }
+    const json = await res.json();
+    state.currentId = json.id;
+    applyDraft(json.data);
+    document.querySelector('[data-tab="builder"]').click();
+    setStatus();
+    toast(`Loaded #${id}`);
+  }
+
+  async function deleteDraft(id) {
+    if (!confirm(`Delete draft #${id}?`)) return;
+    const res = await fetch(`${API}/drafts/${id}`, { method: 'DELETE' });
+    if (!res.ok) { toast('Delete failed'); return; }
+    if (state.currentId === id) {
+      state.currentId = null;
+      setStatus();
+    }
+    toast('Deleted');
+    loadHistory();
+  }
+
+  function newDraft() {
+    state.currentId = null;
+    setStatus();
+    toast('New blank draft');
+  }
+
+  // ---- PDF ----
   function downloadPdf() {
     const el = document.getElementById('a4');
+    const title = (document.querySelector('[data-bind="docTitle"]').value || 'VIP-Dessert-Proposal')
+      .replace(/[^\w\-]+/g, '_');
     const opts = {
       margin: 0,
-      filename: 'VIP-Plated-Dessert-Proposal.pdf',
+      filename: `${title}.pdf`,
       image: { type: 'jpeg', quality: 0.98 },
       html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
       jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['css', 'legacy'] }
+      pagebreak: { mode: ['css', 'legacy'] },
     };
-    html2pdf().set(opts).from(el).save();
+    return html2pdf().set(opts).from(el).save();
   }
-  document.getElementById('btnPdf').addEventListener('click', downloadPdf);
-  document.getElementById('btnPdf2').addEventListener('click', downloadPdf);
+
+  // ---- helpers ----
+  function escapeHtml(s) {
+    return (s || '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+  function formatDate(iso) {
+    try { return new Date(iso).toLocaleString(); } catch { return iso; }
+  }
+
+  // ---- buttons ----
+  document.getElementById('btnSave').addEventListener('click', saveDraft);
+  document.getElementById('btnPdf').addEventListener('click', async () => {
+    await saveDraft();
+    await downloadPdf();
+  });
+  document.getElementById('btnNew').addEventListener('click', newDraft);
+  document.getElementById('btnRefreshHistory').addEventListener('click', loadHistory);
+
+  setStatus();
 </script>
 </body>
 </html>
