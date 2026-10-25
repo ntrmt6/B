@@ -23,18 +23,26 @@ import {
 import SyncBar from './SyncBar';
 import ReminderInbox from './ReminderInbox';
 import DailyPnlCard from './DailyPnlCard';
+import BirthdayReminderCard from './BirthdayReminderCard';
 import ShopSwitcher from './ShopSwitcher';
 
 const InventoryModal = dynamic(() => import('./InventoryModal'), { ssr: false });
 const QRCodeSVG = dynamic(() => import('qrcode.react').then(m => m.QRCodeSVG), { ssr: false });
 
 /* ─── Types ─── */
+interface FamilyMember {
+  name: string;
+  relation?: string;
+  birthDate: string; // 'YYYY-MM-DD' or 'MM-DD'
+}
+
 interface Entity {
   _id: string; name: string; phone?: string;
   type: 'Customer' | 'Supplier' | 'Employee';
   totalOwedToMe: number; totalIOweThemNumber: number;
   rewardsClaimed?: number;
   profilePicture?: string;
+  familyMembers?: FamilyMember[];
   updatedAt?: string; createdAt?: string;
   _pending?: boolean;
 }
@@ -716,6 +724,7 @@ export default function DueBookPage() {
   const [editName, setEditName] = useState('');
   const [editPhone, setEditPhone] = useState('');
   const [editProfilePic, setEditProfilePic] = useState('');
+  const [editFamily, setEditFamily] = useState<FamilyMember[]>([]);
   const [editSaving, setEditSaving] = useState(false);
 
   /* add transaction extra */
@@ -1404,6 +1413,7 @@ export default function DueBookPage() {
     setEditName(selected.name);
     setEditPhone(selected.phone || '');
     setEditProfilePic(selected.profilePicture || '');
+    setEditFamily(Array.isArray(selected.familyMembers) ? selected.familyMembers.map(m => ({ ...m })) : []);
     setShowEditEntity(true);
     window.history.pushState({ duebook: 'modal' }, '');
   };
@@ -1411,14 +1421,26 @@ export default function DueBookPage() {
   const handleEditEntity = async () => {
     if (!selected || !tenantId) return;
     if (!editName.trim()) { toast.error('Name required'); return; }
+    const cleanedFamily = editFamily
+      .map(m => ({
+        name: (m.name || '').trim(),
+        relation: (m.relation || '').trim(),
+        birthDate: (m.birthDate || '').trim(),
+      }))
+      .filter(m => m.name && /^(\d{4}-)?\d{2}-\d{2}$/.test(m.birthDate));
     setEditSaving(true);
     try {
-      const res = await patchEntityOffline(tenantId, selected._id, { name: editName.trim(), phone: editPhone.trim(), profilePicture: editProfilePic });
+      const res = await patchEntityOffline(tenantId, selected._id, {
+        name: editName.trim(),
+        phone: editPhone.trim(),
+        profilePicture: editProfilePic,
+        familyMembers: cleanedFamily,
+      });
       toast.success(res.queued ? 'Saved offline — will sync' : 'Updated');
       setShowEditEntity(false);
       // Optimistic local update
-      setEntities(prev => prev.map(e => e._id === selected._id ? { ...e, name: editName.trim(), phone: editPhone.trim(), profilePicture: editProfilePic } : e));
-      setSelected(prev => prev ? { ...prev, name: editName.trim(), phone: editPhone.trim(), profilePicture: editProfilePic } : prev);
+      setEntities(prev => prev.map(e => e._id === selected._id ? { ...e, name: editName.trim(), phone: editPhone.trim(), profilePicture: editProfilePic, familyMembers: cleanedFamily } : e));
+      setSelected(prev => prev ? { ...prev, name: editName.trim(), phone: editPhone.trim(), profilePicture: editProfilePic, familyMembers: cleanedFamily } : prev);
       if (!res.queued) {
         const updated = await getEntities(tenantId);
         setEntities(updated);
@@ -2870,8 +2892,9 @@ export default function DueBookPage() {
           ) : (
             <div className="p-2 space-y-1">
               {tab === 'Customer' && (
-                <div className="mb-1.5">
+                <div className="mb-1.5 space-y-1.5">
                   <DailyPnlCard isDark={isDark} />
+                  <BirthdayReminderCard isDark={isDark} shopName={regSettings.shopName} tenantId={tenantId} />
                 </div>
               )}
               {recentEntities.length > 0 && (
@@ -3924,6 +3947,64 @@ export default function DueBookPage() {
                 placeholder="Phone number"
                 className="w-full border border-gray-200 dark:border-slate-600 rounded-xl px-3 py-2 text-[13px] text-gray-900 dark:text-slate-100 outline-none focus:border-sky-400"
               />
+              {selected?.type === 'Customer' && (
+                <div className="pt-1">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-[11px] font-bold uppercase tracking-wide text-pink-700 dark:text-pink-300">
+                      Family birthdays (loyalty)
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setEditFamily(prev => [...prev, { name: '', relation: '', birthDate: '' }])}
+                      className="text-[10px] font-semibold text-sky-600 dark:text-sky-400"
+                    >
+                      + Add
+                    </button>
+                  </div>
+                  {editFamily.length === 0 && (
+                    <p className="text-[10px] text-gray-400 dark:text-slate-500 italic mb-1">
+                      Add family members &amp; birth dates to send a birthday wish + discount offer the day before.
+                    </p>
+                  )}
+                  <div className="space-y-1.5">
+                    {editFamily.map((m, i) => (
+                      <div key={i} className="rounded-lg border border-pink-100 dark:border-pink-900/40 bg-pink-50/60 dark:bg-pink-950/20 p-2 space-y-1">
+                        <div className="flex gap-1.5">
+                          <input
+                            type="text"
+                            value={m.name}
+                            onChange={e => setEditFamily(prev => prev.map((x, j) => j === i ? { ...x, name: e.target.value } : x))}
+                            placeholder="Name *"
+                            className="flex-1 border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 rounded-lg px-2 py-1.5 text-[12px] text-gray-900 dark:text-slate-100 outline-none focus:border-pink-400"
+                          />
+                          <input
+                            type="text"
+                            value={m.relation || ''}
+                            onChange={e => setEditFamily(prev => prev.map((x, j) => j === i ? { ...x, relation: e.target.value } : x))}
+                            placeholder="Relation"
+                            className="w-24 border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 rounded-lg px-2 py-1.5 text-[12px] text-gray-900 dark:text-slate-100 outline-none focus:border-pink-400"
+                          />
+                        </div>
+                        <div className="flex gap-1.5">
+                          <input
+                            type="date"
+                            value={m.birthDate && m.birthDate.length === 10 ? m.birthDate : ''}
+                            onChange={e => setEditFamily(prev => prev.map((x, j) => j === i ? { ...x, birthDate: e.target.value } : x))}
+                            className="flex-1 border border-gray-200 dark:border-slate-600 bg-white dark:bg-slate-800 rounded-lg px-2 py-1.5 text-[12px] text-gray-900 dark:text-slate-100 outline-none focus:border-pink-400"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setEditFamily(prev => prev.filter((_, j) => j !== i))}
+                            className="px-2 py-1 rounded-lg text-[10px] font-semibold text-red-600 border border-red-200 dark:border-red-800"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <button onClick={handleEditEntity} disabled={editSaving || !editName.trim()}
                 className="w-full py-3 rounded-xl bg-sky-500 text-white text-[14px] font-bold disabled:opacity-50 active:scale-[0.98] transition-all flex items-center justify-center">
                 {editSaving

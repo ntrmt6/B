@@ -7,6 +7,12 @@ import {
   isNative,
 } from './nativeSqlite';
 
+export interface FamilyMember {
+  name: string;
+  relation?: string;
+  birthDate: string; // 'YYYY-MM-DD' or 'MM-DD'
+}
+
 interface Entity {
   _id: string;
   name: string;
@@ -15,6 +21,7 @@ interface Entity {
   totalOwedToMe: number;
   totalIOweThemNumber: number;
   profilePicture?: string;
+  familyMembers?: FamilyMember[];
   _pending?: boolean;
 }
 
@@ -275,7 +282,13 @@ async function bumpEntityTotalsDexie(tid: string, entityId: string, dir: 'INCOME
   void putEntityNative(next);
 }
 
-interface CreateEntityPayload { name: string; phone: string; type: Entity['type']; profilePicture?: string; }
+interface CreateEntityPayload {
+  name: string;
+  phone: string;
+  type: Entity['type'];
+  profilePicture?: string;
+  familyMembers?: FamilyMember[];
+}
 export async function createEntityOffline(tid: string, payload: CreateEntityPayload): Promise<{ entity: Entity; queued: boolean }> {
   if (!isOffline()) {
     try {
@@ -292,6 +305,7 @@ export async function createEntityOffline(tid: string, payload: CreateEntityPayl
     _id: ref, name: payload.name, phone: payload.phone, type: payload.type,
     totalOwedToMe: 0, totalIOweThemNumber: 0,
     profilePicture: payload.profilePicture || '',
+    familyMembers: payload.familyMembers || [],
     _pending: true,
   };
   await putEntityRow(tid, optimistic, true);
@@ -412,7 +426,7 @@ export async function deleteTxOffline(tid: string, txId: string, entityId?: stri
   return { queued: true };
 }
 
-export async function patchEntityOffline(tid: string, id: string, payload: { name: string; phone: string; profilePicture?: string }): Promise<{ queued: boolean }> {
+export async function patchEntityOffline(tid: string, id: string, payload: { name: string; phone: string; profilePicture?: string; familyMembers?: FamilyMember[] }): Promise<{ queued: boolean }> {
   if (isTempId(id)) throw new Error('This contact has not synced yet — please wait for connection.');
   if (!isOffline()) {
     try {

@@ -49,6 +49,24 @@ const getTenantId = (req: any): string => {
   return req.tenantId || (req.headers['x-tenant-id'] as string) || '';
 };
 
+// Normalize + validate incoming familyMembers payload.
+// Accepts arrays up to 20 members. Each: { name, relation?, birthDate }.
+// birthDate accepted as 'YYYY-MM-DD' or 'MM-DD' (recurring, year-less).
+function sanitizeFamilyMembers(input: any): Array<{ name: string; relation: string; birthDate: string }> | undefined {
+  if (!Array.isArray(input)) return undefined;
+  const out: Array<{ name: string; relation: string; birthDate: string }> = [];
+  for (const m of input.slice(0, 20)) {
+    if (!m || typeof m !== 'object') continue;
+    const name = String(m.name || '').trim().slice(0, 80);
+    const relation = String(m.relation || '').trim().slice(0, 40);
+    const birthDate = String(m.birthDate || '').trim().slice(0, 10);
+    if (!name || !birthDate) continue;
+    if (!/^(\d{4}-)?\d{2}-\d{2}$/.test(birthDate)) continue;
+    out.push({ name, relation, birthDate });
+  }
+  return out;
+}
+
 // ============ ENTITY ENDPOINTS ============
 
 // GET all entities by type with optional search (filtered by tenant)
@@ -104,7 +122,7 @@ router.post('/entities', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Tenant ID is required' });
     }
 
-    const { name, phone, email, address, type, profilePicture } = req.body;
+    const { name, phone, email, address, type, profilePicture, familyMembers } = req.body;
 
     // Validate required fields
     if (!name || !phone || !type) {
@@ -117,6 +135,8 @@ router.post('/entities', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Entity with this phone already exists' });
     }
 
+    const sanitizedFamily = sanitizeFamilyMembers(familyMembers);
+
     const entity = new Entity({
       tenantId,
       name,
@@ -127,6 +147,7 @@ router.post('/entities', async (req: Request, res: Response) => {
       totalOwedToMe: 0,
       totalIOweThemNumber: 0,
       profilePicture: typeof profilePicture === 'string' && profilePicture.length <= 300000 ? profilePicture : '',
+      familyMembers: sanitizedFamily || [],
     });
 
     await entity.save();
@@ -145,7 +166,7 @@ router.put('/entities/:id', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Tenant ID is required' });
     }
 
-    const { name, phone, email, address, type, profilePicture } = req.body;
+    const { name, phone, email, address, type, profilePicture, familyMembers } = req.body;
 
     const update: any = {};
     if (typeof name === 'string') update.name = name;
@@ -154,6 +175,10 @@ router.put('/entities/:id', async (req: Request, res: Response) => {
     if (address !== undefined) update.address = address;
     if (typeof type === 'string') update.type = type;
     if (typeof profilePicture === 'string' && profilePicture.length <= 300000) update.profilePicture = profilePicture;
+    if (familyMembers !== undefined) {
+      const fam = sanitizeFamilyMembers(familyMembers);
+      if (fam) update.familyMembers = fam;
+    }
 
     const entity = await Entity.findOneAndUpdate(
       { _id: req.params.id, tenantId },
@@ -325,6 +350,91 @@ router.put('/duebook/settings', async (req: Request, res: Response) => {
   } catch (error) {
     console.error('Error saving duebook settings:', error);
     res.status(500).json({ error: 'Error saving settings' });
+  }
+});
+
+// ============ FAMILY BIRTHDAYS (loyalty reminders) ============
+
+// GET /duebook/family-birthdays?days=7
+// Returns upcoming family birthdays within `days` from today (inclusive),
+// scoped by tenant. Each result row includes the customer so UI can one-tap
+// a WhatsApp greeting with a discount offer.
+router.get('/duebook/family-birthdays', async (req: Request, res: Response) => {
+  try {
+    const tenantId = getTenantId(req);
+    if (!tenantId) return res.status(400).json({ error: 'Tenant ID is required' });
+
+    const windowDays = Math.min(60, Math.max(1, Number(req.query.days) || 7));
+
+    const customers = await Entity.find({
+      tenantId,
+      type: 'Customer',
+      familyMembers: { $exists: true, $ne: [] },
+    })
+      .select('_id name phone familyMembers')
+      .lean();
+
+    // Build MM-DD set for the upcoming window
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const windowKeys: Array<{ key: string; date: Date; offset: number }> = [];
+    for (let i = 0; i < windowDays; i++) {
+      const d = new Date(today);
+      d.setDate(d.getDate() + i);
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const dd = String(d.getDate()).padStart(2, '0');
+      windowKeys.push({ key: `${mm}-${dd}`, date: new Date(d), offset: i });
+    }
+    const keyToSlot = new Map(windowKeys.map(w => [w.key, w]));
+
+    const rows: Array<{
+      customerId: string;
+      customerName: string;
+      phone: string;
+      memberName: string;
+      relation: string;
+      birthDate: string;
+      birthdayOn: string;      // ISO date for the upcoming occurrence
+      daysUntil: number;       // 0 = today, 1 = tomorrow
+      age: number | null;      // null if year not provided
+    }> = [];
+
+    for (const c of customers as any[]) {
+      for (const m of c.familyMembers || []) {
+        const bd: string = (m.birthDate || '').trim();
+        // Accept 'YYYY-MM-DD' or 'MM-DD'
+        const mmdd = bd.length === 10 ? bd.slice(5) : bd;
+        const slot = keyToSlot.get(mmdd);
+        if (!slot) continue;
+
+        let age: number | null = null;
+        if (bd.length === 10) {
+          const birthYear = Number(bd.slice(0, 4));
+          if (Number.isFinite(birthYear)) {
+            age = slot.date.getFullYear() - birthYear;
+          }
+        }
+
+        rows.push({
+          customerId: String(c._id),
+          customerName: c.name,
+          phone: c.phone || '',
+          memberName: m.name,
+          relation: m.relation || '',
+          birthDate: bd,
+          birthdayOn: slot.date.toISOString(),
+          daysUntil: slot.offset,
+          age,
+        });
+      }
+    }
+
+    rows.sort((a, b) => a.daysUntil - b.daysUntil || a.customerName.localeCompare(b.customerName));
+
+    res.json({ windowDays, count: rows.length, upcoming: rows });
+  } catch (error) {
+    console.error('Error fetching family birthdays:', error);
+    res.status(500).json({ error: 'Error fetching family birthdays' });
   }
 });
 

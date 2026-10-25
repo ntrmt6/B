@@ -1,5 +1,11 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export interface IFamilyMember {
+  name: string;
+  relation?: string;
+  birthDate: string; // YYYY-MM-DD (year optional but preferred)
+}
+
 export interface IEntity extends Document {
   tenantId: string;
   name: string;
@@ -11,9 +17,19 @@ export interface IEntity extends Document {
   totalIOweThemNumber: number;
   rewardsClaimed: number;
   profilePicture?: string;
+  familyMembers?: IFamilyMember[];
   createdAt: Date;
   updatedAt: Date;
 }
+
+const FamilyMemberSchema = new Schema<IFamilyMember>(
+  {
+    name: { type: String, required: true, trim: true, maxlength: 80 },
+    relation: { type: String, trim: true, maxlength: 40, default: '' },
+    birthDate: { type: String, required: true, trim: true, maxlength: 10 },
+  },
+  { _id: false }
+);
 
 const EntitySchema = new Schema<IEntity>(
   {
@@ -67,6 +83,10 @@ const EntitySchema = new Schema<IEntity>(
     profilePicture: {
       type: String,
       default: '',
+    },
+    familyMembers: {
+      type: [FamilyMemberSchema],
+      default: [],
     },
   },
   {
