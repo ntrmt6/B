@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0b0f14">
+<title>wifi-audit</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>wifi-audit</h1>
+  <div class="banner">authorized networks only · add BSSID to <b>My networks</b> before any active attack</div>
+</header>
+
+<nav class="tabs">
+  <button class="tab active" data-tab="setup">Setup</button>
+  <button class="tab" data-tab="scan">Scan</button>
+  <button class="tab" data-tab="whitelist">My&nbsp;networks</button>
+  <button class="tab" data-tab="captures">Captures</button>
+  <button class="tab" data-tab="jobs">Jobs</button>
+</nav>
+
+<main>
+
+<section id="tab-setup" class="panel active">
+  <h2>Interface</h2>
+  <div id="tools" class="row small"></div>
+  <div class="row">
+    <select id="iface"></select>
+    <button class="btn" id="btn-refresh">Refresh</button>
+  </div>
+  <div class="row">
+    <button class="btn primary" id="btn-mon-start">Monitor ON</button>
+    <button class="btn" id="btn-mon-stop">Monitor OFF</button>
+  </div>
+  <pre id="mon-out" class="log"></pre>
+</section>
+
+<section id="tab-scan" class="panel">
+  <h2>Live scan</h2>
+  <div class="row">
+    <button class="btn primary" id="btn-scan-start">Start</button>
+    <button class="btn" id="btn-scan-stop">Stop</button>
+    <span id="scan-status" class="pill">idle</span>
+  </div>
+  <div id="nets"></div>
+</section>
+
+<section id="tab-whitelist" class="panel">
+  <h2>My networks</h2>
+  <p class="small">Only networks listed here can be targeted. BSSIDs are MAC addresses in <code>AA:BB:CC:DD:EE:FF</code> form.</p>
+  <div class="row">
+    <input id="wl-bssid" placeholder="BSSID">
+    <input id="wl-note" placeholder="note (e.g. home router)">
+    <button class="btn primary" id="btn-wl-add">Add</button>
+  </div>
+  <div id="wl-list"></div>
+</section>
+
+<section id="tab-captures" class="panel">
+  <h2>Captures</h2>
+  <div class="row">
+    <button class="btn" id="btn-cap-refresh">Refresh</button>
+  </div>
+  <div id="captures"></div>
+  <h3>Crack</h3>
+  <div class="row">
+    <select id="crack-hash"></select>
+    <input id="crack-wordlist" value="/usr/share/wordlists/rockyou.txt">
+    <button class="btn primary" id="btn-crack">Crack</button>
+  </div>
+</section>
+
+<section id="tab-jobs" class="panel">
+  <h2>Jobs</h2>
+  <div class="row"><button class="btn" id="btn-jobs-refresh">Refresh</button></div>
+  <div id="jobs"></div>
+</section>
+
+</main>
+
+<dialog id="target-dlg">
+  <h3 id="t-title">Target</h3>
+  <div id="t-info" class="small"></div>
+  <div class="t-actions">
+    <button class="btn primary" id="t-handshake">Capture handshake (deauth)</button>
+    <button class="btn" id="t-pmkid">PMKID (hcxdumptool)</button>
+    <button class="btn" id="t-whitelist">Add to my networks</button>
+    <button class="btn ghost" id="t-close">Close</button>
+  </div>
+  <div id="t-warn" class="warn hidden">Not in whitelist — add it first.</div>
+</dialog>
+
+<script src="/static/app.js"></script>
+</body>
+</html>
