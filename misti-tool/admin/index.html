@@ -1,0 +1,1113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mishti &amp; More · Admin Panel</title>
+<meta name="robots" content="noindex,nofollow" />
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script>
+  Babel.registerPreset('react-classic', { presets: [[Babel.availablePresets['react'], { runtime:'classic' }]] });
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Inter:wght@300;400;500;600;700&family=Hind+Siliguri:wght@500;700&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      colors: { cream:'#FFFDF9', saffron:'#D97706', saffrondark:'#B45309', espresso:'#1C1917', berry:'#E11D48', ink:'#0C0A09' },
+      fontFamily: { serif:['Playfair Display','serif'], sans:['Inter','system-ui','sans-serif'], bn:['Hind Siliguri','Inter','sans-serif'] },
+    }},
+  };
+</script>
+<style>
+  html,body { background:#faf7f2; color:#1C1917; }
+  body { font-family:'Inter',system-ui,sans-serif; }
+  .font-bn { font-family:'Hind Siliguri','Inter',sans-serif; }
+  .no-scrollbar::-webkit-scrollbar { display:none; }
+  .no-scrollbar { -ms-overflow-style:none; scrollbar-width:none; }
+  @keyframes fade-in { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+  .animate-fade-in { animation: fade-in .25s ease-out; }
+  @keyframes pop { 0%{transform:scale(.7);opacity:0} 60%{transform:scale(1.1)} 100%{transform:scale(1);opacity:1} }
+  .animate-pop { animation: pop .3s ease-out; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react-classic">
+const { useState, useMemo, useEffect, useRef, Fragment } = React;
+
+/* ============================================================
+   Inline SVG icons
+   ============================================================ */
+const I = ({ size=18, cls='', sw=1.75, children }) =>
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" className={cls}>{children}</svg>;
+const Icon = {
+  Dash:   (p)=><I {...p}><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></I>,
+  Cart:   (p)=><I {...p}><circle cx="9" cy="21" r="1.5"/><circle cx="18" cy="21" r="1.5"/><path d="M2.5 3h2.4l2.9 13.3a2 2 0 0 0 2 1.7h8.2a2 2 0 0 0 2-1.6l1.7-8.4H6.2"/></I>,
+  Box:    (p)=><I {...p}><path d="M21 8 12 3 3 8v8l9 5 9-5zM3 8l9 5 9-5M12 13v8"/></I>,
+  Users:  (p)=><I {...p}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1A4 4 0 0 1 16 11"/></I>,
+  Heart:  (p)=><I {...p}><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></I>,
+  Pos:    (p)=><I {...p}><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M3 10h18"/></I>,
+  Chart:  (p)=><I {...p}><path d="M3 3v18h18M7 14l4-4 3 3 5-6"/></I>,
+  Gear:   (p)=><I {...p}><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1A2 2 0 1 1 4.3 17l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></I>,
+  Search: (p)=><I {...p}><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></I>,
+  Bell:   (p)=><I {...p}><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"/></I>,
+  Plus:   (p)=><I {...p}><path d="M12 5v14M5 12h14"/></I>,
+  Minus:  (p)=><I {...p}><path d="M5 12h14"/></I>,
+  X:      (p)=><I {...p}><path d="M18 6 6 18M6 6l12 12"/></I>,
+  Check:  (p)=><I {...p}><path d="M20 6 9 17l-5-5"/></I>,
+  Dots:   (p)=><I {...p}><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></I>,
+  Logout: (p)=><I {...p}><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></I>,
+  Download:(p)=><I {...p}><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/></I>,
+  Edit:   (p)=><I {...p}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.1 2.1 0 1 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></I>,
+  Trash:  (p)=><I {...p}><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></I>,
+  Clock:  (p)=><I {...p}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></I>,
+  Phone:  (p)=><I {...p}><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.7a2 2 0 0 1-.4 2.1L8 9.9a16 16 0 0 0 6 6l1.4-1.4a2 2 0 0 1 2.1-.4c.9.3 1.8.5 2.7.6a2 2 0 0 1 1.7 2z"/></I>,
+  MapPin: (p)=><I {...p}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></I>,
+  Truck:  (p)=><I {...p}><path d="M1 3h15v13H1zM16 8h4l3 3v5h-7"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/></I>,
+  Store:  (p)=><I {...p}><path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v10h16V9"/><path d="M9 22V14h6v8"/></I>,
+  Gift:   (p)=><I {...p}><path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H8a2.5 2.5 0 1 1 0-5c3 0 4 5 4 5zM12 7h4a2.5 2.5 0 1 0 0-5c-3 0-4 5-4 5z"/></I>,
+  Cake:   (p)=><I {...p}><path d="M20 21H4v-7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2zM4 16s1.5-2 4-2 4 2 4 2 1.5-2 4-2 4 2 4 2M2 21h20M7 8V2M12 8V2M17 8V2"/></I>,
+  Sparkle:(p)=><I {...p}><path d="M12 2v6M12 16v6M2 12h6M16 12h6M5 5l4 4M15 15l4 4M19 5l-4 4M9 15l-4 4"/></I>,
+  Snow:   (p)=><I {...p}><path d="M12 2v20M2 12h20M4 4l16 16M20 4 4 20"/></I>,
+  Trophy: (p)=><I {...p}><path d="M8 21h8M12 17v4M17 4h3v3a4 4 0 0 1-4 4M7 4H4v3a4 4 0 0 0 4 4M7 4h10v7a5 5 0 0 1-10 0z"/></I>,
+  Wallet: (p)=><I {...p}><path d="M3 7h18v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM3 7V5a2 2 0 0 1 2-2h11l3 4"/><circle cx="17" cy="14" r="1.5"/></I>,
+  Card:   (p)=><I {...p}><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></I>,
+  Bank:   (p)=><I {...p}><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/></I>,
+  Printer:(p)=><I {...p}><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></I>,
+  Whats:  (p)=><I {...p}><path d="M20.5 3.5A11 11 0 0 0 3.6 17.2L2 22l4.9-1.6A11 11 0 1 0 20.5 3.5z"/></I>,
+  Open:   (p)=><I {...p}><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6M15 3h6v6M10 14 21 3"/></I>,
+  Up:     (p)=><I {...p}><path d="M18 15l-6-6-6 6"/></I>,
+  Down:   (p)=><I {...p}><path d="M6 9l6 6 6-6"/></I>,
+  Filter: (p)=><I {...p}><path d="M3 4h18l-7 9v6l-4-2v-4L3 4z"/></I>,
+  Refresh:(p)=><I {...p}><path d="M23 4v6h-6M1 20v-6h6"/><path d="M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15"/></I>,
+};
+
+const BDT = (n) => `৳${Number(Math.round(n||0)).toLocaleString('en-IN')}`;
+const fmtDate = (d) => new Date(d).toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
+const fmtTime = (d) => new Date(d).toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+const fmtDT   = (d) => `${fmtDate(d)} · ${fmtTime(d)}`;
+const relTime = (d) => {
+  const s = (Date.now() - new Date(d).getTime()) / 1000;
+  if (s < 60) return 'just now';
+  if (s < 3600) return `${Math.floor(s/60)}m ago`;
+  if (s < 86400) return `${Math.floor(s/3600)}h ago`;
+  return `${Math.floor(s/86400)}d ago`;
+};
+
+/* ============================================================
+   Shared catalog (same as storefront, trimmed fields)
+   ============================================================ */
+const CAT = [
+  { id:'combo',    label:'Celebration Combos', emoji:'🎁' },
+  { id:'mishti',   label:'Traditional Mishti', emoji:'🍬' },
+  { id:'bakery',   label:'Bakery & Cakes',     emoji:'🎂' },
+  { id:'snacks',   label:'Savory Snacks',      emoji:'🥟' },
+  { id:'icecream', label:'Ice Cream & Frozen', emoji:'🍦' },
+  { id:'pantry',   label:'Drinks · Chips · Chocolates', emoji:'🧃' },
+  { id:'party',    label:'Party Supplies',     emoji:'🎈' },
+];
+
+const PRODUCTS_SEED = [
+  { id:'c1', cat:'combo', name:'Complete Birthday Package', price:1450, stock:28, emoji:'🎉', unit:'pkg' },
+  { id:'c2', cat:'combo', name:'Kids Party Snack Box',      price:950,  stock:42, emoji:'🧁', unit:'box' },
+  { id:'c3', cat:'combo', name:'Festival Family Sweet Box', price:1200, stock:35, emoji:'🍡', unit:'box' },
+  { id:'m1', cat:'mishti', name:'Classic Rosogolla',          price:550, stock:120, emoji:'🍡', unit:'kg' },
+  { id:'m2', cat:'mishti', name:'Tangail Porabari Chamcham',  price:650, stock:84,  emoji:'🟤', unit:'kg' },
+  { id:'m3', cat:'mishti', name:'Kalojam',                    price:500, stock:62,  emoji:'⚫', unit:'kg' },
+  { id:'m4', cat:'mishti', name:'Kacha Golla',                price:780, stock:48,  emoji:'⚪', unit:'kg' },
+  { id:'m5', cat:'mishti', name:'Premium Kheer Sandesh',      price:720, stock:37,  emoji:'🟡', unit:'kg' },
+  { id:'m6', cat:'mishti', name:'Bogurar Shahi Doi',          price:350, stock:95,  emoji:'🥣', unit:'kg' },
+  { id:'b1', cat:'bakery', name:'Black Forest Birthday Cake', price:850, stock:14, emoji:'🍰', unit:'1 lb' },
+  { id:'b2', cat:'bakery', name:'Red Velvet Cream Cake',      price:1050,stock:9,  emoji:'❤️', unit:'1 lb' },
+  { id:'b3', cat:'bakery', name:'Belgian Chocolate Brownie',  price:120, stock:76, emoji:'🍫', unit:'pc' },
+  { id:'b4', cat:'bakery', name:'Butterscotch Pastry Slice',  price:80,  stock:92, emoji:'🍮', unit:'pc' },
+  { id:'b5', cat:'bakery', name:'Special Pound Cake',         price:650, stock:18, emoji:'🍞', unit:'1 lb' },
+  { id:'s1', cat:'snacks', name:'Flaky Chicken Patties',      price:50,  stock:150,emoji:'🥐', unit:'pc' },
+  { id:'s2', cat:'snacks', name:'Spicy Beef Samosa',          price:45,  stock:180,emoji:'🔺', unit:'pc' },
+  { id:'s3', cat:'snacks', name:'Vegetable Spring Roll',      price:35,  stock:200,emoji:'🥠', unit:'pc' },
+  { id:'s4', cat:'snacks', name:'Mini Chicken Pizza',         price:110, stock:68, emoji:'🍕', unit:'pc' },
+  { id:'i1', cat:'icecream', name:'Vanilla Bean Family Tub (1L)', price:420, stock:22, emoji:'🍨', unit:'L' },
+  { id:'i2', cat:'icecream', name:'Belgian Chocolate Cone',       price:90,  stock:110, emoji:'🍦', unit:'pc' },
+  { id:'i3', cat:'icecream', name:'Mango Ripple Cup',             price:120, stock:74,  emoji:'🥭', unit:'cup' },
+  { id:'i4', cat:'icecream', name:'Traditional Malai Kulfi',      price:70,  stock:88,  emoji:'🥛', unit:'stick' },
+  { id:'p1', cat:'pantry', name:'2L Chilled Soft Drink',       price:220, stock:65, emoji:'🧃', unit:'btl' },
+  { id:'p2', cat:'pantry', name:'250ml Beverage Can',         price:60,  stock:140,emoji:'🥫', unit:'can' },
+  { id:'p3', cat:'pantry', name:'Crispy Potato Chips',        price:30,  stock:7,  emoji:'🥔', unit:'bag' },
+  { id:'p4', cat:'pantry', name:'Assorted Chocolate Bar',     price:90,  stock:112,emoji:'🍫', unit:'bar' },
+  { id:'py1',cat:'party', name:'Metallic Foil "Happy Birthday" Balloon Set', price:250, stock:18, emoji:'🎈', unit:'set' },
+  { id:'py2',cat:'party', name:'Musical Sparkle Candles',                    price:120, stock:44, emoji:'🕯️', unit:'pack' },
+  { id:'py3',cat:'party', name:'Numeric Age Candles',                        price:80,  stock:60, emoji:'0️⃣', unit:'pc' },
+  { id:'py4',cat:'party', name:'Party Poppers (Pack of 10)',                 price:40,  stock:85, emoji:'🎊', unit:'pack' },
+  { id:'py5',cat:'party', name:'Birthday Hats (Pack of 6)',                  price:150, stock:32, emoji:'🎩', unit:'pack' },
+];
+
+/* ============================================================
+   Mock orders seed
+   ============================================================ */
+const CUSTOMERS = [
+  { name:'Mishka Rahman',   phone:'01712345678', area:'Dhanmondi',   addr:'House 12, Road 7, Flat 4B' },
+  { name:'Tanvir Hasan',    phone:'01718223344', area:'Banani',      addr:'House 5, Road 11, Flat 2A' },
+  { name:'Shaila Khatun',   phone:'01911778899', area:'Uttara',      addr:'Sector 7, Road 4, House 22' },
+  { name:'Rafiq Ahmed',     phone:'01676554433', area:'Gulshan',     addr:'House 44, Road 103, Flat 3C' },
+  { name:'Nadia Islam',     phone:'01828447711', area:'Mirpur',      addr:'Section 10, Block C, House 7' },
+  { name:'Sabbir Ahsan',    phone:'01512334455', area:'Banasree',    addr:'Block F, Road 8, Flat 5A' },
+  { name:'Lamia Chowdhury', phone:'01745998822', area:'Mohammadpur', addr:'Zakir Hossain Road, House 18' },
+  { name:'Fahim Rahaman',   phone:'01634226688', area:'Dhanmondi',   addr:'Satmasjid Road, House 44/B' },
+  { name:'Nusrat Jahan',    phone:'01918776655', area:'Gulshan',     addr:'House 15, Road 71, Flat 6B' },
+  { name:'Imran Kabir',     phone:'01789443322', area:'Uttara',      addr:'Sector 4, Road 12, Flat 1D' },
+];
+
+const STATUS = {
+  received:   { label:'New',                color:'rose',    next:'packing' },
+  packing:    { label:'Packing',            color:'amber',   next:'out_for_delivery' },
+  out_for_delivery: { label:'Out for Delivery', color:'sky', next:'delivered' },
+  delivered:  { label:'Delivered',          color:'emerald', next:null },
+  cancelled:  { label:'Cancelled',          color:'stone',   next:null },
+};
+
+function seedOrders() {
+  const now = Date.now();
+  const rand = (a,b) => a + Math.floor(Math.random()*(b-a+1));
+  const list = [];
+  for (let i = 0; i < 24; i++) {
+    const cust = CUSTOMERS[rand(0, CUSTOMERS.length-1)];
+    const itemCount = rand(1,4);
+    const items = [];
+    const used = new Set();
+    for (let k=0; k<itemCount; k++) {
+      let p; do { p = PRODUCTS_SEED[rand(0, PRODUCTS_SEED.length-1)]; } while (used.has(p.id));
+      used.add(p.id);
+      const qty = rand(1,3);
+      items.push({ id:p.id, name:p.name, emoji:p.emoji, unit:p.unit, qty, unitPrice:p.price });
+    }
+    const subtotal = items.reduce((s,i)=> s + i.unitPrice*i.qty, 0);
+    const bundle   = items.filter(i=>i.id.startsWith('c')).reduce((s,i)=> s + Math.round(i.unitPrice*i.qty*0.15), 0);
+    const fulfillment = Math.random() < 0.75 ? 'delivery' : 'pickup';
+    const deliveryFee = fulfillment==='pickup' ? 0 : (subtotal - bundle >= 1500 ? 0 : 60);
+    const grand = subtotal - bundle + deliveryFee;
+    const hoursAgo = i===0 ? 0.05 : i===1 ? 0.3 : i<4 ? rand(1,6) : i<8 ? rand(6,24) : rand(24, 24*7);
+    const placedAt = new Date(now - hoursAgo*3600*1000);
+    // Status distribution: recent = new/packing, older = delivered
+    let status;
+    if (hoursAgo < 0.5)  status = 'received';
+    else if (hoursAgo < 2) status = Math.random()<0.5 ? 'received' : 'packing';
+    else if (hoursAgo < 6) status = ['packing','out_for_delivery'][rand(0,1)];
+    else if (hoursAgo < 24) status = Math.random()<0.15 ? 'cancelled' : (Math.random()<0.4 ? 'out_for_delivery' : 'delivered');
+    else                 status = Math.random()<0.1 ? 'cancelled' : 'delivered';
+    const paymentPick = ['bkash','card','cod'][rand(0,2)];
+    list.push({
+      id: `MM-2026-${(8000 + i).toString()}`,
+      placedAt: placedAt.toISOString(),
+      customer: cust,
+      fulfillment,
+      items,
+      subtotal, bundle, deliveryFee, packaging: items.some(i=>i.id.startsWith('i')) ? 40 : 0,
+      grand: grand + (items.some(i=>i.id.startsWith('i')) ? 40 : 0),
+      status, payment: paymentPick,
+      note: i%5===0 ? 'Please deliver before 7pm, it is a surprise 🎂' : '',
+    });
+  }
+  return list.sort((a,b) => new Date(b.placedAt) - new Date(a.placedAt));
+}
+
+function seedCeleb() {
+  const today = new Date();
+  const base = [
+    { person:'Mishka Rahman',   occasion:'Birthday',          daysFromNow:3,  phone:'01712345678' },
+    { person:'Arif (Tanvir\'s son)', occasion:"Child's Birthday", daysFromNow:7, phone:'01718223344' },
+    { person:'Shaila & Reza',   occasion:'Anniversary',       daysFromNow:12, phone:'01911778899' },
+    { person:'Rafiq\'s mother', occasion:"Parent's Birthday", daysFromNow:18, phone:'01676554433' },
+    { person:'Nadia Islam',     occasion:'Birthday',          daysFromNow:22, phone:'01828447711' },
+    { person:'Sabbir\'s wife',  occasion:'Anniversary',       daysFromNow:28, phone:'01512334455' },
+    { person:'Lamia Chowdhury', occasion:'Birthday',          daysFromNow:35, phone:'01745998822' },
+    { person:'Fahim\'s brother',occasion:'Birthday',          daysFromNow:45, phone:'01634226688' },
+  ];
+  return base.map(x => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + x.daysFromNow);
+    return { ...x, date: d.toISOString().slice(0,10) };
+  });
+}
+
+/* ============================================================
+   App root
+   ============================================================ */
+function App() {
+  const [auth, setAuth] = useState(() => localStorage.getItem('misti-admin-auth') === '1');
+  if (!auth) return <Login onPass={() => { localStorage.setItem('misti-admin-auth','1'); setAuth(true); }}/>;
+  return <Shell onLogout={() => { localStorage.removeItem('misti-admin-auth'); setAuth(false); }}/>;
+}
+
+function Login({ onPass }) {
+  const [pin, setPin] = useState('');
+  const [err, setErr] = useState('');
+  function submit(e) {
+    e.preventDefault();
+    if (pin === '1234') onPass();
+    else { setErr('Incorrect PIN. (Demo PIN: 1234)'); setPin(''); }
+  }
+  return <div className="min-h-screen grid place-items-center p-6 bg-gradient-to-br from-amber-100 via-rose-50 to-amber-50">
+    <div className="w-full max-w-sm bg-white rounded-3xl shadow-2xl p-8 animate-fade-in">
+      <div className="flex items-center gap-3 mb-5">
+        <div className="h-12 w-12 rounded-full bg-gradient-to-br from-saffron to-berry grid place-items-center text-white font-serif font-black text-xl">M</div>
+        <div>
+          <div className="font-serif font-black text-xl">Mishti &amp; More</div>
+          <div className="text-xs text-stone-500">Admin Panel · Staff Only</div>
+        </div>
+      </div>
+      <form onSubmit={submit} className="space-y-3">
+        <div>
+          <label className="text-xs font-semibold uppercase tracking-wider text-stone-500">Staff PIN</label>
+          <input value={pin} onChange={e=>{ setErr(''); setPin(e.target.value.replace(/\D/g,'').slice(0,6)); }} type="password" inputMode="numeric" autoFocus className="mt-1.5 w-full px-4 py-3 border border-stone-200 rounded-xl focus:border-saffron focus:ring-2 focus:ring-amber-100 outline-none text-center tracking-[0.5em] font-mono font-bold text-lg" placeholder="••••"/>
+        </div>
+        {err && <div className="text-xs text-berry">{err}</div>}
+        <button type="submit" className="w-full bg-espresso text-cream py-3 rounded-xl font-semibold hover:bg-stone-800">Sign In</button>
+        <div className="text-[11px] text-center text-stone-400">Demo PIN: <span className="font-mono font-bold">1234</span></div>
+      </form>
+    </div>
+  </div>;
+}
+
+/* ============================================================
+   Shell with sidebar + top bar
+   ============================================================ */
+function Shell({ onLogout }) {
+  const [tab, setTab] = useState('dashboard');
+  const [orders, setOrders] = useState(() => {
+    const s = localStorage.getItem('misti-orders');
+    return s ? JSON.parse(s) : seedOrders();
+  });
+  const [products, setProducts] = useState(() => {
+    const s = localStorage.getItem('misti-products');
+    return s ? JSON.parse(s) : PRODUCTS_SEED;
+  });
+  const [celeb, setCeleb] = useState(() => {
+    const s = localStorage.getItem('misti-celeb');
+    return s ? JSON.parse(s) : seedCeleb();
+  });
+  const [mobile, setMobile] = useState(false);
+
+  useEffect(() => { localStorage.setItem('misti-orders', JSON.stringify(orders)); }, [orders]);
+  useEffect(() => { localStorage.setItem('misti-products', JSON.stringify(products)); }, [products]);
+  useEffect(() => { localStorage.setItem('misti-celeb', JSON.stringify(celeb)); }, [celeb]);
+
+  function resetAll() {
+    if (!confirm('Reset all demo data (orders, products, celebration club) back to seed values?')) return;
+    localStorage.removeItem('misti-orders'); localStorage.removeItem('misti-products'); localStorage.removeItem('misti-celeb');
+    setOrders(seedOrders()); setProducts(PRODUCTS_SEED); setCeleb(seedCeleb());
+  }
+
+  const NAV = [
+    { id:'dashboard', label:'Dashboard',       icon:Icon.Dash },
+    { id:'orders',    label:'Orders',          icon:Icon.Cart,  badge: orders.filter(o=>o.status==='received').length || null },
+    { id:'products',  label:'Products',        icon:Icon.Box,   badge: products.filter(p=>p.stock<15).length || null },
+    { id:'celeb',     label:'Celebration Club',icon:Icon.Heart },
+    { id:'pos',       label:'Walk-in POS',     icon:Icon.Pos },
+    { id:'reports',   label:'Reports',         icon:Icon.Chart },
+  ];
+
+  return <div className="min-h-screen flex bg-[#faf7f2]">
+    {/* Sidebar */}
+    <aside className={`${mobile?'translate-x-0':'-translate-x-full'} lg:translate-x-0 fixed lg:static z-40 h-screen w-64 bg-espresso text-stone-300 flex flex-col transition-transform`}>
+      <div className="h-16 px-5 flex items-center gap-3 border-b border-stone-800">
+        <div className="h-9 w-9 rounded-full bg-gradient-to-br from-saffron to-berry grid place-items-center text-white font-serif font-black">M</div>
+        <div>
+          <div className="font-serif font-bold text-cream text-base leading-tight">Mishti &amp; More</div>
+          <div className="text-[10px] uppercase tracking-widest text-stone-500">Admin Panel</div>
+        </div>
+      </div>
+      <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5">
+        {NAV.map(n => <button key={n.id} onClick={()=>{ setTab(n.id); setMobile(false); }}
+          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition ${tab===n.id ? 'bg-saffron text-white shadow' : 'text-stone-300 hover:bg-stone-800 hover:text-cream'}`}>
+          <n.icon size={18}/> <span className="flex-1 text-left">{n.label}</span>
+          {n.badge != null && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${tab===n.id?'bg-white/20 text-white':'bg-berry text-white'}`}>{n.badge}</span>}
+        </button>)}
+      </nav>
+      <div className="px-3 pb-3 space-y-1">
+        <a href="/" target="_blank" className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-stone-300 hover:bg-stone-800 hover:text-cream"><Icon.Open size={16}/> View Storefront</a>
+        <button onClick={resetAll} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-stone-400 hover:bg-stone-800"><Icon.Refresh size={16}/> Reset Demo Data</button>
+        <button onClick={onLogout} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-stone-400 hover:bg-berry/20 hover:text-berry"><Icon.Logout size={16}/> Sign Out</button>
+      </div>
+    </aside>
+
+    {mobile && <div className="fixed inset-0 bg-black/40 z-30 lg:hidden" onClick={()=>setMobile(false)}/>}
+
+    {/* Main */}
+    <main className="flex-1 min-w-0 flex flex-col">
+      <TopBar onMenu={()=>setMobile(true)} orders={orders}/>
+      <div className="flex-1 overflow-y-auto">
+        <div key={tab} className="animate-fade-in">
+          {tab==='dashboard' && <Dashboard orders={orders} products={products} celeb={celeb} onNav={setTab}/>}
+          {tab==='orders'    && <Orders orders={orders} setOrders={setOrders}/>}
+          {tab==='products'  && <Products products={products} setProducts={setProducts}/>}
+          {tab==='celeb'     && <Celeb celeb={celeb} setCeleb={setCeleb}/>}
+          {tab==='pos'       && <Pos products={products} setProducts={setProducts} orders={orders} setOrders={setOrders}/>}
+          {tab==='reports'   && <Reports orders={orders}/>}
+        </div>
+      </div>
+    </main>
+  </div>;
+}
+
+function TopBar({ onMenu, orders }) {
+  const newCount = orders.filter(o => o.status==='received').length;
+  return <header className="sticky top-0 z-20 bg-white/85 backdrop-blur border-b border-stone-200">
+    <div className="h-16 px-4 sm:px-6 flex items-center gap-3">
+      <button onClick={onMenu} className="lg:hidden h-9 w-9 grid place-items-center rounded-lg hover:bg-stone-100"><Icon.Dash size={18}/></button>
+      <div className="relative flex-1 max-w-md">
+        <Icon.Search cls="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={16}/>
+        <input placeholder="Search orders, products, customers…" className="w-full pl-9 pr-3 h-9 rounded-full bg-stone-100 text-sm placeholder:text-stone-400 outline-none focus:bg-white focus:ring-2 focus:ring-amber-200"/>
+      </div>
+      <button className="relative h-9 w-9 grid place-items-center rounded-full hover:bg-stone-100">
+        <Icon.Bell size={17}/>
+        {newCount > 0 && <span className="absolute top-1 right-1 h-2 w-2 bg-berry rounded-full"/>}
+      </button>
+      <div className="flex items-center gap-2 pl-2 border-l border-stone-200">
+        <div className="h-8 w-8 rounded-full bg-gradient-to-br from-amber-300 to-rose-300 grid place-items-center text-sm font-bold text-espresso">AH</div>
+        <div className="hidden sm:block text-xs">
+          <div className="font-semibold">Ariful Haque</div>
+          <div className="text-stone-500 text-[10px]">Store Manager · Dhanmondi</div>
+        </div>
+      </div>
+    </div>
+  </header>;
+}
+
+/* ============================================================
+   Dashboard
+   ============================================================ */
+function Dashboard({ orders, products, celeb, onNav }) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const yday  = new Date(today); yday.setDate(yday.getDate()-1);
+  const todayOrders = orders.filter(o => new Date(o.placedAt) >= today);
+  const yesterdayOrders = orders.filter(o => { const d = new Date(o.placedAt); return d >= yday && d < today; });
+  const revToday = todayOrders.filter(o=>o.status!=='cancelled').reduce((s,o)=>s+o.grand, 0);
+  const revYday  = yesterdayOrders.filter(o=>o.status!=='cancelled').reduce((s,o)=>s+o.grand, 0);
+  const pending = orders.filter(o => o.status==='received' || o.status==='packing').length;
+  const lowStock = products.filter(p => p.stock < 15);
+  const upcomingCeleb = celeb.filter(c => { const d = new Date(c.date); const diff = (d - today)/(86400*1000); return diff >= 0 && diff <= 30; });
+
+  // 7-day sales
+  const sales7 = Array.from({length:7}, (_,i) => {
+    const day = new Date(today); day.setDate(day.getDate() - (6-i));
+    const next = new Date(day); next.setDate(next.getDate()+1);
+    const total = orders.filter(o => { const d = new Date(o.placedAt); return d>=day && d<next && o.status!=='cancelled'; }).reduce((s,o)=>s+o.grand, 0);
+    return { label: day.toLocaleDateString('en-GB',{weekday:'short'}), total };
+  });
+  const maxSale = Math.max(...sales7.map(s=>s.total), 1);
+
+  // Top products
+  const topMap = {};
+  orders.filter(o=>o.status!=='cancelled').forEach(o => o.items.forEach(i => { topMap[i.id] = (topMap[i.id]||0) + i.qty; }));
+  const topProducts = Object.entries(topMap).sort((a,b)=>b[1]-a[1]).slice(0,5).map(([id,qty]) => ({ p: products.find(x=>x.id===id), qty }));
+
+  const delta = revYday > 0 ? Math.round((revToday - revYday)/revYday * 100) : 0;
+
+  return <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+    <div className="flex items-end justify-between flex-wrap gap-2">
+      <div>
+        <h1 className="font-serif text-3xl font-black">Good {new Date().getHours()<12?'morning':new Date().getHours()<17?'afternoon':'evening'}, Ariful</h1>
+        <p className="text-stone-500 text-sm mt-1">Here's what's happening at your Dhanmondi counter today.</p>
+      </div>
+      <div className="text-right text-xs text-stone-500">
+        <div className="font-semibold text-espresso">{new Date().toLocaleDateString('en-GB',{weekday:'long', day:'numeric', month:'long', year:'numeric'})}</div>
+        <div>{fmtTime(new Date())}</div>
+      </div>
+    </div>
+
+    {/* KPI cards */}
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+      <Kpi icon={<Icon.Cart size={18}/>} tone="saffron" label="Orders Today" value={todayOrders.length} delta={todayOrders.length - yesterdayOrders.length} suffix=" vs yday"/>
+      <Kpi icon={<Icon.Wallet size={18}/>} tone="emerald" label="Revenue Today" value={BDT(revToday)} delta={delta} suffix="%" unit=""/>
+      <Kpi icon={<Icon.Clock size={18}/>} tone="rose"    label="Pending Orders" value={pending} click={()=>onNav('orders')}/>
+      <Kpi icon={<Icon.Box size={18}/>}   tone="amber"   label="Low Stock Items" value={lowStock.length} click={()=>onNav('products')}/>
+    </div>
+
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      {/* Sales chart */}
+      <Card className="lg:col-span-2">
+        <CardHead title="Sales · Last 7 days" right={<div className="text-xs text-stone-500">Grand total: <span className="font-semibold text-espresso">{BDT(sales7.reduce((s,d)=>s+d.total,0))}</span></div>}/>
+        <div className="flex items-end gap-2 h-48 mt-2 px-1">
+          {sales7.map((d,i) => <div key={i} className="flex-1 flex flex-col items-center gap-1 group">
+            <div className="text-[10px] font-bold text-stone-500 group-hover:text-saffron">{BDT(d.total)}</div>
+            <div className="w-full rounded-t-lg bg-gradient-to-t from-saffron to-amber-300 relative overflow-hidden transition-all hover:from-berry hover:to-rose-400" style={{ height: `${Math.max(6, (d.total/maxSale)*160)}px` }}>
+              <div className="absolute inset-0 bg-white/0 group-hover:bg-white/10"/>
+            </div>
+            <div className="text-[11px] text-stone-500">{d.label}</div>
+          </div>)}
+        </div>
+      </Card>
+
+      {/* Top products */}
+      <Card>
+        <CardHead title="Top Sellers · Last 7 days"/>
+        <ul className="divide-y divide-stone-100 mt-2">
+          {topProducts.map(({p,qty},i) => p && <li key={p.id} className="py-2.5 flex items-center gap-3">
+            <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-amber-100 to-rose-100 grid place-items-center text-xl">{p.emoji}</div>
+            <div className="flex-1 min-w-0">
+              <div className="text-sm font-semibold truncate">{p.name}</div>
+              <div className="text-[11px] text-stone-500">{CAT.find(c=>c.id===p.cat)?.label}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-sm font-bold">{qty}</div>
+              <div className="text-[10px] text-stone-500 uppercase tracking-wider">sold</div>
+            </div>
+            <div className="text-[10px] font-bold text-stone-400 w-4">#{i+1}</div>
+          </li>)}
+        </ul>
+      </Card>
+    </div>
+
+    {/* Recent orders + upcoming celebrations */}
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <Card className="lg:col-span-2">
+        <CardHead title="Recent Orders" right={<button onClick={()=>onNav('orders')} className="text-xs font-semibold text-saffron hover:text-saffrondark">View all →</button>}/>
+        <ul className="divide-y divide-stone-100">
+          {orders.slice(0,6).map(o => <li key={o.id} className="py-3 flex items-center gap-3">
+            <StatusDot status={o.status}/>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="font-mono font-bold text-sm">#{o.id}</div>
+                <StatusPill status={o.status}/>
+              </div>
+              <div className="text-[11px] text-stone-500 truncate">{o.customer.name} · {o.customer.area} · {relTime(o.placedAt)}</div>
+            </div>
+            <div className="text-right">
+              <div className="font-bold text-sm">{BDT(o.grand)}</div>
+              <div className="text-[10px] text-stone-500 uppercase tracking-wider">{o.items.length} item{o.items.length>1?'s':''}</div>
+            </div>
+          </li>)}
+        </ul>
+      </Card>
+
+      <Card>
+        <CardHead title="Upcoming Celebrations"/>
+        <ul className="divide-y divide-stone-100">
+          {upcomingCeleb.slice(0,6).map((c,i) => {
+            const d = new Date(c.date); d.setHours(0,0,0,0);
+            const days = Math.round((d - today)/(86400*1000));
+            return <li key={i} className="py-2.5 flex items-center gap-3">
+              <div className="h-10 w-10 rounded-full bg-rose-100 text-berry grid place-items-center"><Icon.Heart size={16}/></div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold truncate">{c.person}</div>
+                <div className="text-[11px] text-stone-500">{c.occasion} · {fmtDate(c.date)}</div>
+              </div>
+              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${days<=3?'bg-berry text-white':days<=7?'bg-amber-200 text-amber-900':'bg-stone-100 text-stone-600'}`}>{days===0?'TODAY':`in ${days}d`}</span>
+            </li>;
+          })}
+        </ul>
+      </Card>
+    </div>
+
+    {/* Low stock warning */}
+    {lowStock.length > 0 && <Card>
+      <CardHead title="⚠️ Low Stock — Replenish Soon" right={<span className="text-xs text-stone-500">{lowStock.length} items below 15 units</span>}/>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 mt-2">
+        {lowStock.map(p => <div key={p.id} className="p-3 rounded-xl bg-amber-50 border border-amber-200 flex items-center gap-2">
+          <div className="text-2xl">{p.emoji}</div>
+          <div className="min-w-0">
+            <div className="text-xs font-semibold truncate">{p.name}</div>
+            <div className="text-[10px] text-amber-700 font-bold">{p.stock} {p.unit} left</div>
+          </div>
+        </div>)}
+      </div>
+    </Card>}
+  </div>;
+}
+
+function Kpi({ icon, tone, label, value, delta, suffix='', click }) {
+  const tones = { saffron:'from-amber-200 to-amber-100 text-saffrondark', emerald:'from-emerald-200 to-emerald-100 text-emerald-700', rose:'from-rose-200 to-rose-100 text-berry', amber:'from-yellow-200 to-yellow-100 text-amber-800' };
+  return <button onClick={click} disabled={!click} className={`bg-white rounded-2xl p-4 border border-stone-100 text-left hover:shadow-md transition disabled:cursor-default`}>
+    <div className="flex items-center justify-between mb-2">
+      <div className={`h-9 w-9 rounded-xl bg-gradient-to-br ${tones[tone]} grid place-items-center`}>{icon}</div>
+      {delta != null && <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full ${delta>0?'bg-emerald-100 text-emerald-700':delta<0?'bg-rose-100 text-berry':'bg-stone-100 text-stone-600'}`}>{delta>0?'+':''}{delta}{suffix}</span>}
+    </div>
+    <div className="text-[11px] uppercase tracking-wider text-stone-500 font-semibold">{label}</div>
+    <div className="font-serif font-black text-2xl text-espresso mt-0.5">{value}</div>
+  </button>;
+}
+function Card({ className='', children }) { return <div className={`bg-white rounded-2xl p-4 sm:p-5 border border-stone-100 ${className}`}>{children}</div>; }
+function CardHead({ title, right }) { return <div className="flex items-center justify-between mb-2"><div className="font-serif font-bold text-base">{title}</div>{right}</div>; }
+
+function StatusDot({ status }) {
+  const dots = { received:'bg-berry animate-pulse', packing:'bg-amber-500', out_for_delivery:'bg-sky-500', delivered:'bg-emerald-500', cancelled:'bg-stone-400' };
+  return <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${dots[status]}`}/>;
+}
+function StatusPill({ status }) {
+  const colors = { rose:'bg-rose-100 text-berry border-rose-200', amber:'bg-amber-100 text-amber-900 border-amber-200', sky:'bg-sky-100 text-sky-700 border-sky-200', emerald:'bg-emerald-100 text-emerald-700 border-emerald-200', stone:'bg-stone-100 text-stone-600 border-stone-200' };
+  return <span className={`inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${colors[STATUS[status].color]}`}>{STATUS[status].label}</span>;
+}
+
+/* ============================================================
+   Orders tab
+   ============================================================ */
+function Orders({ orders, setOrders }) {
+  const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [open, setOpen] = useState(null); // order id
+
+  const list = useMemo(() => {
+    let l = orders;
+    if (filter !== 'all') l = l.filter(o => o.status === filter);
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      l = l.filter(o => o.id.toLowerCase().includes(q) || o.customer.name.toLowerCase().includes(q) || o.customer.phone.includes(q));
+    }
+    return l;
+  }, [orders, filter, search]);
+
+  function advance(id) {
+    setOrders(prev => prev.map(o => {
+      if (o.id !== id) return o;
+      const nx = STATUS[o.status].next;
+      if (!nx) return o;
+      return { ...o, status: nx };
+    }));
+  }
+  function cancel(id) {
+    if (!confirm('Cancel this order?')) return;
+    setOrders(prev => prev.map(o => o.id===id ? {...o, status:'cancelled'} : o));
+  }
+
+  const counts = useMemo(() => {
+    const c = { all: orders.length };
+    Object.keys(STATUS).forEach(s => c[s] = orders.filter(o=>o.status===s).length);
+    return c;
+  }, [orders]);
+
+  return <div className="p-4 sm:p-6 lg:p-8 space-y-4">
+    <div>
+      <h1 className="font-serif text-3xl font-black">Orders</h1>
+      <p className="text-stone-500 text-sm mt-1">Manage incoming orders, update status, and print invoices.</p>
+    </div>
+
+    <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-2xl border border-stone-100">
+      <div className="flex gap-1 overflow-x-auto no-scrollbar flex-1 min-w-0">
+        <FilterPill active={filter==='all'} onClick={()=>setFilter('all')} label={`All · ${counts.all}`}/>
+        {Object.entries(STATUS).map(([s,meta]) => <FilterPill key={s} active={filter===s} onClick={()=>setFilter(s)} label={`${meta.label} · ${counts[s]||0}`} color={meta.color}/>)}
+      </div>
+      <div className="relative shrink-0">
+        <Icon.Search cls="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={14}/>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Order ID / phone / name" className="pl-8 pr-3 h-9 rounded-full bg-stone-100 text-xs outline-none focus:bg-white focus:ring-2 focus:ring-amber-100 w-56"/>
+      </div>
+    </div>
+
+    <div className="bg-white rounded-2xl border border-stone-100 overflow-hidden">
+      <div className="hidden md:grid grid-cols-12 gap-3 px-4 py-2.5 bg-stone-50 border-b border-stone-100 text-[10px] font-bold uppercase tracking-wider text-stone-500">
+        <div className="col-span-2">Order ID</div>
+        <div className="col-span-3">Customer</div>
+        <div className="col-span-2">Items</div>
+        <div className="col-span-2">Total</div>
+        <div className="col-span-2">Status</div>
+        <div className="col-span-1 text-right">Action</div>
+      </div>
+      <ul className="divide-y divide-stone-100">
+        {list.length === 0 && <li className="p-10 text-center text-stone-500 text-sm">No orders match your filter.</li>}
+        {list.map(o => <li key={o.id} className="p-4 md:grid md:grid-cols-12 md:gap-3 md:items-center hover:bg-stone-50 transition">
+          <div className="col-span-2 flex md:block items-start justify-between">
+            <div>
+              <div className="font-mono font-bold text-sm">#{o.id}</div>
+              <div className="text-[10px] text-stone-500">{relTime(o.placedAt)}</div>
+            </div>
+            <div className="md:hidden"><StatusPill status={o.status}/></div>
+          </div>
+          <div className="col-span-3 mt-2 md:mt-0">
+            <div className="text-sm font-semibold">{o.customer.name}</div>
+            <div className="text-[11px] text-stone-500 flex items-center gap-1.5">
+              <Icon.Phone size={11}/> {o.customer.phone}
+              {o.fulfillment==='pickup' ? <><Icon.Store size={11} cls="ml-1"/> Pickup</> : <><Icon.MapPin size={11} cls="ml-1"/> {o.customer.area}</>}
+            </div>
+          </div>
+          <div className="col-span-2 mt-2 md:mt-0 flex -space-x-1">
+            {o.items.slice(0,4).map((i,k) => <div key={k} title={`${i.name} × ${i.qty}`} className="h-8 w-8 rounded-full bg-gradient-to-br from-amber-100 to-rose-100 border-2 border-white grid place-items-center text-sm">{i.emoji}</div>)}
+            {o.items.length>4 && <div className="h-8 w-8 rounded-full bg-stone-100 border-2 border-white grid place-items-center text-[10px] font-bold text-stone-500">+{o.items.length-4}</div>}
+          </div>
+          <div className="col-span-2 mt-2 md:mt-0">
+            <div className="font-bold text-sm">{BDT(o.grand)}</div>
+            <div className="text-[10px] text-stone-500 inline-flex items-center gap-1 uppercase tracking-wider">
+              {o.payment==='bkash' ? <Icon.Wallet size={11}/> : o.payment==='card' ? <Icon.Card size={11}/> : <Icon.Bank size={11}/>} {o.payment}
+            </div>
+          </div>
+          <div className="hidden md:block col-span-2"><StatusPill status={o.status}/></div>
+          <div className="col-span-1 flex md:justify-end gap-1 mt-3 md:mt-0">
+            <button onClick={()=>setOpen(o.id)} className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-stone-100 hover:bg-stone-200">View</button>
+            {STATUS[o.status].next && <button onClick={()=>advance(o.id)} className="px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-saffron text-white hover:bg-saffrondark">→</button>}
+          </div>
+        </li>)}
+      </ul>
+    </div>
+
+    {open && <OrderDrawer order={orders.find(o=>o.id===open)} onClose={()=>setOpen(null)} advance={advance} cancel={cancel}/>}
+  </div>;
+}
+
+function FilterPill({ active, onClick, label, color }) {
+  const activeColors = { rose:'bg-berry text-white', amber:'bg-amber-500 text-white', sky:'bg-sky-500 text-white', emerald:'bg-emerald-500 text-white', stone:'bg-stone-500 text-white' };
+  const act = color && active ? activeColors[color] : active ? 'bg-espresso text-white' : 'bg-transparent text-stone-600 hover:bg-stone-100';
+  return <button onClick={onClick} className={`shrink-0 px-3 py-1.5 rounded-full text-xs font-semibold transition ${act}`}>{label}</button>;
+}
+
+function OrderDrawer({ order, onClose, advance, cancel }) {
+  if (!order) return null;
+  return <div className="fixed inset-0 z-50 flex">
+    <div className="absolute inset-0 bg-black/50" onClick={onClose}/>
+    <div className="relative ml-auto h-full w-full max-w-lg bg-white shadow-2xl flex flex-col animate-fade-in">
+      <div className="shrink-0 px-5 py-4 border-b border-stone-100 flex items-center justify-between">
+        <div>
+          <div className="font-mono font-bold">#{order.id}</div>
+          <div className="text-xs text-stone-500">{fmtDT(order.placedAt)}</div>
+        </div>
+        <button onClick={onClose} className="h-9 w-9 grid place-items-center rounded-full hover:bg-stone-100"><Icon.X size={18}/></button>
+      </div>
+      <div className="flex-1 overflow-y-auto p-5 space-y-4">
+        <div className="flex items-center justify-between">
+          <StatusPill status={order.status}/>
+          <div className="text-xs text-stone-500 inline-flex items-center gap-1.5">
+            {order.payment==='bkash' ? <Icon.Wallet size={14}/> : order.payment==='card' ? <Icon.Card size={14}/> : <Icon.Bank size={14}/>} Payment: <span className="font-semibold text-espresso uppercase">{order.payment}</span>
+          </div>
+        </div>
+
+        <div className="bg-stone-50 rounded-xl p-4 text-sm">
+          <div className="font-semibold">{order.customer.name}</div>
+          <div className="text-stone-600 text-xs flex items-center gap-1.5 mt-1"><Icon.Phone size={12}/> {order.customer.phone}</div>
+          <div className="text-stone-600 text-xs flex items-center gap-1.5 mt-1">
+            {order.fulfillment==='pickup' ? <><Icon.Store size={12}/> In-Store Pickup · Dhanmondi Counter</> : <><Icon.Truck size={12}/> Delivery to {order.customer.area}</>}
+          </div>
+          {order.fulfillment==='delivery' && <div className="text-stone-500 text-xs mt-1 pl-5">{order.customer.addr}</div>}
+          {order.note && <div className="mt-2 text-xs italic text-berry bg-rose-50 border border-rose-100 px-2 py-1.5 rounded-lg">✍️ "{order.note}"</div>}
+        </div>
+
+        <div>
+          <div className="text-xs font-bold uppercase tracking-wider text-stone-500 mb-2">Items</div>
+          <ul className="divide-y divide-stone-100">
+            {order.items.map((i,k) => <li key={k} className="py-2.5 flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-gradient-to-br from-amber-100 to-rose-100 grid place-items-center text-xl">{i.emoji}</div>
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-semibold truncate">{i.name}</div>
+                <div className="text-[11px] text-stone-500">{i.qty} × {BDT(i.unitPrice)} · {i.unit}</div>
+              </div>
+              <div className="text-sm font-bold">{BDT(i.unitPrice * i.qty)}</div>
+            </li>)}
+          </ul>
+        </div>
+
+        <div className="bg-stone-50 rounded-xl p-4 text-sm space-y-1">
+          <Row label="Subtotal" value={BDT(order.subtotal)}/>
+          {order.bundle>0 && <Row label="Bundle −15%" value={`−${BDT(order.bundle)}`} tone="berry"/>}
+          {order.packaging>0 && <Row label="Cold-chain pack" value={BDT(order.packaging)} muted/>}
+          <Row label={order.fulfillment==='pickup'?'Pickup':'Delivery'} value={order.deliveryFee===0?'FREE':BDT(order.deliveryFee)} muted/>
+          <div className="pt-2 border-t border-stone-200 flex items-center justify-between">
+            <div className="font-serif font-bold">Grand Total</div>
+            <div className="font-serif font-black text-xl">{BDT(order.grand)}</div>
+          </div>
+        </div>
+      </div>
+      <div className="shrink-0 border-t border-stone-100 p-4 flex items-center gap-2">
+        {order.status !== 'cancelled' && order.status !== 'delivered' && <>
+          <button onClick={()=>cancel(order.id)} className="px-3 py-2 rounded-full text-xs font-semibold text-berry border border-rose-200 hover:bg-rose-50">Cancel</button>
+          {STATUS[order.status].next && <button onClick={()=>advance(order.id)} className="flex-1 bg-saffron text-white px-4 py-2 rounded-full text-sm font-semibold hover:bg-saffrondark">
+            Mark as {STATUS[STATUS[order.status].next].label} →
+          </button>}
+        </>}
+        <a href={`https://wa.me/${order.customer.phone.replace(/\D/g,'').replace(/^0/,'88')}?text=${encodeURIComponent(`Hello ${order.customer.name}, your Mishti & More order #${order.id} is ${STATUS[order.status].label.toLowerCase()}.`)}`} target="_blank" className="px-3 py-2 rounded-full text-xs font-semibold bg-emerald-500 text-white hover:bg-emerald-600 inline-flex items-center gap-1"><Icon.Whats size={13}/> Notify</a>
+      </div>
+    </div>
+  </div>;
+}
+
+function Row({ label, value, tone, muted }) {
+  const tones = { base:'text-espresso', berry:'text-berry', emerald:'text-emerald-700' };
+  return <div className="flex items-center justify-between"><span className={muted?'text-stone-500':''}>{label}</span><span className={`font-semibold ${tones[tone||'base']}`}>{value}</span></div>;
+}
+
+/* ============================================================
+   Products tab
+   ============================================================ */
+function Products({ products, setProducts }) {
+  const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [edit, setEdit] = useState(null);
+
+  const list = useMemo(() => {
+    let l = products;
+    if (filter !== 'all') l = l.filter(p => p.cat === filter);
+    if (search.trim()) l = l.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+    return l;
+  }, [products, filter, search]);
+
+  function updateStock(id, delta) {
+    setProducts(prev => prev.map(p => p.id===id ? {...p, stock: Math.max(0, p.stock + delta)} : p));
+  }
+  function savePrice(id, price) {
+    setProducts(prev => prev.map(p => p.id===id ? {...p, price: parseInt(price,10) || p.price} : p));
+    setEdit(null);
+  }
+
+  return <div className="p-4 sm:p-6 lg:p-8 space-y-4">
+    <div className="flex items-end justify-between flex-wrap gap-2">
+      <div>
+        <h1 className="font-serif text-3xl font-black">Products &amp; Inventory</h1>
+        <p className="text-stone-500 text-sm mt-1">Adjust stock levels and prices. Low-stock items appear flagged.</p>
+      </div>
+      <button className="inline-flex items-center gap-1.5 bg-espresso text-cream px-4 py-2 rounded-full text-sm font-semibold hover:bg-stone-800"><Icon.Plus size={15}/> Add Product</button>
+    </div>
+
+    <div className="flex flex-wrap items-center gap-2 bg-white p-2 rounded-2xl border border-stone-100">
+      <div className="flex gap-1 overflow-x-auto no-scrollbar flex-1 min-w-0">
+        <FilterPill active={filter==='all'} onClick={()=>setFilter('all')} label={`All · ${products.length}`}/>
+        {CAT.map(c => <FilterPill key={c.id} active={filter===c.id} onClick={()=>setFilter(c.id)} label={`${c.emoji} ${c.label} · ${products.filter(p=>p.cat===c.id).length}`}/>)}
+      </div>
+      <div className="relative shrink-0">
+        <Icon.Search cls="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={14}/>
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search products" className="pl-8 pr-3 h-9 rounded-full bg-stone-100 text-xs outline-none focus:bg-white focus:ring-2 focus:ring-amber-100 w-56"/>
+      </div>
+    </div>
+
+    <div className="bg-white rounded-2xl border border-stone-100 overflow-hidden">
+      <div className="hidden md:grid grid-cols-12 gap-3 px-4 py-2.5 bg-stone-50 border-b border-stone-100 text-[10px] font-bold uppercase tracking-wider text-stone-500">
+        <div className="col-span-5">Product</div>
+        <div className="col-span-2">Category</div>
+        <div className="col-span-2">Price</div>
+        <div className="col-span-3">Stock</div>
+      </div>
+      <ul className="divide-y divide-stone-100">
+        {list.map(p => <li key={p.id} className="p-4 md:grid md:grid-cols-12 md:gap-3 md:items-center hover:bg-stone-50">
+          <div className="col-span-5 flex items-center gap-3">
+            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-amber-100 to-rose-100 grid place-items-center text-2xl shrink-0">{p.emoji}</div>
+            <div className="min-w-0">
+              <div className="font-semibold text-sm truncate">{p.name}</div>
+              <div className="text-[11px] text-stone-500">ID: {p.id} · {p.unit}</div>
+            </div>
+          </div>
+          <div className="col-span-2 mt-2 md:mt-0 text-xs text-stone-600">{CAT.find(c=>c.id===p.cat)?.label}</div>
+          <div className="col-span-2 mt-2 md:mt-0">
+            {edit === p.id ? <InlinePrice price={p.price} onSave={v=>savePrice(p.id, v)} onCancel={()=>setEdit(null)}/>
+              : <button onClick={()=>setEdit(p.id)} className="inline-flex items-center gap-1 font-bold text-sm hover:text-saffron group">{BDT(p.price)} <Icon.Edit size={11} cls="opacity-0 group-hover:opacity-100 transition"/></button>}
+            <div className="text-[10px] text-stone-400">per {p.unit}</div>
+          </div>
+          <div className="col-span-3 mt-3 md:mt-0 flex items-center gap-2">
+            <div className="flex items-center rounded-full bg-amber-50 border border-amber-200 overflow-hidden">
+              <button onClick={()=>updateStock(p.id,-1)} className="h-7 w-7 grid place-items-center hover:bg-amber-100 text-saffrondark"><Icon.Minus size={12}/></button>
+              <span className={`min-w-[40px] text-center text-sm font-bold ${p.stock<15?'text-berry':'text-espresso'}`}>{p.stock}</span>
+              <button onClick={()=>updateStock(p.id,1)} className="h-7 w-7 grid place-items-center hover:bg-amber-100 text-saffrondark"><Icon.Plus size={12}/></button>
+            </div>
+            {p.stock < 15 && <span className="text-[10px] font-bold text-berry uppercase">Low</span>}
+            {p.stock === 0 && <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-stone-800 text-white">Out</span>}
+          </div>
+        </li>)}
+      </ul>
+    </div>
+  </div>;
+}
+
+function InlinePrice({ price, onSave, onCancel }) {
+  const [v, setV] = useState(String(price));
+  const ref = useRef(null);
+  useEffect(() => { ref.current?.focus(); ref.current?.select(); }, []);
+  return <div className="inline-flex items-center gap-1">
+    <span className="text-xs text-stone-500">৳</span>
+    <input ref={ref} value={v} onChange={e=>setV(e.target.value.replace(/\D/g,''))} onKeyDown={e=>{ if (e.key==='Enter') onSave(v); if (e.key==='Escape') onCancel(); }} className="w-16 px-1.5 py-0.5 rounded border border-amber-300 text-sm font-bold outline-none focus:ring-2 focus:ring-amber-100"/>
+    <button onClick={()=>onSave(v)} className="h-6 w-6 grid place-items-center text-emerald-600 hover:bg-emerald-50 rounded"><Icon.Check size={14}/></button>
+    <button onClick={onCancel} className="h-6 w-6 grid place-items-center text-stone-400 hover:bg-stone-100 rounded"><Icon.X size={14}/></button>
+  </div>;
+}
+
+/* ============================================================
+   Celebration Club tab
+   ============================================================ */
+function Celeb({ celeb, setCeleb }) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const sorted = [...celeb].sort((a,b) => new Date(a.date) - new Date(b.date));
+  function remove(i) { if (!confirm('Remove this celebration entry?')) return; setCeleb(prev => prev.filter((_,k)=>k!==i)); }
+  function sendReminder(c) { window.open(`https://wa.me/${c.phone.replace(/\D/g,'').replace(/^0/,'88')}?text=${encodeURIComponent(`Hi! It's almost ${c.person}'s ${c.occasion.toLowerCase()} on ${c.date}. Get 10% off any Mishti & More birthday combo as our gift — show this message at checkout. 🎂`)}`,'_blank'); }
+
+  const upcoming7 = sorted.filter(c => { const d=new Date(c.date); return (d-today)/(86400*1000) <= 7 && (d-today)/(86400*1000) >= 0; });
+  const upcoming30 = sorted.filter(c => { const d=new Date(c.date); const diff=(d-today)/(86400*1000); return diff > 7 && diff <= 30; });
+  const later = sorted.filter(c => { const d=new Date(c.date); return (d-today)/(86400*1000) > 30; });
+
+  return <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+    <div className="flex items-end justify-between flex-wrap gap-2">
+      <div>
+        <h1 className="font-serif text-3xl font-black">Celebration Club CRM</h1>
+        <p className="text-stone-500 text-sm mt-1">Birthdays &amp; anniversaries shared by customers. Send 10%-off reminders in one click.</p>
+      </div>
+      <button className="inline-flex items-center gap-1.5 bg-espresso text-cream px-4 py-2 rounded-full text-sm font-semibold hover:bg-stone-800"><Icon.Plus size={15}/> Add Entry</button>
+    </div>
+
+    <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+      <Kpi icon={<Icon.Heart size={18}/>} tone="rose" label="Total Members" value={celeb.length}/>
+      <Kpi icon={<Icon.Clock size={18}/>} tone="amber" label="Next 7 Days" value={upcoming7.length}/>
+      <Kpi icon={<Icon.Gift size={18}/>} tone="emerald" label="Next 30 Days" value={upcoming30.length + upcoming7.length}/>
+    </div>
+
+    {[['🎯 This Week', upcoming7],['📅 This Month', upcoming30],['⏳ Later', later]].map(([title, arr]) => arr.length > 0 && <Card key={title}>
+      <CardHead title={`${title} · ${arr.length}`}/>
+      <ul className="divide-y divide-stone-100">
+        {arr.map((c,i) => {
+          const d = new Date(c.date);
+          const days = Math.round((d - today)/(86400*1000));
+          return <li key={c.person+i} className="py-3 flex items-center gap-3">
+            <div className="h-11 w-11 rounded-full bg-gradient-to-br from-rose-100 to-amber-100 text-berry grid place-items-center"><Icon.Heart size={18}/></div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="font-semibold">{c.person}</div>
+                <span className="text-[10px] font-bold uppercase tracking-wider bg-rose-100 text-berry px-1.5 py-0.5 rounded-full">{c.occasion}</span>
+              </div>
+              <div className="text-xs text-stone-500 flex items-center gap-2 mt-0.5"><Icon.Phone size={11}/> {c.phone}</div>
+            </div>
+            <div className="text-right">
+              <div className="text-sm font-bold">{fmtDate(c.date)}</div>
+              <div className={`text-[10px] font-bold ${days<=3?'text-berry':days<=7?'text-amber-700':'text-stone-500'}`}>{days===0?'TODAY':`in ${days}d`}</div>
+            </div>
+            <button onClick={()=>sendReminder(c)} title="Send WhatsApp reminder" className="h-9 w-9 grid place-items-center rounded-full bg-emerald-500 text-white hover:bg-emerald-600"><Icon.Whats size={16}/></button>
+            <button onClick={()=>remove(celeb.indexOf(c))} title="Remove" className="h-9 w-9 grid place-items-center rounded-full text-stone-400 hover:bg-rose-50 hover:text-berry"><Icon.Trash size={15}/></button>
+          </li>;
+        })}
+      </ul>
+    </Card>)}
+  </div>;
+}
+
+/* ============================================================
+   Walk-in POS tab
+   ============================================================ */
+function Pos({ products, setProducts, orders, setOrders }) {
+  const [filter, setFilter] = useState('all');
+  const [search, setSearch] = useState('');
+  const [tray, setTray] = useState([]);
+  const [paid, setPaid] = useState(null);
+
+  const list = useMemo(() => {
+    let l = products.filter(p => p.stock > 0);
+    if (filter!=='all') l = l.filter(p => p.cat===filter);
+    if (search.trim()) l = l.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+    return l;
+  }, [products, filter, search]);
+
+  function add(p) { setTray(prev => {
+    const idx = prev.findIndex(x=>x.id===p.id);
+    if (idx>=0) { const n=[...prev]; n[idx]={...n[idx], qty:n[idx].qty+1}; return n; }
+    return [...prev, { id:p.id, name:p.name, emoji:p.emoji, unitPrice:p.price, unit:p.unit, qty:1 }];
+  }); }
+  function dec(id) { setTray(prev => prev.flatMap(x => x.id===id ? (x.qty>1?[{...x, qty:x.qty-1}]:[]) : [x])); }
+  function inc(id) { setTray(prev => prev.map(x => x.id===id ? {...x, qty:x.qty+1} : x)); }
+  function remove(id) { setTray(prev => prev.filter(x => x.id!==id)); }
+
+  const subtotal = tray.reduce((s,i)=>s+i.unitPrice*i.qty, 0);
+
+  function checkout(method) {
+    if (tray.length === 0) return;
+    const now = new Date();
+    const id = `MM-2026-${(9000 + Math.floor(Math.random()*999)).toString()}`;
+    const order = {
+      id, placedAt: now.toISOString(),
+      customer: { name:'Walk-in Customer', phone:'—', area:'—', addr:'Dhanmondi counter' },
+      fulfillment:'pickup', items: tray.map(i => ({ ...i })), subtotal, bundle:0, deliveryFee:0, packaging:0, grand:subtotal,
+      status:'delivered', payment: method, note:'POS counter sale',
+    };
+    setOrders(prev => [order, ...prev]);
+    setProducts(prev => prev.map(p => {
+      const t = tray.find(x=>x.id===p.id);
+      return t ? {...p, stock: Math.max(0, p.stock - t.qty)} : p;
+    }));
+    setPaid({ order, method });
+    setTray([]);
+  }
+
+  return <div className="flex flex-col lg:flex-row h-full lg:h-[calc(100vh-4rem)]">
+    {/* Product grid */}
+    <div className="flex-1 p-4 sm:p-6 overflow-y-auto">
+      <div className="flex items-end justify-between mb-4 flex-wrap gap-2">
+        <div>
+          <h1 className="font-serif text-2xl font-black">Walk-in POS</h1>
+          <p className="text-stone-500 text-xs mt-1">Tap items to add to the counter tray. Stock auto-decrements on sale.</p>
+        </div>
+        <div className="relative">
+          <Icon.Search cls="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={14}/>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search" className="pl-8 pr-3 h-9 rounded-full bg-white border border-stone-200 text-xs outline-none focus:ring-2 focus:ring-amber-100 w-56"/>
+        </div>
+      </div>
+      <div className="flex gap-1 overflow-x-auto no-scrollbar mb-3">
+        <FilterPill active={filter==='all'} onClick={()=>setFilter('all')} label="All"/>
+        {CAT.map(c => <FilterPill key={c.id} active={filter===c.id} onClick={()=>setFilter(c.id)} label={`${c.emoji} ${c.label}`}/>)}
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5">
+        {list.map(p => <button key={p.id} onClick={()=>add(p)} className="bg-white border border-stone-100 rounded-2xl p-3 text-left hover:border-saffron hover:shadow-md active:scale-95 transition">
+          <div className="text-3xl mb-1">{p.emoji}</div>
+          <div className="text-xs font-semibold leading-snug line-clamp-2 h-8">{p.name}</div>
+          <div className="mt-1.5 flex items-end justify-between">
+            <span className="font-bold text-sm">{BDT(p.price)}</span>
+            <span className={`text-[10px] font-bold ${p.stock<15?'text-berry':'text-stone-400'}`}>{p.stock} left</span>
+          </div>
+        </button>)}
+      </div>
+    </div>
+
+    {/* Tray */}
+    <aside className="w-full lg:w-96 lg:border-l border-t lg:border-t-0 border-stone-200 bg-white flex flex-col">
+      <div className="px-5 py-4 border-b border-stone-100">
+        <div className="flex items-center gap-2"><Icon.Pos size={18} cls="text-saffron"/><div className="font-serif font-bold">Counter Tray</div></div>
+        <div className="text-xs text-stone-500 mt-0.5">{tray.length} line{tray.length!==1?'s':''} · {tray.reduce((s,i)=>s+i.qty,0)} items</div>
+      </div>
+      <div className="flex-1 overflow-y-auto p-3">
+        {tray.length === 0 && <div className="text-center text-stone-400 p-10 text-sm">Tap products to add</div>}
+        {tray.map(i => <div key={i.id} className="flex items-center gap-2 py-2 border-b border-stone-50">
+          <div className="text-2xl">{i.emoji}</div>
+          <div className="flex-1 min-w-0">
+            <div className="text-xs font-semibold truncate">{i.name}</div>
+            <div className="text-[10px] text-stone-500">{BDT(i.unitPrice)} · {i.unit}</div>
+          </div>
+          <div className="inline-flex items-center rounded-full bg-amber-50 border border-amber-200 overflow-hidden">
+            <button onClick={()=>dec(i.id)} className="h-6 w-6 grid place-items-center text-saffrondark hover:bg-amber-100"><Icon.Minus size={11}/></button>
+            <span className="min-w-[22px] text-center text-xs font-bold">{i.qty}</span>
+            <button onClick={()=>inc(i.id)} className="h-6 w-6 grid place-items-center text-saffrondark hover:bg-amber-100"><Icon.Plus size={11}/></button>
+          </div>
+          <div className="w-14 text-right text-xs font-bold">{BDT(i.unitPrice*i.qty)}</div>
+          <button onClick={()=>remove(i.id)} className="text-stone-300 hover:text-berry"><Icon.X size={14}/></button>
+        </div>)}
+      </div>
+      <div className="border-t border-stone-100 p-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <div className="font-serif font-bold">Total</div>
+          <div className="font-serif font-black text-2xl">{BDT(subtotal)}</div>
+        </div>
+        <div className="grid grid-cols-3 gap-2">
+          <button disabled={tray.length===0} onClick={()=>checkout('cash')} className="bg-emerald-500 text-white py-2.5 rounded-xl text-xs font-semibold disabled:opacity-40 hover:bg-emerald-600 inline-flex flex-col items-center gap-0.5"><Icon.Bank size={14}/> Cash</button>
+          <button disabled={tray.length===0} onClick={()=>checkout('bkash')} className="bg-pink-500 text-white py-2.5 rounded-xl text-xs font-semibold disabled:opacity-40 hover:bg-pink-600 inline-flex flex-col items-center gap-0.5"><Icon.Wallet size={14}/> bKash</button>
+          <button disabled={tray.length===0} onClick={()=>checkout('card')} className="bg-espresso text-white py-2.5 rounded-xl text-xs font-semibold disabled:opacity-40 hover:bg-stone-800 inline-flex flex-col items-center gap-0.5"><Icon.Card size={14}/> Card</button>
+        </div>
+        {tray.length > 0 && <button onClick={()=>setTray([])} className="w-full text-xs text-stone-500 hover:text-berry">Clear tray</button>}
+      </div>
+    </aside>
+
+    {paid && <div className="fixed inset-0 z-50 grid place-items-center p-4">
+      <div className="absolute inset-0 bg-black/50" onClick={()=>setPaid(null)}/>
+      <div className="relative bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 animate-pop">
+        <div className="mx-auto h-16 w-16 rounded-full bg-emerald-100 text-emerald-600 grid place-items-center animate-pop"><Icon.Check size={36}/></div>
+        <div className="text-center mt-3">
+          <div className="font-serif font-black text-xl">Sale Completed</div>
+          <div className="text-xs text-stone-500">Order <span className="font-mono font-bold">#{paid.order.id}</span></div>
+          <div className="mt-3 font-serif font-black text-3xl text-saffrondark">{BDT(paid.order.grand)}</div>
+          <div className="text-[11px] uppercase tracking-wider text-stone-500">paid via {paid.method}</div>
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-2">
+          <button onClick={()=>window.print()} className="bg-stone-100 text-espresso py-2.5 rounded-xl text-sm font-semibold inline-flex items-center justify-center gap-1.5"><Icon.Printer size={15}/> Print</button>
+          <button onClick={()=>setPaid(null)} className="bg-espresso text-cream py-2.5 rounded-xl text-sm font-semibold">Next Customer</button>
+        </div>
+      </div>
+    </div>}
+  </div>;
+}
+
+/* ============================================================
+   Reports tab
+   ============================================================ */
+function Reports({ orders }) {
+  const today = new Date(); today.setHours(0,0,0,0);
+  const alive = orders.filter(o => o.status !== 'cancelled');
+
+  const byCategory = useMemo(() => {
+    const m = {};
+    CAT.forEach(c => m[c.id] = { label:c.label, emoji:c.emoji, revenue:0, qty:0 });
+    alive.forEach(o => o.items.forEach(i => {
+      const p = PRODUCTS_SEED.find(x=>x.id===i.id); if (!p) return;
+      m[p.cat].revenue += i.unitPrice * i.qty;
+      m[p.cat].qty += i.qty;
+    }));
+    return Object.entries(m).sort((a,b)=>b[1].revenue-a[1].revenue);
+  }, [alive]);
+
+  const byPayment = useMemo(() => {
+    const m = { bkash:0, card:0, cod:0, cash:0 };
+    alive.forEach(o => { m[o.payment] = (m[o.payment]||0) + o.grand; });
+    return m;
+  }, [alive]);
+
+  const byArea = useMemo(() => {
+    const m = {};
+    alive.forEach(o => { const a = o.customer.area; if (a==='—') return; m[a] = (m[a]||0) + o.grand; });
+    return Object.entries(m).sort((a,b)=>b[1]-a[1]);
+  }, [alive]);
+
+  const total = alive.reduce((s,o)=>s+o.grand,0);
+  const maxCat = Math.max(...byCategory.map(([,v])=>v.revenue), 1);
+  const maxArea = Math.max(...byArea.map(([,v])=>v), 1);
+  const paymentTotal = Object.values(byPayment).reduce((s,v)=>s+v, 0);
+
+  return <div className="p-4 sm:p-6 lg:p-8 space-y-6">
+    <div>
+      <h1 className="font-serif text-3xl font-black">Reports</h1>
+      <p className="text-stone-500 text-sm mt-1">Sales breakdown across categories, payment methods and delivery zones.</p>
+    </div>
+
+    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+      <Kpi icon={<Icon.Wallet size={18}/>} tone="emerald" label="Total Revenue" value={BDT(total)}/>
+      <Kpi icon={<Icon.Cart size={18}/>} tone="saffron" label="Orders" value={alive.length}/>
+      <Kpi icon={<Icon.Up size={18}/>} tone="rose" label="Avg Order Value" value={BDT(alive.length?total/alive.length:0)}/>
+      <Kpi icon={<Icon.Truck size={18}/>} tone="amber" label="Delivery Orders" value={alive.filter(o=>o.fulfillment==='delivery').length}/>
+    </div>
+
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+      <Card>
+        <CardHead title="Revenue by Category"/>
+        <div className="space-y-2 mt-2">
+          {byCategory.map(([id,v]) => <div key={id}>
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="font-semibold">{v.emoji} {v.label}</span>
+              <span className="font-bold">{BDT(v.revenue)} <span className="text-stone-400 font-normal">· {v.qty} items</span></span>
+            </div>
+            <div className="h-2 rounded-full bg-stone-100 overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-saffron to-berry" style={{ width:`${(v.revenue/maxCat)*100}%` }}/>
+            </div>
+          </div>)}
+        </div>
+      </Card>
+
+      <Card>
+        <CardHead title="Payment Methods"/>
+        <div className="space-y-3 mt-3">
+          {[
+            { id:'bkash', label:'bKash / Nagad', color:'bg-pink-500', icon:<Icon.Wallet size={14}/> },
+            { id:'card',  label:'Credit / Debit Card', color:'bg-espresso', icon:<Icon.Card size={14}/> },
+            { id:'cod',   label:'Cash on Delivery',    color:'bg-amber-500', icon:<Icon.Bank size={14}/> },
+            { id:'cash',  label:'Counter Cash (POS)',  color:'bg-emerald-500', icon:<Icon.Bank size={14}/> },
+          ].map(m => <div key={m.id}>
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="font-semibold inline-flex items-center gap-1.5">{m.icon} {m.label}</span>
+              <span className="font-bold">{BDT(byPayment[m.id]||0)} <span className="text-stone-400 font-normal">· {paymentTotal?Math.round((byPayment[m.id]||0)/paymentTotal*100):0}%</span></span>
+            </div>
+            <div className="h-2 rounded-full bg-stone-100 overflow-hidden">
+              <div className={`h-full ${m.color}`} style={{ width:`${paymentTotal?(byPayment[m.id]||0)/paymentTotal*100:0}%` }}/>
+            </div>
+          </div>)}
+        </div>
+      </Card>
+
+      <Card className="lg:col-span-2">
+        <CardHead title="Revenue by Delivery Area"/>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+          {byArea.map(([area,rev]) => <div key={area}>
+            <div className="flex items-center justify-between text-xs mb-1">
+              <span className="font-semibold inline-flex items-center gap-1.5"><Icon.MapPin size={12}/> {area}</span>
+              <span className="font-bold">{BDT(rev)}</span>
+            </div>
+            <div className="h-2 rounded-full bg-stone-100 overflow-hidden">
+              <div className="h-full bg-gradient-to-r from-sky-400 to-saffron" style={{ width:`${(rev/maxArea)*100}%` }}/>
+            </div>
+          </div>)}
+        </div>
+      </Card>
+    </div>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
