@@ -1,0 +1,1247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Mishti &amp; More — মি ষ্টি ও ম োর | Hybrid Confectionery, Bakery &amp; Sweetmeat Store, Dhaka</title>
+<meta name="description" content="One-stop boutique confectionery in Dhaka — traditional mishti, birthday cakes, bakery, ice cream, snacks, party supplies. Home delivery &amp; in-store pickup." />
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@500;700;900&family=Inter:wght@300;400;500;600;700&family=Hind+Siliguri:wght@500;700&display=swap" rel="stylesheet">
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          cream: '#FFFDF9',
+          saffron: '#D97706',
+          saffrondark: '#B45309',
+          espresso: '#1C1917',
+          berry: '#E11D48',
+        },
+        fontFamily: {
+          serif: ['Playfair Display', 'serif'],
+          sans: ['Inter', 'system-ui', 'sans-serif'],
+          bn: ['Hind Siliguri', 'Inter', 'sans-serif'],
+        },
+      },
+    },
+  };
+</script>
+<style>
+  html, body { background: #FFFDF9; color: #1C1917; }
+  body { font-family: 'Inter', system-ui, sans-serif; }
+  .font-bn { font-family: 'Hind Siliguri', 'Inter', sans-serif; }
+  .glass-counter { background: linear-gradient(180deg, #fffdf9 0%, #fff6e6 100%); }
+  .hero-gradient { background: radial-gradient(1200px 400px at 20% 0%, #fde68a 0%, rgba(253,230,138,0) 60%),
+                                radial-gradient(900px 400px at 90% 20%, #fecdd3 0%, rgba(254,205,211,0) 55%),
+                                linear-gradient(135deg, #fffdf9 0%, #fff6e6 100%); }
+  .scrollbar-thin::-webkit-scrollbar { height: 6px; width: 6px; }
+  .scrollbar-thin::-webkit-scrollbar-thumb { background: #e7e5e4; border-radius: 4px; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  @keyframes pop { 0%{transform:scale(.7);opacity:0} 60%{transform:scale(1.15)} 100%{transform:scale(1);opacity:1} }
+  .animate-pop { animation: pop .35s ease-out; }
+  @keyframes slide-in { from{transform:translateX(100%)} to{transform:translateX(0)} }
+  .animate-slide-in { animation: slide-in .35s cubic-bezier(.22,.61,.36,1); }
+  @keyframes bounce-slow { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+  .animate-bounce-slow { animation: bounce-slow 2.6s ease-in-out infinite; }
+  @media print {
+    body * { visibility: hidden; }
+    #receipt-print, #receipt-print * { visibility: visible; }
+    #receipt-print { position: absolute; left: 0; top: 0; width: 100%; padding: 24px; }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useMemo, useEffect, useRef, Fragment } = React;
+
+/* ============================================================
+   Inline SVG icon set (lucide-style strokes, 1.5px)
+   ============================================================ */
+const I = ({ d, size = 20, cls = '', fill = 'none', stroke = 'currentColor', sw = 1.75, children, viewBox = '0 0 24 24' }) =>
+  <svg xmlns="http://www.w3.org/2000/svg" width={size} height={size} viewBox={viewBox} fill={fill} stroke={stroke} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" className={cls}>{children || <path d={d} />}</svg>;
+
+const Icon = {
+  Cart:    (p)=> <I {...p}><circle cx="9" cy="21" r="1.5"/><circle cx="18" cy="21" r="1.5"/><path d="M2.5 3h2.4l2.9 13.3a2 2 0 0 0 2 1.7h8.2a2 2 0 0 0 2-1.6l1.7-8.4H6.2"/></I>,
+  Search:  (p)=> <I {...p}><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></I>,
+  Plus:    (p)=> <I {...p}><path d="M12 5v14M5 12h14"/></I>,
+  Minus:   (p)=> <I {...p}><path d="M5 12h14"/></I>,
+  X:       (p)=> <I {...p}><path d="M18 6 6 18M6 6l12 12"/></I>,
+  Trash:   (p)=> <I {...p}><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></I>,
+  Check:   (p)=> <I {...p}><path d="M20 6 9 17l-5-5"/></I>,
+  Star:    (p)=> <I {...p}><path d="M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.9L12 17.8 5.8 21l1.2-6.9-5-4.9 6.9-1z"/></I>,
+  Truck:   (p)=> <I {...p}><path d="M1 3h15v13H1zM16 8h4l3 3v5h-7"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="19" r="2"/></I>,
+  Store:   (p)=> <I {...p}><path d="M3 9l1.5-5h15L21 9"/><path d="M4 9v10h16V9"/><path d="M9 22V14h6v8"/></I>,
+  Gift:    (p)=> <I {...p}><path d="M20 12v10H4V12M2 7h20v5H2zM12 22V7M12 7H8a2.5 2.5 0 1 1 0-5c3 0 4 5 4 5zM12 7h4a2.5 2.5 0 1 0 0-5c-3 0-4 5-4 5z"/></I>,
+  Cake:    (p)=> <I {...p}><path d="M20 21H4v-7a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2zM4 16s1.5-2 4-2 4 2 4 2 1.5-2 4-2 4 2 4 2M2 21h20M7 8V2M12 8V2M17 8V2"/></I>,
+  Phone:   (p)=> <I {...p}><path d="M22 16.9v3a2 2 0 0 1-2.2 2 19.8 19.8 0 0 1-8.6-3.1 19.5 19.5 0 0 1-6-6A19.8 19.8 0 0 1 2.1 4.2 2 2 0 0 1 4.1 2h3a2 2 0 0 1 2 1.7c.1.9.3 1.8.6 2.7a2 2 0 0 1-.4 2.1L8 9.9a16 16 0 0 0 6 6l1.4-1.4a2 2 0 0 1 2.1-.4c.9.3 1.8.5 2.7.6a2 2 0 0 1 1.7 2z"/></I>,
+  MapPin:  (p)=> <I {...p}><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></I>,
+  Clock:   (p)=> <I {...p}><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></I>,
+  Tag:     (p)=> <I {...p}><path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0L3 13V3h10l7.6 7.6a2 2 0 0 1 0 2.8z"/><circle cx="7.5" cy="7.5" r="1.5"/></I>,
+  Snowflake:(p)=> <I {...p}><path d="M12 2v20M2 12h20M4 4l16 16M20 4 4 20M12 6l2-2M12 6l-2-2M12 18l2 2M12 18l-2 2M6 12l-2 2M6 12l-2-2M18 12l2 2M18 12l2-2"/></I>,
+  Sparkles:(p)=> <I {...p}><path d="M12 2v6M12 16v6M2 12h6M16 12h6M5 5l4 4M15 15l4 4M19 5l-4 4M9 15l-4 4"/></I>,
+  Heart:   (p)=> <I {...p}><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 1 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8z"/></I>,
+  Printer: (p)=> <I {...p}><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></I>,
+  WhatsApp:(p)=> <I {...p}><path d="M20.5 3.5A11 11 0 0 0 3.6 17.2L2 22l4.9-1.6A11 11 0 1 0 20.5 3.5z"/><path d="M7.5 8.5c0-.5.5-1 1-1h1l1 2.5-1 1a6 6 0 0 0 3.5 3.5l1-1 2.5 1v1c0 .6-.4 1-1 1A8 8 0 0 1 7.5 8.5z"/></I>,
+  Chevron: (p)=> <I {...p}><path d="M9 6l6 6-6 6"/></I>,
+  Trophy:  (p)=> <I {...p}><path d="M8 21h8M12 17v4M17 4h3v3a4 4 0 0 1-4 4M7 4H4v3a4 4 0 0 0 4 4M7 4h10v7a5 5 0 0 1-10 0z"/></I>,
+  CreditCard:(p)=> <I {...p}><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20M6 15h4"/></I>,
+  Wallet:  (p)=> <I {...p}><path d="M3 7h18v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2zM3 7V5a2 2 0 0 1 2-2h11l3 4"/><circle cx="17" cy="14" r="1.5"/></I>,
+  Banknote:(p)=> <I {...p}><rect x="2" y="6" width="20" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/><path d="M6 10v.01M18 14v.01"/></I>,
+  Flame:   (p)=> <I {...p}><path d="M12 22c4 0 7-2.8 7-7 0-3-2-5-3.5-7.5C14.2 5.3 14 3 14 2c0 0-5 3-5 9 0 1 .5 2 1.5 2.5C9 14 7 15 7 17c0 3 2 5 5 5z"/></I>,
+  Calendar:(p)=> <I {...p}><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></I>,
+};
+
+/* ============================================================
+   Product catalog (31 items across 7 categories)
+   ============================================================ */
+const CAT = [
+  { id: 'combo',   label: 'Celebration Combos', icon: Icon.Gift, hero: '🎁' },
+  { id: 'mishti',  label: 'Traditional Mishti', icon: Icon.Sparkles, hero: '🍬' },
+  { id: 'bakery',  label: 'Bakery & Cakes',     icon: Icon.Cake, hero: '🎂' },
+  { id: 'snacks',  label: 'Savory Snacks',      icon: Icon.Flame, hero: '🥟' },
+  { id: 'icecream',label: 'Ice Cream & Frozen', icon: Icon.Snowflake, hero: '🍦' },
+  { id: 'pantry',  label: 'Drinks, Chips & Chocolates', icon: Icon.Wallet, hero: '🧃' },
+  { id: 'party',   label: 'Party Supplies',     icon: Icon.Sparkles, hero: '🎈' },
+];
+
+// Unsplash curated image urls (foodphotography w/ fallback)
+const img = (q) => `https://source.unsplash.com/featured/640x480/?${q}`;
+
+const PRODUCTS = [
+  // 1. Celebration Combos
+  { id:'c1', cat:'combo', name:'Complete Birthday Package', desc:'1 lb fresh cake + 1 kg assorted mishti + candles & balloons + 2L soft drink', price:1450, rating:4.9, reviews:412, tags:['Bestseller','Combo Saver'], emoji:'🎉', img:img('birthday,cake,party'), cakeFlavor:true, cakeMessage:true, popularity:99 },
+  { id:'c2', cat:'combo', name:'Kids Party Snack Box',      desc:'Mini pizza × 4, spring rolls × 6, cupcakes × 6, juice boxes × 4', price:950,  rating:4.8, reviews:218, tags:['Combo Saver'], emoji:'🧁', img:img('kids,party,snacks'), popularity:92 },
+  { id:'c3', cat:'combo', name:'Festival Family Sweet Box', desc:'1.5 kg premium assorted mishti in a brass-style gift box', price:1200, rating:4.9, reviews:187, tags:['Bestseller'], emoji:'🍡', img:img('bengali,sweets,giftbox'), popularity:95 },
+
+  // 2. Traditional Mishti (per kg, weight selector)
+  { id:'m1', cat:'mishti', name:'Classic Rosogolla',          desc:'Soft spongy syrup-soaked chhana balls, made fresh each morning', price:550, rating:4.9, reviews:830, tags:['Bestseller','Fresh Daily'], emoji:'🍡', img:img('rasgulla,bengali,sweet'), perKg:true, popularity:98 },
+  { id:'m2', cat:'mishti', name:'Tangail Porabari Chamcham',  desc:'Signature caramel-glazed chamcham from Tangail', price:650, rating:4.9, reviews:541, tags:['Bestseller','Fresh Daily'], emoji:'🟤', img:img('chamcham,bengali,sweet'), perKg:true, popularity:96 },
+  { id:'m3', cat:'mishti', name:'Kalojam',                    desc:'Double-fried, syrup-rich dark cottage-cheese sweet', price:500, rating:4.7, reviews:312, tags:['Fresh Daily'], emoji:'⚫', img:img('kalojam,gulab,jamun'), perKg:true, popularity:88 },
+  { id:'m4', cat:'mishti', name:'Kacha Golla',                desc:'Premium hand-rolled milk sweet, mildly sweet and melt-in-mouth', price:780, rating:4.8, reviews:259, tags:['Premium','Fresh Daily'], emoji:'⚪', img:img('sandesh,bengali,sweets'), perKg:true, popularity:90 },
+  { id:'m5', cat:'mishti', name:'Premium Kheer Sandesh',      desc:'Cardamom-scented reduced-milk sandesh with pistachio crumble', price:720, rating:4.8, reviews:198, tags:['Premium'], emoji:'🟡', img:img('sandesh,milk,sweet'), perKg:true, popularity:86 },
+  { id:'m6', cat:'mishti', name:'Bogurar Shahi Doi',          desc:'Caramelized traditional sweet yogurt from Bogra', price:350, rating:4.9, reviews:664, tags:['Bestseller','Chilled'], emoji:'🥣', img:img('mishti,doi,yogurt'), perKg:true, popularity:94 },
+
+  // 3. Bakery & Cakes
+  { id:'b1', cat:'bakery', name:'Black Forest Birthday Cake', desc:'Cherry-layered chocolate sponge, whipped cream, chocolate curls', price:850, rating:4.8, reviews:402, tags:['Bestseller'], emoji:'🍰', img:img('blackforest,birthday,cake'), cakeWeight:true, cakeMessage:true, popularity:97 },
+  { id:'b2', cat:'bakery', name:'Red Velvet Cream Cake',      desc:'Scarlet cocoa sponge with cream cheese frosting',    price:1050, rating:4.8, reviews:291, tags:['Bestseller'], emoji:'❤️', img:img('redvelvet,cake'), cakeWeight:true, cakeMessage:true, popularity:91 },
+  { id:'b3', cat:'bakery', name:'Belgian Chocolate Brownie',  desc:'Fudgy dark chocolate brownie with walnut chunks (per piece)', price:120, rating:4.7, reviews:356, tags:['Fresh Daily'], emoji:'🍫', img:img('brownie,chocolate'), popularity:84 },
+  { id:'b4', cat:'bakery', name:'Butterscotch Pastry Slice',  desc:'Butterscotch crunch pastry with caramel drizzle (per slice)', price:80,  rating:4.6, reviews:243, tags:['Fresh Daily'], emoji:'🍮', img:img('butterscotch,pastry'), popularity:80 },
+  { id:'b5', cat:'bakery', name:'Special Pound Cake',         desc:'Classic buttery pound cake, 1 lb',                   price:650, rating:4.7, reviews:174, tags:[], emoji:'🍞', img:img('poundcake,butter'), cakeWeight:true, popularity:76 },
+
+  // 4. Savory Snacks (per pc)
+  { id:'s1', cat:'snacks', name:'Flaky Chicken Patties',      desc:'Golden puff pastry stuffed with spiced chicken (per pc)', price:50, rating:4.7, reviews:522, tags:['Bestseller','Fresh Daily'], emoji:'🥐', img:img('chicken,pastry,snack'), snackPack:true, popularity:93 },
+  { id:'s2', cat:'snacks', name:'Spicy Beef Samosa',          desc:'Flaky triangular samosa with spiced beef filling (per pc)', price:45, rating:4.6, reviews:388, tags:['Fresh Daily'], emoji:'🔺', img:img('samosa,beef,snack'), snackPack:true, popularity:85 },
+  { id:'s3', cat:'snacks', name:'Vegetable Spring Roll',      desc:'Crispy cabbage-carrot-onion spring roll (per pc)', price:35, rating:4.5, reviews:244, tags:['Fresh Daily'], emoji:'🥠', img:img('springroll,snack'), snackPack:true, popularity:72 },
+  { id:'s4', cat:'snacks', name:'Mini Chicken Pizza',         desc:'Oven-baked mini pizza with chicken & mozzarella (per pc)', price:110, rating:4.7, reviews:201, tags:[], emoji:'🍕', img:img('minipizza,chicken'), snackPack:true, popularity:78 },
+
+  // 5. Ice Cream & Frozen
+  { id:'i1', cat:'icecream', name:'Vanilla Bean Family Tub (1L)', desc:'Smooth Madagascar-vanilla family ice cream tub',     price:420, rating:4.8, reviews:312, tags:['Chilled','Bestseller'], emoji:'🍨', img:img('vanilla,icecream,tub'), coldPackOpt:true, popularity:89 },
+  { id:'i2', cat:'icecream', name:'Belgian Chocolate Cone',        desc:'Rich dark Belgian chocolate waffle cone',           price:90,  rating:4.7, reviews:420, tags:['Chilled'], emoji:'🍦', img:img('chocolate,icecream,cone'), coldPackOpt:true, popularity:83 },
+  { id:'i3', cat:'icecream', name:'Mango Ripple Cup',              desc:'Alphonso mango ribbon with real fruit chunks',      price:120, rating:4.7, reviews:276, tags:['Chilled','Fresh Daily'], emoji:'🥭', img:img('mango,icecream,cup'), coldPackOpt:true, popularity:82 },
+  { id:'i4', cat:'icecream', name:'Traditional Malai Kulfi',       desc:'Cardamom-saffron reduced-milk kulfi on a stick',    price:70,  rating:4.8, reviews:198, tags:['Chilled'], emoji:'🥛', img:img('kulfi,indian,dessert'), coldPackOpt:true, popularity:77 },
+
+  // 6. Pantry: drinks / chips / chocolates
+  { id:'p1', cat:'pantry', name:'2L Chilled Soft Drink',            desc:'Coke / Sprite / Fanta — pick your flavor',  price:220, rating:4.7, reviews:290, tags:['Chilled'], emoji:'🧃', img:img('cocacola,bottle'), drinkFlavor:true, popularity:81 },
+  { id:'p2', cat:'pantry', name:'250ml Beverage Can',              desc:'Chilled soda can, perfect for parties',     price:60,  rating:4.6, reviews:180, tags:['Chilled'], emoji:'🥫', img:img('soda,can,chilled'), drinkFlavor:true, popularity:74 },
+  { id:'p3', cat:'pantry', name:'Crispy Potato Chips',             desc:'Pick Masala / BBQ / Salted — single or multipack', price:30, rating:4.5, reviews:410, tags:[], emoji:'🥔', img:img('potato,chips,snack'), chipFlavor:true, multipack:true, popularity:75 },
+  { id:'p4', cat:'pantry', name:'Assorted Chocolate Bar',          desc:'Pick Dairy Milk Silk / Snickers / KitKat',  price:90, rating:4.7, reviews:356, tags:[], emoji:'🍫', img:img('chocolate,bar,candy'), chocFlavor:true, popularity:79 },
+
+  // 7. Party Supplies
+  { id:'py1', cat:'party', name:'Metallic Foil "Happy Birthday" Balloon Set', desc:'16-letter metallic foil balloons + inflator straw', price:250, rating:4.8, reviews:168, tags:['Bestseller'], emoji:'🎈', img:img('birthday,balloons,metallic'), colorOpt:['Gold','Rose Gold','Silver','Rainbow'], popularity:87 },
+  { id:'py2', cat:'party', name:'Musical Sparkle Candles',                    desc:'Rotating sparkle candles that play Happy Birthday', price:120, rating:4.7, reviews:94, tags:[], emoji:'🕯️', img:img('birthday,candle,sparkle'), popularity:71 },
+  { id:'py3', cat:'party', name:'Numeric Age Candles',                        desc:'Large stand-up number candles, pick age 0-9',       price:80, rating:4.6, reviews:88, tags:[], emoji:'0️⃣', img:img('number,candle,birthday'), numberOpt:['0','1','2','3','4','5','6','7','8','9'], popularity:70 },
+  { id:'py4', cat:'party', name:'Party Poppers (Pack of 10)',                 desc:'Confetti poppers — twist & pop for instant fun',   price:40, rating:4.5, reviews:62, tags:[], emoji:'🎊', img:img('confetti,party,poppers'), popularity:66 },
+  { id:'py5', cat:'party', name:'Birthday Hats (Pack of 6)',                  desc:'Glitter cone hats with elastic strap',             price:150, rating:4.6, reviews:77, tags:[], emoji:'🎩', img:img('birthday,hats,party'), popularity:68 },
+];
+
+const DELIVERY_AREAS = ['Dhanmondi','Mirpur','Uttara','Banani','Gulshan','Banasree','Mohammadpur'];
+const CAKE_FLAVORS  = ['Vanilla','Chocolate','Red Velvet','Butterscotch','Strawberry','Black Forest'];
+const QUICK_ADD_IDS = ['p4','p3','p1','i1','py2','py3'];
+const BDT = (n) => `৳${Number(Math.round(n||0)).toLocaleString('en-IN')}`;
+const PROMOS = {
+  WELCOME10:  { type:'pct',  value:10, label:'WELCOME10 · 10% off' },
+  BIRTHDAY100:{ type:'flat', value:100, min:1000, label:'BIRTHDAY100 · ৳100 off ৳1,000+' },
+};
+
+/* ============================================================
+   UI atoms
+   ============================================================ */
+function Badge({ tone='saffron', children, cls='' }) {
+  const tones = {
+    saffron:'bg-amber-100 text-saffrondark border border-amber-200',
+    berry:  'bg-rose-100 text-berry border border-rose-200',
+    emerald:'bg-emerald-100 text-emerald-700 border border-emerald-200',
+    slate:  'bg-stone-100 text-stone-700 border border-stone-200',
+    sky:    'bg-sky-100 text-sky-700 border border-sky-200',
+  };
+  return <span className={`inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wider px-2 py-0.5 rounded-full ${tones[tone]} ${cls}`}>{children}</span>;
+}
+
+function Stars({ v, n }) {
+  return <span className="inline-flex items-center gap-1 text-xs text-stone-600"><Icon.Star size={13} cls="text-amber-500 fill-amber-400" fill="currentColor" sw={0}/> <span className="font-semibold text-stone-800">{v.toFixed(1)}</span><span className="text-stone-400">({n})</span></span>;
+}
+
+function Stepper({ value, onDec, onInc, small }) {
+  const size = small ? 'h-8 w-8' : 'h-9 w-9';
+  return <div className="inline-flex items-center rounded-full bg-amber-50 border border-amber-200 overflow-hidden">
+    <button onClick={onDec} className={`${size} grid place-items-center text-saffrondark hover:bg-amber-100 active:scale-95`}><Icon.Minus size={14}/></button>
+    <span className={`${small?'min-w-[28px]':'min-w-[34px]'} text-center text-sm font-bold text-espresso`}>{value}</span>
+    <button onClick={onInc} className={`${size} grid place-items-center text-saffrondark hover:bg-amber-100 active:scale-95`}><Icon.Plus size={14}/></button>
+  </div>;
+}
+
+function Section({ title, subtitle, right, id, children }) {
+  return <section id={id} className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-10">
+    <div className="flex items-end justify-between mb-5">
+      <div>
+        <h2 className="font-serif text-2xl sm:text-3xl font-bold text-espresso">{title}</h2>
+        {subtitle && <p className="text-stone-500 text-sm mt-1">{subtitle}</p>}
+      </div>
+      {right}
+    </div>
+    {children}
+  </section>;
+}
+
+function ProductImage({ p, cls='' }) {
+  const [ok, setOk] = useState(true);
+  return <div className={`relative overflow-hidden ${cls}`}>
+    {ok
+      ? <img src={p.img} alt={p.name} onError={()=>setOk(false)} className="h-full w-full object-cover" loading="lazy"/>
+      : <div className="h-full w-full grid place-items-center bg-gradient-to-br from-amber-50 via-cream to-rose-50">
+          <div className="text-6xl animate-bounce-slow">{p.emoji}</div>
+        </div>}
+  </div>;
+}
+
+/* ============================================================
+   Product card
+   ============================================================ */
+function ProductCard({ p, inCart, onAdd, onInc, onDec }) {
+  const [weight, setWeight]   = useState(p.perKg ? '1kg' : (p.cakeWeight ? '1lb' : null));
+  const [flavor, setFlavor]   = useState(p.cakeFlavor ? 'Chocolate' : (p.drinkFlavor ? 'Coke' : (p.chipFlavor ? 'Masala' : (p.chocFlavor ? 'Dairy Milk Silk' : null))));
+  const [message, setMessage] = useState('');
+  const [color, setColor]     = useState(p.colorOpt ? p.colorOpt[0] : null);
+  const [num, setNum]         = useState(p.numberOpt ? p.numberOpt[0] : null);
+  const [pack, setPack]       = useState(p.snackPack ? 'single' : (p.multipack ? 'single' : null));
+  const [coldPack, setCold]   = useState(false);
+
+  const unitPrice = useMemo(() => {
+    let base = p.price;
+    if (p.perKg)      base = p.price * ({'500g':0.5,'1kg':1,'2kg':2}[weight] || 1);
+    if (p.cakeWeight) base = p.price * ({'1lb':1,'2lb':1.85}[weight] || 1);
+    if (pack === 'pack4') base = p.price * 4 * 0.9; // "Pack of 4 Saver" @ 10% off
+    if (pack === 'multi') base = p.price * 3 * 0.92; // multipack
+    if (coldPack)     base += 20;
+    return Math.round(base);
+  }, [p, weight, pack, coldPack]);
+
+  const variantKey = JSON.stringify({ weight, flavor, message, color, num, pack, coldPack });
+
+  return <div className="group bg-white border border-stone-100 rounded-2xl overflow-hidden shadow-sm hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 flex flex-col">
+    <div className="relative">
+      <ProductImage p={p} cls="aspect-[4/3]"/>
+      <div className="absolute top-2 left-2 flex flex-wrap gap-1">
+        {p.tags.map(t => <Badge key={t} tone={t==='Bestseller'?'berry':t==='Combo Saver'?'saffron':t==='Chilled'?'sky':t==='Fresh Daily'?'emerald':'slate'}>{t}</Badge>)}
+      </div>
+      <div className="absolute bottom-2 right-2"><Badge tone="slate" cls="backdrop-blur bg-white/80">{CAT.find(c=>c.id===p.cat).label}</Badge></div>
+    </div>
+
+    <div className="p-4 flex-1 flex flex-col">
+      <div className="flex items-start justify-between gap-2">
+        <h3 className="font-semibold text-espresso leading-snug">{p.name}</h3>
+        <Stars v={p.rating} n={p.reviews}/>
+      </div>
+      <p className="text-xs text-stone-500 mt-1 line-clamp-2">{p.desc}</p>
+
+      {/* Variants */}
+      <div className="mt-3 space-y-2">
+        {p.perKg && <div className="flex gap-1">
+          {['500g','1kg','2kg'].map(w => <button key={w} onClick={()=>setWeight(w)} className={`px-2.5 py-1 text-xs rounded-full border ${weight===w?'bg-saffron text-white border-saffron':'bg-white text-stone-700 border-stone-200 hover:border-saffron'}`}>{w}</button>)}
+        </div>}
+        {p.cakeWeight && <div className="flex gap-1">
+          {['1lb','2lb'].map(w => <button key={w} onClick={()=>setWeight(w)} className={`px-2.5 py-1 text-xs rounded-full border ${weight===w?'bg-saffron text-white border-saffron':'bg-white text-stone-700 border-stone-200 hover:border-saffron'}`}>{w}</button>)}
+        </div>}
+        {p.cakeFlavor && <select value={flavor} onChange={e=>setFlavor(e.target.value)} className="w-full text-xs rounded-lg border border-stone-200 px-2 py-1.5 bg-white">
+          {CAKE_FLAVORS.map(f=><option key={f}>{f}</option>)}
+        </select>}
+        {p.cakeMessage && <input value={message} onChange={e=>setMessage(e.target.value)} maxLength={40} placeholder='Name on cake (e.g. "Happy Birthday Mishka")' className="w-full text-xs rounded-lg border border-stone-200 px-2 py-1.5 placeholder:text-stone-400"/>}
+        {p.drinkFlavor && <div className="flex gap-1 flex-wrap">
+          {['Coke','Sprite','Fanta'].map(f=> <button key={f} onClick={()=>setFlavor(f)} className={`px-2.5 py-1 text-xs rounded-full border ${flavor===f?'bg-saffron text-white border-saffron':'bg-white text-stone-700 border-stone-200'}`}>{f}</button>)}
+        </div>}
+        {p.chipFlavor && <div className="flex gap-1 flex-wrap">
+          {['Masala','BBQ','Salted'].map(f=> <button key={f} onClick={()=>setFlavor(f)} className={`px-2.5 py-1 text-xs rounded-full border ${flavor===f?'bg-saffron text-white border-saffron':'bg-white text-stone-700 border-stone-200'}`}>{f}</button>)}
+        </div>}
+        {p.chocFlavor && <select value={flavor} onChange={e=>setFlavor(e.target.value)} className="w-full text-xs rounded-lg border border-stone-200 px-2 py-1.5 bg-white">
+          {['Dairy Milk Silk','Snickers','KitKat'].map(f=><option key={f}>{f}</option>)}
+        </select>}
+        {p.snackPack && <div className="flex gap-1">
+          {[['single','Single pc'],['pack4','Pack of 4 Saver']].map(([v,l]) => <button key={v} onClick={()=>setPack(v)} className={`px-2.5 py-1 text-xs rounded-full border ${pack===v?'bg-saffron text-white border-saffron':'bg-white text-stone-700 border-stone-200'}`}>{l}</button>)}
+          <button onClick={()=>setPack('warm')} className={`px-2.5 py-1 text-xs rounded-full border ${pack==='warm'?'bg-saffron text-white border-saffron':'bg-white text-stone-700 border-stone-200'}`}>Warm & Ready</button>
+        </div>}
+        {p.multipack && <div className="flex gap-1">
+          {[['single','Single'],['multi','Multipack × 3']].map(([v,l]) => <button key={v} onClick={()=>setPack(v)} className={`px-2.5 py-1 text-xs rounded-full border ${pack===v?'bg-saffron text-white border-saffron':'bg-white text-stone-700 border-stone-200'}`}>{l}</button>)}
+        </div>}
+        {p.colorOpt && <select value={color} onChange={e=>setColor(e.target.value)} className="w-full text-xs rounded-lg border border-stone-200 px-2 py-1.5 bg-white">
+          {p.colorOpt.map(c=><option key={c}>{c}</option>)}
+        </select>}
+        {p.numberOpt && <div className="flex gap-1 flex-wrap">
+          {p.numberOpt.map(n=> <button key={n} onClick={()=>setNum(n)} className={`h-7 w-7 text-xs font-bold rounded-full border ${num===n?'bg-saffron text-white border-saffron':'bg-white text-stone-700 border-stone-200'}`}>{n}</button>)}
+        </div>}
+        {p.coldPackOpt && <label className="flex items-center gap-2 text-xs text-stone-600 bg-sky-50 border border-sky-100 rounded-lg px-2 py-1.5 cursor-pointer">
+          <input type="checkbox" checked={coldPack} onChange={e=>setCold(e.target.checked)} className="accent-sky-600"/>
+          <Icon.Snowflake size={14} cls="text-sky-600"/> Insulated cold-pack for delivery (+৳20)
+        </label>}
+      </div>
+
+      <div className="mt-auto pt-4 flex items-center justify-between">
+        <div>
+          <div className="text-lg font-bold text-espresso leading-none">{BDT(unitPrice)}</div>
+          {(p.perKg || p.cakeWeight) && <div className="text-[11px] text-stone-400 mt-0.5">{weight}</div>}
+        </div>
+        {inCart[`${p.id}:${variantKey}`]
+          ? <Stepper
+              value={inCart[`${p.id}:${variantKey}`]}
+              onDec={()=>onDec(p, { weight, flavor, message, color, num, pack, coldPack }, unitPrice)}
+              onInc={()=>onInc(p, { weight, flavor, message, color, num, pack, coldPack }, unitPrice)}/>
+          : <button onClick={()=>onAdd(p, { weight, flavor, message, color, num, pack, coldPack }, unitPrice)}
+              className="inline-flex items-center gap-1.5 bg-espresso text-cream px-3.5 py-2 rounded-full text-sm font-semibold hover:bg-stone-800 active:scale-95">
+              <Icon.Plus size={15}/> Add
+            </button>
+        }
+      </div>
+    </div>
+  </div>;
+}
+
+/* ============================================================
+   App root
+   ============================================================ */
+function App() {
+  const [query, setQuery]       = useState('');
+  const [filter, setFilter]     = useState('all');
+  const [sort, setSort]         = useState('popularity');
+  const [cart, setCart]         = useState([]);
+  const [checkoutOpen, setCO]   = useState(false);
+  const [step, setStep]         = useState(1);
+  const [promo, setPromo]       = useState('');
+  const [promoApplied, setPA]   = useState(null);
+  const [promoError, setPE]     = useState('');
+
+  const [fulfillment, setFul]   = useState('delivery');
+  const [area, setArea]         = useState(DELIVERY_AREAS[0]);
+  const [customer, setCust]     = useState({ name:'', phone:'', addr:'', scheduleKind:'express', scheduleDate:'', scheduleTime:'' });
+  const [custErrors, setCE]     = useState({});
+
+  const [celeb, setCeleb]       = useState({ opted:false, date:'', occasion:'Birthday', person:'' });
+  const [celebBonus, setCB]     = useState(false);
+
+  const [payment, setPayment]   = useState('bkash');
+  const [bkash, setBkash]       = useState({ mobile:'', trx:'' });
+  const [card, setCard]         = useState({ number:'', expiry:'', cvv:'', name:'' });
+  const [cod, setCod]           = useState({ change:'exact' });
+  const [payErrors, setPayE]    = useState({});
+
+  const [processing, setProc]   = useState(false);
+  const [orderId, setOrderId]   = useState('');
+  const [orderMeta, setOrderMeta] = useState(null);
+
+  /* ---------- Cart helpers ---------- */
+  const cartMap = useMemo(() => {
+    const m = {};
+    cart.forEach(it => m[`${it.id}:${it.vKey}`] = it.qty);
+    return m;
+  }, [cart]);
+
+  const makeKey = (variant) => JSON.stringify(variant);
+
+  function addItem(p, variant, unitPrice) {
+    const vKey = makeKey(variant);
+    setCart(prev => {
+      const idx = prev.findIndex(i => i.id===p.id && i.vKey===vKey);
+      if (idx >= 0) {
+        const n = [...prev]; n[idx] = {...n[idx], qty: n[idx].qty + 1 }; return n;
+      }
+      return [...prev, { id:p.id, name:p.name, emoji:p.emoji, img:p.img, cat:p.cat, vKey, variant, unitPrice, qty:1 }];
+    });
+  }
+  function incItem(p, variant) {
+    const vKey = makeKey(variant);
+    setCart(prev => prev.map(i => (i.id===p.id && i.vKey===vKey) ? {...i, qty:i.qty+1} : i));
+  }
+  function decItem(p, variant) {
+    const vKey = makeKey(variant);
+    setCart(prev => prev.flatMap(i => {
+      if (i.id===p.id && i.vKey===vKey) return i.qty>1 ? [{...i, qty:i.qty-1}] : [];
+      return [i];
+    }));
+  }
+  function setQty(key, qty) {
+    setCart(prev => prev.flatMap(i => i.key===key ? (qty<=0 ? [] : [{...i, qty}]) : [i]));
+  }
+  function removeLine(id, vKey) {
+    setCart(prev => prev.filter(i => !(i.id===id && i.vKey===vKey)));
+  }
+  function quickAdd(pid) {
+    const p = PRODUCTS.find(x=>x.id===pid);
+    if (!p) return;
+    const defaultVar = {
+      weight: p.perKg ? '1kg' : (p.cakeWeight ? '1lb' : null),
+      flavor: p.cakeFlavor ? 'Chocolate' : p.drinkFlavor ? 'Coke' : p.chipFlavor ? 'Masala' : p.chocFlavor ? 'Dairy Milk Silk' : null,
+      message:'', color: p.colorOpt?.[0]||null, num: p.numberOpt?.[0]||null,
+      pack: p.snackPack?'single':p.multipack?'single':null, coldPack:false,
+    };
+    let unit = p.price;
+    if (p.perKg) unit = p.price * 1;
+    if (p.cakeWeight) unit = p.price;
+    addItem(p, defaultVar, Math.round(unit));
+  }
+
+  /* ---------- Filtered / sorted catalog ---------- */
+  const catalog = useMemo(() => {
+    let list = PRODUCTS;
+    if (filter !== 'all') list = list.filter(p => p.cat === filter);
+    if (query.trim()) {
+      const q = query.toLowerCase();
+      list = list.filter(p => p.name.toLowerCase().includes(q) || p.desc.toLowerCase().includes(q) || CAT.find(c=>c.id===p.cat).label.toLowerCase().includes(q));
+    }
+    if (sort === 'price-asc')  list = [...list].sort((a,b)=>a.price-b.price);
+    if (sort === 'price-desc') list = [...list].sort((a,b)=>b.price-a.price);
+    if (sort === 'popularity') list = [...list].sort((a,b)=>b.popularity-a.popularity);
+    return list;
+  }, [filter, query, sort]);
+
+  /* ---------- Bill calculation ---------- */
+  const subtotal = useMemo(() => cart.reduce((s,i)=> s + i.unitPrice * i.qty, 0), [cart]);
+  const hasColdChain = useMemo(() => cart.some(i => i.cat==='icecream' || (i.variant && i.variant.coldPack)), [cart]);
+  const bundleDiscount = useMemo(() => cart.filter(i=>i.cat==='combo').reduce((s,i)=> s + Math.round(i.unitPrice * i.qty * 0.15), 0), [cart]);
+
+  const promoDiscount = useMemo(() => {
+    if (!promoApplied) return 0;
+    const { type, value, min } = promoApplied;
+    const base = subtotal - bundleDiscount;
+    if (type === 'pct')  return Math.round(base * value / 100);
+    if (type === 'flat') return base >= (min||0) ? value : 0;
+    return 0;
+  }, [promoApplied, subtotal, bundleDiscount]);
+
+  const packagingFee = hasColdChain ? 40 : 0;
+  const deliveryFee  = fulfillment === 'pickup' ? 0 : (subtotal - bundleDiscount - promoDiscount >= 1500 ? 0 : 60);
+  const grandTotal   = Math.max(0, subtotal - bundleDiscount - promoDiscount + packagingFee + deliveryFee);
+
+  /* ---------- Loyalty ---------- */
+  const basePoints   = Math.floor(grandTotal / 50);
+  const bonusPoints  = celebBonus ? 50 : 0;
+  const totalPoints  = basePoints + bonusPoints;
+
+  /* ---------- Promo apply ---------- */
+  function applyPromo() {
+    const code = promo.trim().toUpperCase();
+    setPE('');
+    if (!code) { setPA(null); return; }
+    const p = PROMOS[code];
+    if (!p) { setPA(null); setPE('Invalid promo code.'); return; }
+    if (p.min && (subtotal - bundleDiscount) < p.min) { setPA(null); setPE(`Add ${BDT(p.min - (subtotal-bundleDiscount))} more to use ${code}.`); return; }
+    setPA({ code, ...p });
+  }
+
+  /* ---------- Step 2 validate ---------- */
+  function validateStep2() {
+    const e = {};
+    if (!customer.name.trim()) e.name = 'Required';
+    if (!/^01[3-9]\d{8}$/.test(customer.phone)) e.phone = 'Enter valid 11-digit Bangladesh mobile (01XXXXXXXXX)';
+    if (fulfillment === 'delivery' && !customer.addr.trim()) e.addr = 'Delivery address required';
+    if (customer.scheduleKind === 'scheduled') {
+      if (!customer.scheduleDate) e.scheduleDate = 'Pick a date';
+      if (!customer.scheduleTime) e.scheduleTime = 'Pick a time';
+    }
+    setCE(e);
+    return Object.keys(e).length === 0;
+  }
+
+  /* ---------- Step 3 validate ---------- */
+  function validatePayment() {
+    const e = {};
+    if (payment === 'bkash') {
+      if (!/^01[3-9]\d{8}$/.test(bkash.mobile)) e.mobile = 'Enter your 11-digit mobile number';
+      if (bkash.trx.trim().length < 6) e.trx = 'Enter the 6+ character bKash/Nagad TrxID';
+    }
+    if (payment === 'card') {
+      const digits = card.number.replace(/\s/g,'');
+      if (!/^\d{15,16}$/.test(digits)) e.number = 'Enter a valid 15–16 digit card number';
+      if (!/^(0[1-9]|1[0-2])\/\d{2}$/.test(card.expiry)) e.expiry = 'MM/YY';
+      if (!/^\d{3,4}$/.test(card.cvv)) e.cvv = '3–4 digits';
+      if (!card.name.trim()) e.name = 'Required';
+    }
+    setPayE(e);
+    return Object.keys(e).length === 0;
+  }
+
+  /* ---------- Place order ---------- */
+  function placeOrder() {
+    if (!validatePayment()) return;
+    setProc(true);
+    setTimeout(() => {
+      const oid = `MM-2026-${Math.floor(1000 + Math.random()*9000)}`;
+      setOrderId(oid);
+      setOrderMeta({
+        placedAt: new Date(),
+        eta: fulfillment === 'pickup'
+          ? 'Ready for pickup in 25–40 min'
+          : (customer.scheduleKind==='express' ? 'Express delivery within 45 min' : `Scheduled: ${customer.scheduleDate} ${customer.scheduleTime}`),
+      });
+      setStep('confirmed');
+      setProc(false);
+    }, 1200);
+  }
+
+  function resetAll() {
+    setCart([]); setCO(false); setStep(1);
+    setPromo(''); setPA(null); setPE('');
+    setFul('delivery'); setArea(DELIVERY_AREAS[0]);
+    setCust({ name:'', phone:'', addr:'', scheduleKind:'express', scheduleDate:'', scheduleTime:'' });
+    setCE({});
+    setCeleb({ opted:false, date:'', occasion:'Birthday', person:'' }); setCB(false);
+    setPayment('bkash'); setBkash({ mobile:'', trx:'' }); setCard({ number:'', expiry:'', cvv:'', name:'' }); setCod({ change:'exact' });
+    setPayE({}); setOrderId(''); setOrderMeta(null);
+  }
+
+  /* ---------- Celebration CRM bonus trigger ---------- */
+  useEffect(() => {
+    if (celeb.opted && celeb.date && celeb.person.trim()) {
+      if (!celebBonus) setCB(true);
+    } else if (celebBonus) setCB(false);
+  }, [celeb.opted, celeb.date, celeb.person]);
+
+  /* ============================================================
+     RENDER
+     ============================================================ */
+  const cartCount = cart.reduce((s,i)=>s+i.qty, 0);
+
+  return <div className="min-h-screen bg-cream text-espresso">
+    {/* Sticky header */}
+    <header className="sticky top-0 z-30 bg-cream/85 backdrop-blur border-b border-amber-100">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center gap-3">
+        <a href="#" onClick={e=>{e.preventDefault(); setFilter('all'); setQuery(''); window.scrollTo({top:0,behavior:'smooth'});}} className="flex items-center gap-2 shrink-0">
+          <div className="h-10 w-10 rounded-full bg-gradient-to-br from-saffron to-berry grid place-items-center text-white font-serif font-black text-lg shadow-md">M</div>
+          <div className="leading-tight">
+            <div className="font-serif font-black text-lg sm:text-xl text-espresso">Mishti &amp; More</div>
+            <div className="text-[11px] text-stone-500 font-bn -mt-0.5">মি ষ্টি ও ম োর · Dhaka</div>
+          </div>
+        </a>
+
+        <div className="relative flex-1 max-w-xl mx-auto hidden sm:block">
+          <Icon.Search cls="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={18}/>
+          <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search rosogolla, cake, chips, balloons…" className="w-full pl-10 pr-10 h-10 rounded-full bg-white border border-stone-200 focus:border-saffron focus:ring-2 focus:ring-amber-100 outline-none text-sm placeholder:text-stone-400"/>
+          {query && <button onClick={()=>setQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700"><Icon.X size={16}/></button>}
+        </div>
+
+        <button onClick={()=>{ document.getElementById('build-bundle')?.scrollIntoView({behavior:'smooth'}); }} className="hidden md:inline-flex items-center gap-2 bg-gradient-to-r from-berry to-saffron text-white px-4 py-2 rounded-full text-sm font-semibold shadow hover:shadow-lg">
+          <Icon.Gift size={16}/> Build a Birthday Bundle
+        </button>
+
+        <button onClick={()=>{ setCO(true); setStep(1); }} className="relative inline-flex items-center gap-2 bg-espresso text-cream px-3 sm:px-4 py-2 rounded-full text-sm font-semibold hover:bg-stone-800">
+          <Icon.Cart size={17}/>
+          <span className="hidden sm:inline">{BDT(subtotal)}</span>
+          {cartCount > 0 && <span className="absolute -top-1.5 -right-1.5 bg-berry text-white text-[10px] h-5 min-w-[20px] px-1 rounded-full grid place-items-center font-bold animate-pop">{cartCount}</span>}
+        </button>
+      </div>
+
+      {/* Mobile search */}
+      <div className="px-4 pb-3 sm:hidden">
+        <div className="relative">
+          <Icon.Search cls="absolute left-3 top-1/2 -translate-y-1/2 text-stone-400" size={18}/>
+          <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Search anything…" className="w-full pl-10 pr-3 h-10 rounded-full bg-white border border-stone-200 text-sm"/>
+        </div>
+      </div>
+    </header>
+
+    {/* Hero */}
+    <section id="build-bundle" className="hero-gradient border-b border-amber-100">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14 grid md:grid-cols-5 gap-8 items-center">
+        <div className="md:col-span-3">
+          <Badge tone="berry" cls="mb-3">Dhaka · Hygienic Glass-Counter Retail · Since 1998</Badge>
+          <h1 className="font-serif text-4xl sm:text-5xl lg:text-6xl font-black leading-tight text-espresso">
+            One-Stop Celebration <span className="text-saffron">&amp; Mishti</span> Experience
+          </h1>
+          <p className="text-stone-600 mt-4 text-base sm:text-lg max-w-xl">
+            Birthday cakes, traditional Bengali mishti, ice cream, savory snacks, soft drinks, chocolates &amp; party supplies — all under one roof.
+            Order the <span className="font-semibold text-berry">Complete Birthday Combo</span> and save <span className="font-semibold text-berry">15%</span> instantly.
+          </p>
+          <div className="mt-6 flex flex-wrap gap-3">
+            <button onClick={()=>quickAdd('c1')} className="inline-flex items-center gap-2 bg-berry text-white px-5 py-3 rounded-full font-semibold shadow-lg hover:shadow-xl active:scale-95">
+              <Icon.Gift size={18}/> Add Birthday Combo · Save 15%
+            </button>
+            <button onClick={()=>setFilter('mishti')} className="inline-flex items-center gap-2 bg-white text-espresso px-5 py-3 rounded-full font-semibold border border-stone-200 hover:border-saffron">
+              <Icon.Sparkles size={18}/> Shop Fresh Mishti
+            </button>
+          </div>
+
+          <div className="mt-8 grid grid-cols-3 gap-4 max-w-md">
+            <div className="text-center"><div className="text-2xl font-serif font-black text-saffron">7</div><div className="text-xs text-stone-500">Categories</div></div>
+            <div className="text-center"><div className="text-2xl font-serif font-black text-saffron">31+</div><div className="text-xs text-stone-500">Fresh Items</div></div>
+            <div className="text-center"><div className="text-2xl font-serif font-black text-saffron">45min</div><div className="text-xs text-stone-500">Express Delivery</div></div>
+          </div>
+        </div>
+
+        <div className="md:col-span-2 relative">
+          <div className="aspect-square max-w-sm mx-auto rounded-3xl bg-gradient-to-br from-amber-200 via-rose-200 to-amber-300 p-8 shadow-2xl relative overflow-hidden">
+            <div className="absolute -top-6 -right-6 h-24 w-24 bg-berry/40 rounded-full blur-2xl"/>
+            <div className="absolute -bottom-6 -left-6 h-28 w-28 bg-amber-500/40 rounded-full blur-2xl"/>
+            <div className="relative h-full flex flex-col items-center justify-center text-center">
+              <div className="text-7xl animate-bounce-slow">🎂</div>
+              <div className="text-5xl absolute top-4 left-4">🍬</div>
+              <div className="text-5xl absolute top-4 right-4">🍦</div>
+              <div className="text-5xl absolute bottom-4 left-4">🧁</div>
+              <div className="text-5xl absolute bottom-4 right-4">🎈</div>
+              <div className="mt-4 font-serif text-xl font-bold text-espresso">Complete Birthday Combo</div>
+              <div className="text-sm text-stone-700 mt-1">1 lb cake · 1 kg mishti · balloons · 2L drink</div>
+              <div className="mt-3 flex items-baseline gap-2">
+                <span className="text-xs text-stone-500 line-through">{BDT(1700)}</span>
+                <span className="font-serif font-black text-2xl text-berry">{BDT(1450)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    {/* Category pills */}
+    <div className="sticky top-16 z-20 bg-cream/85 backdrop-blur border-b border-amber-100">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center gap-3">
+        <div className="flex gap-2 overflow-x-auto no-scrollbar flex-1">
+          <CatPill id="all" active={filter==='all'} onClick={()=>setFilter('all')} icon={<Icon.Store size={15}/>} label="All Items"/>
+          {CAT.map(c=> <CatPill key={c.id} id={c.id} active={filter===c.id} onClick={()=>setFilter(c.id)} icon={<c.icon size={15}/>} label={c.label} hero={c.hero}/>)}
+        </div>
+        <select value={sort} onChange={e=>setSort(e.target.value)} className="shrink-0 text-xs bg-white border border-stone-200 rounded-full px-3 py-2 font-medium">
+          <option value="popularity">Sort: Popularity</option>
+          <option value="price-asc">Price: Low → High</option>
+          <option value="price-desc">Price: High → Low</option>
+        </select>
+      </div>
+    </div>
+
+    {/* Catalog */}
+    <Section
+      title={filter==='all' ? 'Fresh From Our Glass Counter' : CAT.find(c=>c.id===filter)?.label}
+      subtitle={`${catalog.length} ${catalog.length===1?'item':'items'}${query?` matching "${query}"`:''}`}>
+      {catalog.length === 0
+        ? <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-stone-200">
+            <div className="text-4xl mb-2">🔍</div>
+            <div className="font-semibold text-stone-700">No items found</div>
+            <div className="text-sm text-stone-500 mt-1">Try another search term or clear filters.</div>
+            <button onClick={()=>{setQuery(''); setFilter('all');}} className="mt-4 text-sm font-semibold text-saffron hover:text-saffrondark">Clear filters →</button>
+          </div>
+        : <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+            {catalog.map(p => <ProductCard key={p.id} p={p} inCart={cartMap} onAdd={addItem} onInc={incItem} onDec={decItem}/>)}
+          </div>
+      }
+    </Section>
+
+    {/* Trust strip */}
+    <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12 mb-16">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        {[
+          { icon:<Icon.Flame size={22}/>, title:'Fresh Daily', desc:'Mishti made each morning' },
+          { icon:<Icon.Truck size={22}/>, title:'Fast Delivery', desc:'45-min express in Dhaka' },
+          { icon:<Icon.Snowflake size={22}/>, title:'Cold-Chain', desc:'Ice cream stays frozen' },
+          { icon:<Icon.Trophy size={22}/>, title:'Loyalty Club', desc:'Earn points each order' },
+        ].map((f,i)=> <div key={i} className="bg-white border border-stone-100 rounded-2xl p-4 flex items-center gap-3">
+          <div className="h-11 w-11 rounded-full bg-amber-100 text-saffrondark grid place-items-center">{f.icon}</div>
+          <div>
+            <div className="font-semibold text-sm">{f.title}</div>
+            <div className="text-xs text-stone-500">{f.desc}</div>
+          </div>
+        </div>)}
+      </div>
+    </section>
+
+    {/* Footer */}
+    <footer className="bg-espresso text-stone-300 mt-10">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 grid sm:grid-cols-3 gap-8">
+        <div>
+          <div className="flex items-center gap-2 mb-3">
+            <div className="h-9 w-9 rounded-full bg-gradient-to-br from-saffron to-berry grid place-items-center text-white font-serif font-black">M</div>
+            <div className="font-serif font-bold text-lg text-cream">Mishti &amp; More</div>
+          </div>
+          <p className="text-sm text-stone-400 font-bn">মি ষ্টি ও ম োর — Dhaka's boutique confectionery, bakery & party shop since 1998.</p>
+        </div>
+        <div>
+          <div className="text-cream font-semibold mb-3">Visit Our Counter</div>
+          <ul className="text-sm space-y-1.5 text-stone-400">
+            <li className="flex items-start gap-2"><Icon.MapPin size={15}/> House 12, Road 7, Dhanmondi, Dhaka 1205</li>
+            <li className="flex items-start gap-2"><Icon.Phone size={15}/> +880 1711-234567</li>
+            <li className="flex items-start gap-2"><Icon.Clock size={15}/> 8:00 AM – 11:00 PM daily</li>
+          </ul>
+        </div>
+        <div>
+          <div className="text-cream font-semibold mb-3">Celebration Club</div>
+          <p className="text-sm text-stone-400 mb-3">Share a birthday or anniversary date — we'll send 10% off reminder discounts each year.</p>
+          <button onClick={()=>{ setCO(true); setStep(1); }} className="inline-flex items-center gap-2 bg-saffron text-white px-4 py-2 rounded-full text-sm font-semibold">Join via Checkout →</button>
+        </div>
+      </div>
+      <div className="border-t border-stone-800 py-4 text-center text-xs text-stone-500">© 2026 Mishti &amp; More · Dhaka · misti.shopbdit.com</div>
+    </footer>
+
+    {/* =========================================================
+         CHECKOUT DRAWER
+         ========================================================= */}
+    {checkoutOpen && <div className="fixed inset-0 z-50 flex">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={()=> step==='confirmed' ? null : setCO(false)}/>
+      <div className="relative ml-auto w-full max-w-xl h-full bg-cream shadow-2xl flex flex-col animate-slide-in">
+        {/* Header */}
+        <div className="shrink-0 border-b border-amber-100 glass-counter">
+          <div className="flex items-center justify-between px-5 py-4">
+            <div>
+              <div className="font-serif text-lg font-bold">{step==='confirmed' ? 'Order Confirmed' : 'Checkout'}</div>
+              <div className="text-xs text-stone-500">{step==='confirmed' ? 'Thanks for ordering with Mishti & More' : `Step ${step} of 4`}</div>
+            </div>
+            <button onClick={()=> step==='confirmed' ? resetAll() : setCO(false)} className="h-9 w-9 grid place-items-center rounded-full hover:bg-amber-100"><Icon.X size={18}/></button>
+          </div>
+          {step !== 'confirmed' && <div className="px-5 pb-4">
+            <div className="flex items-center gap-1">
+              {[1,2,3,4].map(n => <Fragment key={n}>
+                <div className={`h-7 w-7 shrink-0 rounded-full grid place-items-center text-xs font-bold border-2 ${step>=n ? 'bg-saffron text-white border-saffron' : 'bg-white text-stone-400 border-stone-200'}`}>{step>n ? <Icon.Check size={14}/> : n}</div>
+                {n<4 && <div className={`flex-1 h-0.5 ${step>n?'bg-saffron':'bg-stone-200'}`}/>}
+              </Fragment>)}
+            </div>
+            <div className="mt-2 grid grid-cols-4 text-[10px] text-stone-500 font-semibold uppercase tracking-wider text-center">
+              <div>Cart</div><div>Details</div><div>Payment</div><div>Confirm</div>
+            </div>
+          </div>}
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto">
+          {step === 1 && <StepCart
+            cart={cart} setCart={setCart} removeLine={removeLine} setQty={setQty}
+            quickAdd={quickAdd}
+            promo={promo} setPromo={setPromo} applyPromo={applyPromo} promoApplied={promoApplied} promoError={promoError} setPA={setPA}
+            subtotal={subtotal} bundleDiscount={bundleDiscount} promoDiscount={promoDiscount}
+            packagingFee={packagingFee} deliveryFee={deliveryFee} grandTotal={grandTotal}
+            fulfillment={fulfillment} hasColdChain={hasColdChain}/>
+          }
+          {step === 2 && <StepDetails
+            fulfillment={fulfillment} setFul={setFul} area={area} setArea={setArea}
+            customer={customer} setCust={setCust} errors={custErrors}
+            celeb={celeb} setCeleb={setCeleb} celebBonus={celebBonus}/>}
+          {step === 3 && <StepPayment
+            payment={payment} setPayment={setPayment}
+            grandTotal={grandTotal} bkash={bkash} setBkash={setBkash}
+            card={card} setCard={setCard} cod={cod} setCod={setCod} errors={payErrors}/>}
+          {step === 'confirmed' && <StepConfirmed
+            orderId={orderId} meta={orderMeta} cart={cart}
+            customer={customer} fulfillment={fulfillment} area={area}
+            subtotal={subtotal} bundleDiscount={bundleDiscount} promoDiscount={promoDiscount} promoApplied={promoApplied}
+            packagingFee={packagingFee} deliveryFee={deliveryFee} grandTotal={grandTotal}
+            payment={payment} bkash={bkash} card={card} cod={cod}
+            basePoints={basePoints} bonusPoints={bonusPoints} totalPoints={totalPoints}
+            celeb={celeb}
+            onReset={resetAll}/>}
+        </div>
+
+        {/* Footer actions */}
+        {step !== 'confirmed' && <div className="shrink-0 border-t border-amber-100 bg-white px-5 py-4 flex items-center justify-between gap-3">
+          <div>
+            <div className="text-xs text-stone-500">Grand Total</div>
+            <div className="font-serif font-black text-xl text-espresso">{BDT(grandTotal)}</div>
+          </div>
+          <div className="flex items-center gap-2">
+            {step > 1 && <button onClick={()=>setStep(step-1)} className="px-4 py-2 rounded-full text-sm font-semibold border border-stone-200 hover:bg-stone-50">Back</button>}
+            {step === 1 && <button
+              disabled={cart.length===0}
+              onClick={()=>setStep(2)}
+              className="inline-flex items-center gap-1.5 bg-espresso text-cream px-5 py-2.5 rounded-full text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed hover:bg-stone-800">
+              Continue <Icon.Chevron size={15}/>
+            </button>}
+            {step === 2 && <button
+              onClick={()=>{ if (validateStep2()) setStep(3); }}
+              className="inline-flex items-center gap-1.5 bg-espresso text-cream px-5 py-2.5 rounded-full text-sm font-semibold hover:bg-stone-800">
+              Continue to Payment <Icon.Chevron size={15}/>
+            </button>}
+            {step === 3 && <button
+              disabled={processing}
+              onClick={placeOrder}
+              className="inline-flex items-center gap-1.5 bg-berry text-white px-5 py-2.5 rounded-full text-sm font-semibold hover:bg-rose-700 disabled:opacity-60">
+              {processing ? <>Placing order… <Spinner/></> : <>Place Order · {BDT(grandTotal)}</>}
+            </button>}
+          </div>
+        </div>}
+      </div>
+    </div>}
+  </div>;
+}
+
+function Spinner() {
+  return <svg width="16" height="16" viewBox="0 0 24 24" className="animate-spin"><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="3" fill="none" strokeDasharray="40" strokeDashoffset="20"/></svg>;
+}
+
+function CatPill({ id, active, onClick, icon, label, hero }) {
+  return <button onClick={onClick} className={`shrink-0 inline-flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-semibold border transition ${active ? 'bg-saffron text-white border-saffron shadow' : 'bg-white text-stone-700 border-stone-200 hover:border-saffron'}`}>
+    {hero ? <span className="text-sm">{hero}</span> : icon}
+    {label}
+  </button>;
+}
+
+/* ============================================================
+   Step 1: Cart
+   ============================================================ */
+function StepCart({ cart, removeLine, setCart, quickAdd, promo, setPromo, applyPromo, promoApplied, promoError, setPA, subtotal, bundleDiscount, promoDiscount, packagingFee, deliveryFee, grandTotal, fulfillment, hasColdChain }) {
+  function dec(i) { setCart(prev => prev.flatMap(x => (x.id===i.id && x.vKey===i.vKey) ? (x.qty>1?[{...x, qty:x.qty-1}]:[]) : [x])); }
+  function inc(i) { setCart(prev => prev.map(x => (x.id===i.id && x.vKey===i.vKey) ? {...x, qty:x.qty+1} : x)); }
+
+  if (cart.length === 0) return <div className="p-8 text-center">
+    <div className="text-5xl mb-3">🛒</div>
+    <div className="font-serif font-bold text-xl mb-1">Your basket is empty</div>
+    <div className="text-sm text-stone-500 mb-4">Browse the glass counter to fill it with mishti &amp; more.</div>
+  </div>;
+
+  return <div className="p-5 space-y-5">
+    {/* Cart lines */}
+    <div className="space-y-3">
+      {cart.map(i => {
+        const v = i.variant || {};
+        const variantBits = [v.weight, v.flavor, v.color, v.num && `#${v.num}`, v.pack && v.pack!=='single' && v.pack, v.coldPack && 'Cold-pack'].filter(Boolean).join(' · ');
+        return <div key={`${i.id}-${i.vKey}`} className="flex gap-3 bg-white border border-stone-100 rounded-2xl p-3">
+          <div className="h-16 w-16 shrink-0 rounded-xl bg-gradient-to-br from-amber-100 to-rose-100 grid place-items-center text-3xl">{i.emoji}</div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <div className="font-semibold text-sm truncate">{i.name}</div>
+                {variantBits && <div className="text-[11px] text-stone-500 mt-0.5 truncate">{variantBits}</div>}
+                {v.message && <div className="text-[11px] text-berry mt-0.5 italic truncate">✍️ "{v.message}"</div>}
+              </div>
+              <button onClick={()=>removeLine(i.id, i.vKey)} className="text-stone-400 hover:text-berry"><Icon.Trash size={15}/></button>
+            </div>
+            <div className="flex items-center justify-between mt-2">
+              <Stepper small value={i.qty} onDec={()=>dec(i)} onInc={()=>inc(i)}/>
+              <div className="text-right">
+                <div className="text-xs text-stone-400">{BDT(i.unitPrice)} × {i.qty}</div>
+                <div className="font-bold text-sm">{BDT(i.unitPrice * i.qty)}</div>
+              </div>
+            </div>
+          </div>
+        </div>;
+      })}
+    </div>
+
+    {/* Impulse rack */}
+    <div className="rounded-2xl border border-dashed border-saffron/40 bg-gradient-to-br from-amber-50 to-rose-50 p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div>
+          <div className="font-serif font-bold text-base text-espresso">Forgot Something?</div>
+          <div className="text-xs text-stone-500">One-click add-ons from the POS counter</div>
+        </div>
+        <Badge tone="berry">Quick Add-Ons</Badge>
+      </div>
+      <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+        {QUICK_ADD_IDS.map(pid => {
+          const p = PRODUCTS.find(x=>x.id===pid); if (!p) return null;
+          return <div key={pid} className="shrink-0 w-32 bg-white border border-stone-100 rounded-xl p-2 flex flex-col items-center">
+            <div className="h-14 w-14 rounded-lg bg-gradient-to-br from-amber-100 to-rose-100 grid place-items-center text-2xl mb-1">{p.emoji}</div>
+            <div className="text-[11px] font-semibold text-center leading-tight line-clamp-2 h-8">{p.name}</div>
+            <div className="text-xs font-bold text-saffrondark mt-0.5">{BDT(p.price)}</div>
+            <button onClick={()=>quickAdd(pid)} className="mt-1.5 w-full bg-espresso text-cream text-[11px] font-semibold rounded-full py-1 hover:bg-stone-800 inline-flex items-center justify-center gap-1"><Icon.Plus size={11}/> Add</button>
+          </div>;
+        })}
+      </div>
+    </div>
+
+    {/* Promo */}
+    <div className="rounded-2xl bg-white border border-stone-100 p-4">
+      <div className="flex items-center gap-2 mb-2"><Icon.Tag size={16} cls="text-saffron"/><div className="font-semibold text-sm">Promo code</div></div>
+      <div className="flex gap-2">
+        <input value={promo} onChange={e=>{ setPromo(e.target.value.toUpperCase()); }} placeholder="WELCOME10 · BIRTHDAY100" className="flex-1 px-3 py-2 rounded-lg border border-stone-200 text-sm focus:border-saffron outline-none tracking-wider"/>
+        <button onClick={applyPromo} className="bg-saffron text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-saffrondark">Apply</button>
+      </div>
+      {promoApplied && <div className="mt-2 flex items-center gap-2 text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-2 py-1.5">
+        <Icon.Check size={14}/> {promoApplied.label} applied · −{BDT(promoDiscount)}
+        <button onClick={()=>{ setPA(null); setPromo(''); }} className="ml-auto text-emerald-700 hover:underline">Remove</button>
+      </div>}
+      {promoError && <div className="mt-2 text-xs text-berry">{promoError}</div>}
+    </div>
+
+    {/* Live bill */}
+    <div className="rounded-2xl bg-white border border-stone-100 p-4 space-y-2 text-sm">
+      <Row label="Subtotal" value={BDT(subtotal)}/>
+      {bundleDiscount > 0 && <Row label="Birthday bundle −15%" value={`−${BDT(bundleDiscount)}`} tone="berry"/>}
+      {promoDiscount > 0 && <Row label={`Promo (${promoApplied?.code})`} value={`−${BDT(promoDiscount)}`} tone="emerald"/>}
+      {packagingFee > 0 && <Row label="Cold-chain packaging" value={BDT(packagingFee)} muted/>}
+      <Row label={fulfillment==='pickup' ? 'In-Store pickup' : 'Delivery charge'} value={deliveryFee===0 ? 'FREE' : BDT(deliveryFee)} muted={deliveryFee>0} tone={deliveryFee===0?'emerald':'muted'}/>
+      {hasColdChain && <div className="text-[11px] text-sky-700 bg-sky-50 border border-sky-100 rounded-lg px-2 py-1.5 flex items-start gap-1.5"><Icon.Snowflake size={13} cls="mt-0.5"/>Cold-chain insulated packaging will be added for frozen items.</div>}
+      <div className="border-t border-stone-100 pt-2 flex items-center justify-between">
+        <div className="font-serif font-bold">Grand Total</div>
+        <div className="font-serif font-black text-xl text-espresso">{BDT(grandTotal)}</div>
+      </div>
+    </div>
+  </div>;
+}
+
+function Row({ label, value, tone='base', muted }) {
+  const colors = { base:'text-espresso', emerald:'text-emerald-700', berry:'text-berry', muted:'text-stone-500' };
+  return <div className="flex items-center justify-between">
+    <div className={`${muted?'text-stone-500':''}`}>{label}</div>
+    <div className={`font-semibold ${colors[tone]}`}>{value}</div>
+  </div>;
+}
+
+/* ============================================================
+   Step 2: Customer details, delivery, celebration CRM
+   ============================================================ */
+function StepDetails({ fulfillment, setFul, area, setArea, customer, setCust, errors, celeb, setCeleb, celebBonus }) {
+  return <div className="p-5 space-y-5">
+    {/* Fulfillment toggle */}
+    <div>
+      <Label>Fulfillment</Label>
+      <div className="grid grid-cols-2 gap-2 mt-1.5">
+        <button onClick={()=>setFul('delivery')} className={`p-3 rounded-xl border text-left ${fulfillment==='delivery' ? 'bg-amber-50 border-saffron ring-2 ring-amber-200' : 'bg-white border-stone-200 hover:border-saffron'}`}>
+          <div className="flex items-center gap-2"><Icon.Truck size={18} cls="text-saffron"/><div className="font-semibold text-sm">Home Delivery</div></div>
+          <div className="text-xs text-stone-500 mt-1">৳60 within Dhaka · Free over ৳1,500</div>
+        </button>
+        <button onClick={()=>setFul('pickup')} className={`p-3 rounded-xl border text-left ${fulfillment==='pickup' ? 'bg-amber-50 border-saffron ring-2 ring-amber-200' : 'bg-white border-stone-200 hover:border-saffron'}`}>
+          <div className="flex items-center gap-2"><Icon.Store size={18} cls="text-saffron"/><div className="font-semibold text-sm">In-Store Express Pickup</div></div>
+          <div className="text-xs text-stone-500 mt-1">Dhanmondi counter · FREE</div>
+        </button>
+      </div>
+    </div>
+
+    {/* Customer form */}
+    <div className="grid grid-cols-1 gap-3">
+      <Field label="Full Name" error={errors.name}>
+        <input value={customer.name} onChange={e=>setCust({...customer, name:e.target.value})} className={fieldClass(errors.name)} placeholder="Mishka Rahman"/>
+      </Field>
+      <Field label="Bangladesh Mobile Number" error={errors.phone} hint="11-digit format, e.g. 01712345678">
+        <input value={customer.phone} onChange={e=>setCust({...customer, phone:e.target.value.replace(/\D/g,'').slice(0,11)})} className={fieldClass(errors.phone)} placeholder="01XXXXXXXXX" inputMode="numeric"/>
+      </Field>
+      {fulfillment==='delivery' && <>
+        <Field label="Delivery Area">
+          <select value={area} onChange={e=>setArea(e.target.value)} className={fieldClass()}>{DELIVERY_AREAS.map(a=><option key={a}>{a}</option>)}</select>
+        </Field>
+        <Field label="Street Address / Flat #" error={errors.addr}>
+          <textarea value={customer.addr} onChange={e=>setCust({...customer, addr:e.target.value})} rows={2} className={fieldClass(errors.addr)} placeholder="House 12, Road 7, Flat 4B, Dhanmondi"/>
+        </Field>
+      </>}
+
+      <div>
+        <Label>Delivery Timing</Label>
+        <div className="grid grid-cols-2 gap-2 mt-1.5">
+          <button onClick={()=>setCust({...customer, scheduleKind:'express'})} className={`p-3 rounded-xl border text-left ${customer.scheduleKind==='express'?'bg-amber-50 border-saffron ring-2 ring-amber-200':'bg-white border-stone-200'}`}>
+            <div className="flex items-center gap-2"><Icon.Flame size={16} cls="text-berry"/><div className="font-semibold text-sm">Express · 45 Min</div></div>
+            <div className="text-xs text-stone-500 mt-1">Fastest, same-day</div>
+          </button>
+          <button onClick={()=>setCust({...customer, scheduleKind:'scheduled'})} className={`p-3 rounded-xl border text-left ${customer.scheduleKind==='scheduled'?'bg-amber-50 border-saffron ring-2 ring-amber-200':'bg-white border-stone-200'}`}>
+            <div className="flex items-center gap-2"><Icon.Calendar size={16} cls="text-saffron"/><div className="font-semibold text-sm">Schedule</div></div>
+            <div className="text-xs text-stone-500 mt-1">Pick date &amp; slot</div>
+          </button>
+        </div>
+        {customer.scheduleKind==='scheduled' && <div className="grid grid-cols-2 gap-2 mt-2">
+          <Field label="Date" error={errors.scheduleDate}>
+            <input type="date" min={new Date().toISOString().slice(0,10)} value={customer.scheduleDate} onChange={e=>setCust({...customer, scheduleDate:e.target.value})} className={fieldClass(errors.scheduleDate)}/>
+          </Field>
+          <Field label="Time Slot" error={errors.scheduleTime}>
+            <select value={customer.scheduleTime} onChange={e=>setCust({...customer, scheduleTime:e.target.value})} className={fieldClass(errors.scheduleTime)}>
+              <option value="">Pick…</option>
+              <option>09:00 – 11:00 AM</option>
+              <option>11:00 – 01:00 PM</option>
+              <option>01:00 – 03:00 PM</option>
+              <option>03:00 – 05:00 PM</option>
+              <option>05:00 – 07:00 PM</option>
+              <option>07:00 – 09:00 PM</option>
+            </select>
+          </Field>
+        </div>}
+      </div>
+    </div>
+
+    {/* Celebration CRM */}
+    <div className={`rounded-2xl p-4 transition ${celeb.opted?'bg-gradient-to-br from-rose-50 to-amber-50 border-berry/30':'bg-white border-stone-100'} border`}>
+      <label className="flex items-start gap-3 cursor-pointer">
+        <input type="checkbox" checked={celeb.opted} onChange={e=>setCeleb({...celeb, opted:e.target.checked})} className="mt-1 accent-berry h-4 w-4"/>
+        <div className="flex-1">
+          <div className="flex items-center gap-2">
+            <Icon.Sparkles size={16} cls="text-berry"/>
+            <div className="font-serif font-bold text-base">Join Our Celebration Club</div>
+            <Badge tone="berry">+10% next time</Badge>
+          </div>
+          <div className="text-xs text-stone-600 mt-1">Share a family birthday or anniversary — we'll text you a reminder discount each year.</div>
+        </div>
+      </label>
+
+      {celeb.opted && <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <Field label="Occasion">
+          <select value={celeb.occasion} onChange={e=>setCeleb({...celeb, occasion:e.target.value})} className={fieldClass()}>
+            <option>Birthday</option><option>Anniversary</option><option>Child's Birthday</option><option>Parent's Birthday</option>
+          </select>
+        </Field>
+        <Field label="Whose special day?">
+          <input value={celeb.person} onChange={e=>setCeleb({...celeb, person:e.target.value})} className={fieldClass()} placeholder="e.g. Mishka"/>
+        </Field>
+        <Field label="Date">
+          <input type="date" value={celeb.date} onChange={e=>setCeleb({...celeb, date:e.target.value})} className={fieldClass()}/>
+        </Field>
+        {celebBonus && <div className="sm:col-span-3 flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2 animate-pop">
+          <Icon.Trophy size={16}/> <span className="font-semibold">+50 Bonus Loyalty Points</span> locked in for this order.
+        </div>}
+      </div>}
+    </div>
+  </div>;
+}
+
+const fieldClass = (err) => `w-full px-3 py-2 rounded-lg border bg-white text-sm outline-none focus:ring-2 ${err?'border-berry focus:border-berry focus:ring-rose-100':'border-stone-200 focus:border-saffron focus:ring-amber-100'}`;
+function Label({ children }) { return <div className="text-xs font-semibold uppercase tracking-wider text-stone-500">{children}</div>; }
+function Field({ label, error, hint, children }) {
+  return <label className="block">
+    <Label>{label}</Label>
+    <div className="mt-1.5">{children}</div>
+    {hint && !error && <div className="text-[11px] text-stone-400 mt-1">{hint}</div>}
+    {error && <div className="text-[11px] text-berry mt-1">{error}</div>}
+  </label>;
+}
+
+/* ============================================================
+   Step 3: Payment
+   ============================================================ */
+function StepPayment({ payment, setPayment, grandTotal, bkash, setBkash, card, setCard, cod, setCod, errors }) {
+  function fmtCard(v) { return v.replace(/\D/g,'').slice(0,16).replace(/(.{4})/g,'$1 ').trim(); }
+  function fmtExp(v) { const d = v.replace(/\D/g,'').slice(0,4); return d.length>2 ? `${d.slice(0,2)}/${d.slice(2)}` : d; }
+
+  return <div className="p-5 space-y-4">
+    <div className="grid grid-cols-3 gap-2">
+      {[
+        { id:'bkash', label:'bKash / Nagad', icon:<Icon.Wallet size={18}/>, sub:'Mobile banking' },
+        { id:'card',  label:'Credit / Debit', icon:<Icon.CreditCard size={18}/>, sub:'Visa · Mastercard · AMEX' },
+        { id:'cod',   label:'Cash on Delivery', icon:<Icon.Banknote size={18}/>, sub:'Pay at door / counter' },
+      ].map(opt => <button key={opt.id} onClick={()=>setPayment(opt.id)} className={`p-3 rounded-xl border text-left transition ${payment===opt.id?'bg-amber-50 border-saffron ring-2 ring-amber-200':'bg-white border-stone-200 hover:border-saffron'}`}>
+        <div className="flex items-center gap-2 text-saffron">{opt.icon}<div className="font-semibold text-sm text-espresso">{opt.label}</div></div>
+        <div className="text-[11px] text-stone-500 mt-1">{opt.sub}</div>
+      </button>)}
+    </div>
+
+    {payment==='bkash' && <div className="rounded-2xl border border-stone-100 bg-white p-4 space-y-3">
+      <div className="rounded-xl p-4 bg-gradient-to-br from-pink-500 to-rose-600 text-white">
+        <div className="flex items-center justify-between">
+          <div>
+            <div className="text-[10px] uppercase tracking-widest opacity-75">Merchant Payment</div>
+            <div className="font-serif font-black text-xl">Mishti &amp; More</div>
+          </div>
+          <div className="text-right">
+            <div className="text-[10px] uppercase tracking-widest opacity-75">Payable</div>
+            <div className="font-serif font-black text-xl">{BDT(grandTotal)}</div>
+          </div>
+        </div>
+        <div className="mt-3 flex items-center gap-2 text-sm bg-white/15 rounded-lg px-3 py-2">
+          <Icon.Phone size={14}/> Merchant No: <span className="font-mono font-bold tracking-wider">01713-889922</span>
+        </div>
+        <div className="mt-2 text-[11px] opacity-80">Send Money to the merchant number above, then paste the transaction ID below.</div>
+      </div>
+      <Field label="Your bKash / Nagad Mobile Number" error={errors.mobile}>
+        <input value={bkash.mobile} onChange={e=>setBkash({...bkash, mobile:e.target.value.replace(/\D/g,'').slice(0,11)})} placeholder="01XXXXXXXXX" inputMode="numeric" className={fieldClass(errors.mobile)}/>
+      </Field>
+      <Field label="Transaction ID (TrxID)" error={errors.trx} hint="Minimum 6 characters, as shown in your bKash/Nagad SMS">
+        <input value={bkash.trx} onChange={e=>setBkash({...bkash, trx:e.target.value.toUpperCase().slice(0,16)})} placeholder="e.g. 8FG3HK9AB2" className={`${fieldClass(errors.trx)} tracking-widest uppercase font-mono`}/>
+      </Field>
+    </div>}
+
+    {payment==='card' && <div className="rounded-2xl border border-stone-100 bg-white p-4 space-y-3">
+      <div className="rounded-xl p-5 bg-gradient-to-br from-espresso to-stone-700 text-cream relative overflow-hidden">
+        <div className="absolute top-3 right-3 flex gap-1">
+          <div className="h-5 w-8 rounded bg-red-500/80"/>
+          <div className="h-5 w-8 rounded bg-yellow-400/80 -ml-3"/>
+        </div>
+        <div className="text-[10px] uppercase tracking-widest opacity-70">Debit / Credit Card</div>
+        <div className="mt-6 font-mono text-lg tracking-widest">{card.number || '•••• •••• •••• ••••'}</div>
+        <div className="mt-3 flex justify-between text-xs">
+          <div><div className="opacity-60">Cardholder</div><div className="font-semibold tracking-wider uppercase">{card.name || 'YOUR NAME'}</div></div>
+          <div><div className="opacity-60">Expires</div><div className="font-semibold">{card.expiry || 'MM/YY'}</div></div>
+        </div>
+      </div>
+      <Field label="Card Number" error={errors.number}>
+        <input value={card.number} onChange={e=>setCard({...card, number:fmtCard(e.target.value)})} placeholder="1234 5678 9012 3456" inputMode="numeric" className={`${fieldClass(errors.number)} font-mono tracking-widest`}/>
+      </Field>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Expiry" error={errors.expiry}>
+          <input value={card.expiry} onChange={e=>setCard({...card, expiry:fmtExp(e.target.value)})} placeholder="MM/YY" inputMode="numeric" className={`${fieldClass(errors.expiry)} font-mono`}/>
+        </Field>
+        <Field label="CVV" error={errors.cvv}>
+          <input value={card.cvv} onChange={e=>setCard({...card, cvv:e.target.value.replace(/\D/g,'').slice(0,4)})} placeholder="•••" inputMode="numeric" className={`${fieldClass(errors.cvv)} font-mono`}/>
+        </Field>
+      </div>
+      <Field label="Cardholder Name" error={errors.name}>
+        <input value={card.name} onChange={e=>setCard({...card, name:e.target.value.toUpperCase()})} placeholder="NAME ON CARD" className={fieldClass(errors.name)}/>
+      </Field>
+    </div>}
+
+    {payment==='cod' && <div className="rounded-2xl border border-stone-100 bg-white p-4 space-y-3">
+      <div className="text-sm text-stone-600">Pay <span className="font-bold">{BDT(grandTotal)}</span> in cash when your order arrives or at the counter on pickup. Please keep exact change if possible.</div>
+      <Field label="Need change for…">
+        <div className="flex gap-2 flex-wrap">
+          {[['exact','I have exact change'],['1000','Change for ৳1,000 note'],['2000','Change for ৳2,000 note']].map(([v,l]) =>
+            <button key={v} onClick={()=>setCod({change:v})} className={`px-3 py-2 rounded-full text-xs font-semibold border ${cod.change===v?'bg-saffron text-white border-saffron':'bg-white text-stone-700 border-stone-200'}`}>{l}</button>
+          )}
+        </div>
+      </Field>
+    </div>}
+
+    <div className="text-[11px] text-stone-500 text-center">🔒 Secure merchant — your payment details are only used for this order.</div>
+  </div>;
+}
+
+/* ============================================================
+   Step 4: Confirmation
+   ============================================================ */
+function StepConfirmed({ orderId, meta, cart, customer, fulfillment, area, subtotal, bundleDiscount, promoDiscount, promoApplied, packagingFee, deliveryFee, grandTotal, payment, bkash, card, cod, basePoints, bonusPoints, totalPoints, celeb, onReset }) {
+  const stages = [
+    { id:1, label:'Order Received', icon:<Icon.Check size={14}/>, done:true },
+    { id:2, label:'Packing Sweets & Chilling Drinks', icon:<Icon.Gift size={14}/>, done:true, active:true },
+    { id:3, label:'Out for Delivery', icon:<Icon.Truck size={14}/>, done:false },
+    { id:4, label:'Arriving', icon:<Icon.Sparkles size={14}/>, done:false },
+  ];
+  const payLabel = payment==='bkash' ? `bKash/Nagad · TrxID ${bkash.trx}` : payment==='card' ? `Card ending ${card.number.replace(/\s/g,'').slice(-4)}` : `Cash on Delivery${cod.change!=='exact'?` · change for ৳${cod.change}`:''}`;
+
+  const whatsAppText = useMemo(() => {
+    const lines = [
+      `*MISHTI & MORE · Order Confirmation*`,
+      `Order ID: #${orderId}`,
+      `Placed: ${meta?.placedAt?.toLocaleString?.() || new Date().toLocaleString()}`,
+      ``,
+      `*Items*`,
+      ...cart.map(i => {
+        const v = i.variant || {};
+        const bits = [v.weight, v.flavor, v.color, v.num && `#${v.num}`, v.pack && v.pack!=='single' && v.pack, v.coldPack && 'cold-pack'].filter(Boolean).join(' · ');
+        const m = v.message ? `\n   ✍️ "${v.message}"` : '';
+        return `• ${i.name}${bits?` (${bits})`:''} × ${i.qty} — ৳${i.unitPrice*i.qty}${m}`;
+      }),
+      ``,
+      `*Bill*`,
+      `Subtotal: ৳${subtotal}`,
+      bundleDiscount>0 ? `Bundle −15%: −৳${bundleDiscount}` : null,
+      promoDiscount>0 ? `Promo ${promoApplied?.code}: −৳${promoDiscount}` : null,
+      packagingFee>0 ? `Cold-chain pack: ৳${packagingFee}` : null,
+      `${fulfillment==='pickup'?'Pickup':'Delivery'}: ${deliveryFee===0?'FREE':'৳'+deliveryFee}`,
+      `*Grand Total: ৳${grandTotal}*`,
+      ``,
+      `*Customer*`,
+      `${customer.name} · ${customer.phone}`,
+      fulfillment==='delivery' ? `Address: ${customer.addr}, ${area}` : `Pickup at Dhanmondi counter`,
+      customer.scheduleKind==='scheduled' ? `When: ${customer.scheduleDate} ${customer.scheduleTime}` : `When: Express (45 min)`,
+      ``,
+      `Payment: ${payLabel}`,
+      `Loyalty: +${totalPoints} points${bonusPoints?` (incl. +${bonusPoints} birthday bonus)`:''}`,
+      celeb.opted && celeb.date ? `Celebration Club: ${celeb.occasion} for ${celeb.person} on ${celeb.date}` : null,
+    ].filter(Boolean);
+    return lines.join('\n');
+  }, [orderId, meta, cart, customer, fulfillment, area, subtotal, bundleDiscount, promoDiscount, promoApplied, packagingFee, deliveryFee, grandTotal, payment, bkash, card, cod, totalPoints, bonusPoints, celeb, payLabel]);
+
+  return <div className="p-5 space-y-5">
+    <div className="text-center">
+      <div className="mx-auto h-16 w-16 rounded-full bg-emerald-100 text-emerald-600 grid place-items-center animate-pop"><Icon.Check size={36}/></div>
+      <div className="font-serif font-black text-2xl mt-3">Thank you, {customer.name.split(' ')[0] || 'friend'}! 🎉</div>
+      <div className="text-stone-600 text-sm">Your order <span className="font-mono font-bold text-espresso">#{orderId}</span> is confirmed.</div>
+      <div className="text-xs text-saffrondark mt-1 inline-flex items-center gap-1"><Icon.Clock size={13}/> {meta?.eta}</div>
+    </div>
+
+    {/* Status tracker */}
+    <div className="rounded-2xl bg-white border border-stone-100 p-4">
+      <div className="text-xs font-semibold uppercase tracking-wider text-stone-500 mb-3">Live Order Tracker</div>
+      <div className="space-y-2">
+        {stages.map(s => <div key={s.id} className={`flex items-center gap-3 p-2.5 rounded-xl ${s.active?'bg-amber-50 border border-amber-200':''}`}>
+          <div className={`h-8 w-8 shrink-0 rounded-full grid place-items-center ${s.done?'bg-emerald-500 text-white':'bg-stone-200 text-stone-500'} ${s.active?'ring-4 ring-amber-200 animate-pulse':''}`}>{s.icon}</div>
+          <div className="flex-1">
+            <div className={`text-sm font-semibold ${s.done?'text-espresso':'text-stone-500'}`}>{s.label}</div>
+            {s.active && <div className="text-[11px] text-saffrondark">In progress now</div>}
+          </div>
+        </div>)}
+      </div>
+    </div>
+
+    {/* Loyalty */}
+    <div className="rounded-2xl p-4 bg-gradient-to-br from-amber-50 via-cream to-rose-50 border border-amber-100">
+      <div className="flex items-center gap-3">
+        <div className="h-12 w-12 rounded-full bg-gradient-to-br from-saffron to-berry grid place-items-center text-white"><Icon.Trophy size={22}/></div>
+        <div className="flex-1">
+          <div className="font-serif font-bold text-lg">+{totalPoints} Loyalty Points Earned</div>
+          <div className="text-xs text-stone-600">Base {basePoints} from order{bonusPoints?` · +${bonusPoints} birthday bonus`:''}</div>
+        </div>
+      </div>
+      {celeb.opted && celeb.date && <div className="mt-3 text-xs text-stone-600 bg-white/70 border border-rose-100 rounded-lg px-3 py-2 flex items-center gap-2">
+        <Icon.Heart size={14} cls="text-berry"/>
+        We'll remind you about <span className="font-semibold text-espresso">{celeb.person}'s {celeb.occasion.toLowerCase()}</span> on <span className="font-semibold text-espresso">{celeb.date}</span> with 10% off.
+      </div>}
+    </div>
+
+    {/* Receipt (printable) */}
+    <div id="receipt-print" className="rounded-2xl bg-white border border-stone-200 p-5">
+      <div className="flex items-start justify-between pb-3 border-b border-stone-200">
+        <div>
+          <div className="font-serif font-black text-xl">Mishti &amp; More</div>
+          <div className="text-[11px] text-stone-500">House 12, Road 7, Dhanmondi, Dhaka 1205 · +880 1711-234567</div>
+        </div>
+        <div className="text-right">
+          <div className="text-[11px] text-stone-500 uppercase tracking-widest">Receipt</div>
+          <div className="font-mono font-bold">#{orderId}</div>
+          <div className="text-[11px] text-stone-500">{new Date().toLocaleString()}</div>
+        </div>
+      </div>
+      <div className="py-3 text-xs space-y-2">
+        <div><span className="text-stone-500">Customer:</span> <span className="font-semibold">{customer.name}</span> · {customer.phone}</div>
+        <div><span className="text-stone-500">{fulfillment==='delivery'?'Deliver to':'Pickup at'}:</span> {fulfillment==='delivery' ? `${customer.addr}, ${area}` : 'Dhanmondi counter'}</div>
+        <div><span className="text-stone-500">Payment:</span> {payLabel}</div>
+      </div>
+      <div className="border-t border-stone-200 py-3">
+        <table className="w-full text-xs">
+          <thead><tr className="text-stone-500 text-left"><th className="py-1">Item</th><th className="text-center">Qty</th><th className="text-right">Line Total</th></tr></thead>
+          <tbody>
+          {cart.map(i => {
+            const v = i.variant || {};
+            const bits = [v.weight, v.flavor, v.color, v.num && `#${v.num}`, v.pack && v.pack!=='single' && v.pack, v.coldPack && 'cold-pack'].filter(Boolean).join(' · ');
+            return <tr key={`r-${i.id}-${i.vKey}`} className="border-t border-stone-100">
+              <td className="py-1.5"><div className="font-semibold">{i.name}</div>{bits && <div className="text-[10px] text-stone-500">{bits}</div>}{v.message && <div className="text-[10px] italic">"{v.message}"</div>}</td>
+              <td className="text-center">{i.qty}</td>
+              <td className="text-right font-semibold">{BDT(i.unitPrice*i.qty)}</td>
+            </tr>;
+          })}
+          </tbody>
+        </table>
+      </div>
+      <div className="border-t border-stone-200 pt-3 space-y-1 text-xs">
+        <Row label="Subtotal" value={BDT(subtotal)}/>
+        {bundleDiscount>0 && <Row label="Bundle discount (−15%)" value={`−${BDT(bundleDiscount)}`} tone="berry"/>}
+        {promoDiscount>0 && <Row label={`Promo ${promoApplied?.code}`} value={`−${BDT(promoDiscount)}`} tone="emerald"/>}
+        {packagingFee>0 && <Row label="Cold-chain packaging" value={BDT(packagingFee)} muted/>}
+        <Row label={fulfillment==='pickup'?'Pickup':'Delivery'} value={deliveryFee===0?'FREE':BDT(deliveryFee)} muted/>
+        <div className="border-t border-stone-200 pt-2 flex items-center justify-between">
+          <div className="font-serif font-bold">Grand Total</div>
+          <div className="font-serif font-black text-lg">{BDT(grandTotal)}</div>
+        </div>
+      </div>
+      <div className="text-[10px] text-stone-400 text-center mt-3">Thank you for celebrating with Mishti &amp; More · misti.shopbdit.com</div>
+    </div>
+
+    {/* Actions */}
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+      <a href={`https://wa.me/8801711234567?text=${encodeURIComponent(whatsAppText)}`} target="_blank" rel="noopener" className="inline-flex items-center justify-center gap-1.5 bg-emerald-500 text-white px-4 py-2.5 rounded-full text-sm font-semibold hover:bg-emerald-600">
+        <Icon.WhatsApp size={16}/> Send via WhatsApp
+      </a>
+      <button onClick={()=>window.print()} className="inline-flex items-center justify-center gap-1.5 bg-white border border-stone-200 text-espresso px-4 py-2.5 rounded-full text-sm font-semibold hover:bg-stone-50">
+        <Icon.Printer size={16}/> Print / Save Receipt
+      </button>
+      <button onClick={onReset} className="inline-flex items-center justify-center gap-1.5 bg-espresso text-cream px-4 py-2.5 rounded-full text-sm font-semibold hover:bg-stone-800">
+        <Icon.Plus size={16}/> Start New Order
+      </button>
+    </div>
+  </div>;
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
