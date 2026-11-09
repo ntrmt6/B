@@ -1,0 +1,604 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>চা দোকান হিসাব — Daily Cash & Supplier</title>
+<meta name="theme-color" content="#0b1220" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🍵%3C/text%3E%3C/svg%3E" />
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+<style>
+  :root { color-scheme: dark; }
+  body{
+    font-family: 'Hind Siliguri','Noto Sans Bengali',system-ui,-apple-system,sans-serif;
+    background:
+      radial-gradient(1000px 500px at 110% -10%, rgba(34,197,94,.08), transparent 60%),
+      radial-gradient(900px 450px at -10% 110%, rgba(59,130,246,.08), transparent 60%),
+      #070b14;
+    color:#e5e7eb;
+    -webkit-tap-highlight-color: transparent;
+  }
+  input, textarea, select { font-family: inherit; }
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button{ -webkit-appearance:none; margin:0; }
+  input[type="number"]{ -moz-appearance:textfield; }
+  .card{ background:linear-gradient(180deg,rgba(255,255,255,.04),rgba(255,255,255,.01)); border:1px solid rgba(255,255,255,.08); border-radius:16px; }
+  .glow-green{ box-shadow:0 0 0 1px rgba(34,197,94,.3), 0 10px 40px -10px rgba(34,197,94,.35); }
+  .glow-amber{ box-shadow:0 0 0 1px rgba(234,179,8,.25), 0 10px 40px -10px rgba(234,179,8,.3); }
+  .num{ font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
+  .tab-active{ background:linear-gradient(180deg,#1f2937,#111827); color:#fff; box-shadow:inset 0 0 0 1px rgba(255,255,255,.08); }
+  .btn{ transition: transform .08s ease, background .15s ease, box-shadow .15s ease; }
+  .btn:active{ transform: scale(.97); }
+  .toast{ animation: slide 240ms ease; }
+  @keyframes slide{ from{transform:translateY(20px); opacity:0;} to{transform:none; opacity:1;} }
+  .pulse-dot{ animation: pulse 1.6s ease infinite; }
+  @keyframes pulse{ 0%,100%{opacity:.5} 50%{opacity:1} }
+  .no-scrollbar::-webkit-scrollbar{ display:none; }
+</style>
+</head>
+<body class="min-h-screen pb-28">
+
+<!-- Header -->
+<header class="sticky top-0 z-30 backdrop-blur-xl bg-[#070b14]/80 border-b border-white/5">
+  <div class="max-w-xl mx-auto px-4 py-3 flex items-center justify-between">
+    <div class="flex items-center gap-2.5">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-amber-400 to-orange-600 grid place-items-center text-xl shadow-lg shadow-orange-900/40">🍵</div>
+      <div>
+        <h1 class="font-bold text-[15px] leading-tight">চা দোকান হিসাব</h1>
+        <p class="text-[11px] text-gray-400 leading-tight">Daily Cash &amp; Supplier</p>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <span id="cloudStatus" class="text-[10px] px-2 py-1 rounded-full bg-gray-800 text-gray-300 flex items-center gap-1.5">
+        <span class="w-1.5 h-1.5 rounded-full bg-yellow-400 pulse-dot"></span>
+        <span>কানেক্ট হচ্ছে</span>
+      </span>
+    </div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="max-w-xl mx-auto px-3 pb-3">
+    <div class="grid grid-cols-3 gap-1 p-1 rounded-2xl bg-black/40 border border-white/5">
+      <button data-tab="dash" class="tab-btn btn py-2 rounded-xl text-sm font-semibold tab-active">
+        <i class="fa-solid fa-gauge-high mr-1"></i> ড্যাশবোর্ড
+      </button>
+      <button data-tab="hist" class="tab-btn btn py-2 rounded-xl text-sm font-semibold text-gray-400">
+        <i class="fa-solid fa-clock-rotate-left mr-1"></i> হিসাব
+      </button>
+      <a href="https://duebook.shopbdit.com" target="_blank" rel="noopener"
+         class="btn py-2 rounded-xl text-sm font-semibold text-gray-400 text-center">
+        <i class="fa-solid fa-book mr-1"></i> বাকির খাতা <i class="fa-solid fa-up-right-from-square text-[10px] ml-0.5"></i>
+      </a>
+    </div>
+  </div>
+</header>
+
+<main class="max-w-xl mx-auto px-4 pt-4 space-y-5">
+
+  <!-- =========== DASHBOARD TAB =========== -->
+  <section id="tab-dash" class="space-y-4">
+    <!-- Date picker -->
+    <div class="flex items-center justify-between card px-3 py-2.5">
+      <label class="flex items-center gap-2 text-sm text-gray-300">
+        <i class="fa-regular fa-calendar text-amber-400"></i>
+        <span>তারিখ</span>
+      </label>
+      <input id="dateInput" type="date"
+             class="bg-transparent text-right text-sm font-semibold focus:outline-none" />
+    </div>
+
+    <!-- KPI Cards -->
+    <div class="grid grid-cols-2 gap-3">
+      <div class="card p-4 glow-green">
+        <p class="text-[11px] uppercase tracking-wider text-emerald-400/90">মোট লাভ · Net Profit</p>
+        <p id="kpiProfit" class="num mt-1 text-2xl font-extrabold text-emerald-300">৳ 0</p>
+        <p class="text-[10px] text-gray-500 mt-1">= সেল − (সাপ্লাই + খরচ)</p>
+      </div>
+      <div class="card p-4 glow-amber">
+        <p class="text-[11px] uppercase tracking-wider text-amber-400/90">হাতে জমা · Drawer</p>
+        <p id="kpiDrawer" class="num mt-1 text-2xl font-extrabold text-amber-300">৳ 0</p>
+        <p class="text-[10px] text-gray-500 mt-1">= সেল + বাকি আদায় − (সাপ্লাই + খরচ)</p>
+      </div>
+    </div>
+
+    <!-- Form -->
+    <div class="card p-4 space-y-3.5">
+      <h2 class="text-sm font-bold text-gray-200 flex items-center gap-2">
+        <i class="fa-solid fa-pen-to-square text-blue-400"></i> আজকের হিসাব
+      </h2>
+
+      <div class="field">
+        <label class="lbl"><i class="fa-solid fa-cash-register text-emerald-400"></i> মোট বিক্রি (দিনের সেল)</label>
+        <div class="in-wrap"><span class="taka">৳</span>
+          <input id="fSales" type="number" inputmode="decimal" placeholder="0" class="num-input"></div>
+      </div>
+
+      <div class="field">
+        <label class="lbl"><i class="fa-solid fa-truck text-sky-400"></i> দুধ / সাপ্লাইয়ার বিল</label>
+        <div class="in-wrap"><span class="taka">৳</span>
+          <input id="fSupplier" type="number" inputmode="decimal" placeholder="0" class="num-input"></div>
+      </div>
+
+      <div class="field">
+        <label class="lbl"><i class="fa-solid fa-utensils text-rose-400"></i> দোকান খরচ / নাস্তা</label>
+        <div class="in-wrap"><span class="taka">৳</span>
+          <input id="fExpense" type="number" inputmode="decimal" placeholder="0" class="num-input"></div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-3">
+        <div class="field">
+          <label class="lbl"><i class="fa-solid fa-minus text-red-400"></i> নতুন বাকি (−)</label>
+          <div class="in-wrap"><span class="taka">৳</span>
+            <input id="fNewDue" type="number" inputmode="decimal" placeholder="0" class="num-input"></div>
+        </div>
+        <div class="field">
+          <label class="lbl"><i class="fa-solid fa-plus text-emerald-400"></i> বাকি আদায় (+)</label>
+          <div class="in-wrap"><span class="taka">৳</span>
+            <input id="fRecDue" type="number" inputmode="decimal" placeholder="0" class="num-input"></div>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="lbl"><i class="fa-regular fa-note-sticky text-amber-400"></i> নোট / মেমো</label>
+        <textarea id="fNotes" rows="2" placeholder="আজকের কোনো কথা..."
+          class="w-full bg-black/30 border border-white/10 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-amber-400/60"></textarea>
+      </div>
+
+      <button id="btnCountNotes" class="btn w-full py-3 rounded-xl bg-indigo-600/90 hover:bg-indigo-500 font-semibold text-sm shadow-lg shadow-indigo-900/30">
+        <i class="fa-solid fa-money-bill-wave mr-1"></i> নোট গুনা (Bill Counter)
+      </button>
+      <p id="billCountMeta" class="text-[11px] text-center text-gray-500 hidden"></p>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3">
+      <button id="btnSave" class="btn py-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 font-semibold text-sm shadow-lg shadow-emerald-900/30">
+        <i class="fa-solid fa-cloud-arrow-up mr-1"></i> সেভ (Cloud)
+      </button>
+      <button id="btnShare" class="btn py-3 rounded-xl bg-[#25D366]/90 hover:bg-[#25D366] font-semibold text-sm shadow-lg shadow-green-900/30">
+        <i class="fa-brands fa-whatsapp mr-1"></i> WhatsApp পাঠান
+      </button>
+    </div>
+    <button id="btnReset" class="btn w-full py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-sm text-gray-300">
+      <i class="fa-solid fa-rotate-left mr-1"></i> ফর্ম ফাঁকা করুন
+    </button>
+  </section>
+
+  <!-- =========== HISTORY TAB =========== -->
+  <section id="tab-hist" class="space-y-3 hidden">
+    <div class="card p-4">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="text-sm font-bold text-gray-200 flex items-center gap-2">
+          <i class="fa-solid fa-clock-rotate-left text-sky-400"></i> পুরনো হিসাব
+        </h2>
+        <button id="btnRefresh" class="text-xs text-sky-400 hover:text-sky-300">
+          <i class="fa-solid fa-arrows-rotate"></i> রিফ্রেশ
+        </button>
+      </div>
+      <div id="historyList" class="space-y-2 max-h-[65vh] overflow-y-auto no-scrollbar">
+        <p class="text-center text-sm text-gray-500 py-8">লোড হচ্ছে...</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<!-- ======== Bill Counter Modal ======== -->
+<div id="billModal" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" data-close></div>
+  <div class="absolute inset-x-0 bottom-0 sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 sm:left-1/2 sm:-translate-x-1/2 sm:w-[420px]">
+    <div class="bg-[#0b1220] border border-white/10 rounded-t-2xl sm:rounded-2xl max-h-[90vh] overflow-y-auto">
+      <div class="sticky top-0 bg-[#0b1220]/95 backdrop-blur px-5 py-3.5 border-b border-white/5 flex items-center justify-between">
+        <h3 class="font-bold text-base">
+          <i class="fa-solid fa-money-bill-wave text-indigo-400 mr-1"></i> নোট গুনা
+        </h3>
+        <button data-close class="text-gray-400 hover:text-white w-8 h-8 grid place-items-center">
+          <i class="fa-solid fa-xmark text-lg"></i>
+        </button>
+      </div>
+      <div class="p-5 space-y-3" id="billRows"></div>
+      <div class="sticky bottom-0 bg-[#0b1220]/95 backdrop-blur border-t border-white/5 p-4 space-y-3">
+        <div class="flex items-center justify-between text-sm">
+          <span class="text-gray-400">মোট গণনা</span>
+          <span id="billTotal" class="num font-extrabold text-xl text-amber-300">৳ 0</span>
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <button id="billClear" class="btn py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-sm">
+            <i class="fa-solid fa-eraser mr-1"></i> ক্লিয়ার
+          </button>
+          <button id="billApply" class="btn py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-sm font-semibold">
+            <i class="fa-solid fa-check mr-1"></i> প্রয়োগ
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== Confirm Modal ======== -->
+<div id="confirmModal" class="fixed inset-0 z-50 hidden">
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" data-close></div>
+  <div class="absolute inset-0 grid place-items-center p-6">
+    <div class="w-full max-w-sm bg-[#0b1220] border border-white/10 rounded-2xl p-5">
+      <h3 id="confirmTitle" class="font-bold text-base mb-1">নিশ্চিত?</h3>
+      <p id="confirmMsg" class="text-sm text-gray-400 mb-4">আপনি কি নিশ্চিত?</p>
+      <div class="grid grid-cols-2 gap-2">
+        <button data-close class="btn py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-sm">বাতিল</button>
+        <button id="confirmOk" class="btn py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-sm font-semibold">হ্যাঁ</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== Toast Container ======== -->
+<div id="toastRoot" class="fixed top-16 inset-x-0 z-[60] pointer-events-none flex flex-col items-center gap-2 px-4"></div>
+
+<style>
+  .lbl{ display:flex; align-items:center; gap:.5rem; font-size:12px; color:#9ca3af; margin-bottom:.35rem; }
+  .in-wrap{ position:relative; }
+  .taka{ position:absolute; left:.85rem; top:50%; transform:translateY(-50%); color:#9ca3af; font-weight:600; font-size:14px; }
+  .num-input{ width:100%; background:rgba(0,0,0,.3); border:1px solid rgba(255,255,255,.1); border-radius:12px; padding:.625rem .75rem .625rem 2rem; font-size:15px; font-weight:600; color:#fff; font-variant-numeric: tabular-nums; }
+  .num-input:focus{ outline:none; border-color:rgba(251,191,36,.6); }
+</style>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.4/firebase-app.js";
+import {
+  getFirestore, doc, setDoc, getDoc, collection, query, orderBy, limit, onSnapshot, serverTimestamp, deleteDoc
+} from "https://www.gstatic.com/firebasejs/10.12.4/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyAKHP3mQVTS4bC89758sRxYGCZcnx7jdPY",
+  authDomain: "hello-94480.firebaseapp.com",
+  projectId: "hello-94480",
+  storageBucket: "hello-94480.firebasestorage.app",
+  messagingSenderId: "127107907906",
+  appId: "1:127107907906:web:09e78330b89c7dd669c8db",
+};
+
+const app = initializeApp(firebaseConfig);
+const db  = getFirestore(app);
+const COL = "teaStallClosings";
+
+/* ---------- Helpers ---------- */
+const $ = (id) => document.getElementById(id);
+const bn = (n) => Number(n||0).toLocaleString("bn-BD");
+const en = (n) => Number(n||0).toLocaleString("en-IN");
+const todayISO = () => {
+  const d = new Date();
+  const tz = new Date(d.getTime() - d.getTimezoneOffset()*60000);
+  return tz.toISOString().slice(0,10);
+};
+const fmtDateBn = (iso) => {
+  try {
+    return new Date(iso+"T00:00:00").toLocaleDateString("bn-BD",{weekday:"short",day:"numeric",month:"short",year:"numeric"});
+  } catch { return iso; }
+};
+
+/* ---------- Toast ---------- */
+function toast(msg, kind="info"){
+  const colors = { info:"bg-sky-600", ok:"bg-emerald-600", warn:"bg-amber-600", err:"bg-rose-600" };
+  const icon   = { info:"fa-circle-info", ok:"fa-circle-check", warn:"fa-triangle-exclamation", err:"fa-circle-xmark" };
+  const el = document.createElement("div");
+  el.className = `toast pointer-events-auto ${colors[kind]} text-white text-sm font-semibold px-4 py-2.5 rounded-xl shadow-2xl flex items-center gap-2 max-w-sm`;
+  el.innerHTML = `<i class="fa-solid ${icon[kind]}"></i><span>${msg}</span>`;
+  $("toastRoot").appendChild(el);
+  setTimeout(()=>{ el.style.opacity="0"; el.style.transform="translateY(-8px)"; el.style.transition="all .25s"; setTimeout(()=>el.remove(),260); }, 2400);
+}
+
+/* ---------- Confirm Modal ---------- */
+function confirmDialog({title="নিশ্চিত?", msg="আপনি কি নিশ্চিত?", okText="হ্যাঁ"}={}){
+  return new Promise((resolve)=>{
+    const m = $("confirmModal");
+    $("confirmTitle").textContent = title;
+    $("confirmMsg").textContent = msg;
+    const okBtn = $("confirmOk");
+    okBtn.textContent = okText;
+    m.classList.remove("hidden");
+    const close = (val)=>{ m.classList.add("hidden"); cleanup(); resolve(val); };
+    const onOk = ()=>close(true);
+    const onCancel = (e)=>{ if(e.target.matches("[data-close]")) close(false); };
+    function cleanup(){ okBtn.removeEventListener("click", onOk); m.removeEventListener("click", onCancel); }
+    okBtn.addEventListener("click", onOk);
+    m.addEventListener("click", onCancel);
+  });
+}
+
+/* ---------- Tabs ---------- */
+document.querySelectorAll(".tab-btn").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    document.querySelectorAll(".tab-btn").forEach(b=>{ b.classList.remove("tab-active"); b.classList.add("text-gray-400"); });
+    btn.classList.add("tab-active"); btn.classList.remove("text-gray-400");
+    const t = btn.dataset.tab;
+    $("tab-dash").classList.toggle("hidden", t!=="dash");
+    $("tab-hist").classList.toggle("hidden", t!=="hist");
+    if(t==="hist") loadHistory();
+  });
+});
+
+/* ---------- Live calc ---------- */
+const inputs = ["fSales","fSupplier","fExpense","fNewDue","fRecDue"];
+let billCounts = {};
+let billTotal = 0;
+
+function calc(){
+  const sales    = +$("fSales").value    || 0;
+  const supplier = +$("fSupplier").value || 0;
+  const expense  = +$("fExpense").value  || 0;
+  const newDue   = +$("fNewDue").value   || 0;
+  const recDue   = +$("fRecDue").value   || 0;
+
+  const profit = sales - (supplier + expense);
+  const drawer = sales + recDue - (supplier + expense);
+
+  $("kpiProfit").textContent = "৳ " + bn(profit);
+  $("kpiProfit").classList.toggle("text-emerald-300", profit>=0);
+  $("kpiProfit").classList.toggle("text-rose-300", profit<0);
+
+  $("kpiDrawer").textContent = "৳ " + bn(drawer);
+  $("kpiDrawer").classList.toggle("text-amber-300", drawer>=0);
+  $("kpiDrawer").classList.toggle("text-rose-300", drawer<0);
+  return { sales, supplier, expense, newDue, recDue, profit, drawer };
+}
+inputs.forEach(id => $(id).addEventListener("input", calc));
+
+/* ---------- Date ---------- */
+$("dateInput").value = todayISO();
+$("dateInput").addEventListener("change", ()=>loadDate($("dateInput").value));
+
+/* ---------- Bill Counter ---------- */
+const DENOMS = [
+  { v:1000, label:"১০০০ ৳ নোট", kind:"note" },
+  { v:500,  label:"৫০০ ৳ নোট",  kind:"note" },
+  { v:200,  label:"২০০ ৳ নোট",  kind:"note" },
+  { v:100,  label:"১০০ ৳ নোট",  kind:"note" },
+  { v:50,   label:"৫০ ৳ নোট",   kind:"note" },
+  { v:20,   label:"২০ ৳ নোট",   kind:"note" },
+  { v:10,   label:"১০ ৳ নোট",   kind:"note" },
+  { v:5,    label:"৫ ৳ কয়েন",   kind:"coin" },
+  { v:2,    label:"২ ৳ কয়েন",   kind:"coin" },
+  { v:1,    label:"১ ৳ কয়েন",   kind:"coin" },
+];
+
+function renderBillRows(){
+  const html = DENOMS.map(d=>`
+    <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-black/30 border border-white/5">
+      <div class="flex items-center gap-2">
+        <span class="w-11 h-11 rounded-lg grid place-items-center text-base font-bold
+          ${d.kind==='note'?'bg-emerald-900/40 text-emerald-300':'bg-amber-900/40 text-amber-300'}">৳${en(d.v)}</span>
+        <div>
+          <p class="text-sm font-semibold leading-tight">${d.label}</p>
+          <p class="text-[11px] text-gray-500 leading-tight">× count</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <button class="btn w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-lg leading-none" data-dec="${d.v}">−</button>
+        <input type="number" inputmode="numeric" min="0" value="${billCounts[d.v]||0}" data-cnt="${d.v}"
+          class="num w-14 text-center bg-black/40 border border-white/10 rounded-lg py-1.5 text-sm font-bold">
+        <button class="btn w-8 h-8 rounded-lg bg-white/5 hover:bg-white/10 text-lg leading-none" data-inc="${d.v}">+</button>
+      </div>
+    </div>`).join("");
+  $("billRows").innerHTML = html;
+  $("billRows").querySelectorAll("[data-inc]").forEach(b=>b.addEventListener("click",()=>stepBill(+b.dataset.inc,+1)));
+  $("billRows").querySelectorAll("[data-dec]").forEach(b=>b.addEventListener("click",()=>stepBill(+b.dataset.dec,-1)));
+  $("billRows").querySelectorAll("[data-cnt]").forEach(i=>i.addEventListener("input",()=>{
+    const v=+i.dataset.cnt; billCounts[v]=Math.max(0,+i.value||0); calcBillTotal();
+  }));
+  calcBillTotal();
+}
+function stepBill(v,delta){
+  billCounts[v] = Math.max(0,(billCounts[v]||0)+delta);
+  const inp = $("billRows").querySelector(`[data-cnt="${v}"]`);
+  if(inp) inp.value = billCounts[v];
+  calcBillTotal();
+}
+function calcBillTotal(){
+  billTotal = Object.entries(billCounts).reduce((s,[v,c])=>s+(+v)*(+c||0),0);
+  $("billTotal").textContent = "৳ " + bn(billTotal);
+}
+function openBill(){ renderBillRows(); $("billModal").classList.remove("hidden"); }
+function closeBill(){ $("billModal").classList.add("hidden"); }
+$("btnCountNotes").addEventListener("click", openBill);
+$("billModal").addEventListener("click", e=>{ if(e.target.matches("[data-close]")) closeBill(); });
+$("billClear").addEventListener("click", ()=>{ billCounts={}; renderBillRows(); });
+$("billApply").addEventListener("click", ()=>{
+  const total = billTotal;
+  closeBill();
+  const meta = $("billCountMeta");
+  const totalCount = Object.values(billCounts).reduce((s,c)=>s+(+c||0),0);
+  if(totalCount>0){
+    meta.classList.remove("hidden");
+    meta.textContent = `গোনা হয়েছে: ৳ ${bn(total)} (${bn(totalCount)} টি)`;
+  } else meta.classList.add("hidden");
+  toast(`নোট গণনা: ৳ ${bn(total)}`, "ok");
+});
+
+/* ---------- Form actions ---------- */
+function readForm(){
+  const c = calc();
+  return {
+    ...c,
+    notes: $("fNotes").value.trim(),
+    billCounts: {...billCounts},
+    billTotal,
+  };
+}
+function fillForm(data){
+  $("fSales").value    = data?.sales    ?? "";
+  $("fSupplier").value = data?.supplier ?? "";
+  $("fExpense").value  = data?.expense  ?? "";
+  $("fNewDue").value   = data?.newDue   ?? "";
+  $("fRecDue").value   = data?.recDue   ?? "";
+  $("fNotes").value    = data?.notes    ?? "";
+  billCounts = { ...(data?.billCounts || {}) };
+  billTotal  = data?.billTotal ?? 0;
+  const meta = $("billCountMeta");
+  const totalCount = Object.values(billCounts).reduce((s,c)=>s+(+c||0),0);
+  if(totalCount>0){ meta.classList.remove("hidden"); meta.textContent = `গোনা হয়েছে: ৳ ${bn(billTotal)} (${bn(totalCount)} টি)`; }
+  else meta.classList.add("hidden");
+  calc();
+}
+function resetForm(){
+  inputs.forEach(id=>$(id).value="");
+  $("fNotes").value="";
+  billCounts={}; billTotal=0;
+  $("billCountMeta").classList.add("hidden");
+  calc();
+}
+
+/* ---------- Firestore ---------- */
+async function saveToCloud(){
+  const date = $("dateInput").value || todayISO();
+  const payload = readForm();
+  try{
+    const ref = doc(db, COL, date);
+    const existing = await getDoc(ref);
+    await setDoc(ref, {
+      ...payload,
+      date,
+      createdAt: existing.exists() ? (existing.data().createdAt || serverTimestamp()) : serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
+    toast("ক্লাউডে সেভ হয়েছে ✓", "ok");
+  }catch(e){
+    console.error(e);
+    toast("সেভ ব্যর্থ: " + (e?.code || e?.message || "unknown"), "err");
+  }
+}
+async function loadDate(date){
+  try{
+    const snap = await getDoc(doc(db, COL, date));
+    if(snap.exists()){
+      fillForm(snap.data());
+      toast(`${fmtDateBn(date)}: লোড হয়েছে`, "info");
+    } else {
+      resetForm();
+    }
+  }catch(e){ console.error(e); toast("লোড ব্যর্থ", "err"); }
+}
+
+/* ---------- History ---------- */
+let unsubHist = null;
+function loadHistory(){
+  const listEl = $("historyList");
+  if(unsubHist) unsubHist();
+  const q = query(collection(db, COL), orderBy("date","desc"), limit(60));
+  unsubHist = onSnapshot(q, (snap)=>{
+    if(snap.empty){
+      listEl.innerHTML = `<p class="text-center text-sm text-gray-500 py-8">কোনো হিসাব সেভ করা নেই।</p>`;
+      return;
+    }
+    listEl.innerHTML = snap.docs.map(d=>{
+      const r = d.data();
+      const date = r.date || d.id;
+      const profit = Number(r.profit||0);
+      const drawer = Number(r.drawer||0);
+      const pColor = profit>=0?"text-emerald-300":"text-rose-300";
+      return `
+      <div class="p-3 rounded-xl bg-black/30 border border-white/5 hover:border-white/15 transition">
+        <div class="flex items-center justify-between">
+          <div>
+            <p class="text-[13px] font-semibold">${fmtDateBn(date)}</p>
+            <p class="text-[11px] text-gray-500">সেল ৳${bn(r.sales)} · সাপ্লাই ৳${bn(r.supplier)} · খরচ ৳${bn(r.expense)}</p>
+          </div>
+          <div class="text-right">
+            <p class="num text-sm font-bold ${pColor}">৳ ${bn(profit)}</p>
+            <p class="num text-[11px] text-amber-300">ড্রয়ার ৳${bn(drawer)}</p>
+          </div>
+        </div>
+        <div class="flex gap-2 mt-2">
+          <button class="btn flex-1 text-xs py-1.5 rounded-lg bg-sky-600/90 hover:bg-sky-500" data-open="${date}">
+            <i class="fa-solid fa-eye mr-1"></i> দেখুন
+          </button>
+          <button class="btn flex-1 text-xs py-1.5 rounded-lg bg-[#25D366]/90 hover:bg-[#25D366]" data-share="${date}">
+            <i class="fa-brands fa-whatsapp mr-1"></i> পাঠান
+          </button>
+          <button class="btn text-xs py-1.5 px-3 rounded-lg bg-rose-600/80 hover:bg-rose-500" data-del="${date}">
+            <i class="fa-solid fa-trash"></i>
+          </button>
+        </div>
+      </div>`;
+    }).join("");
+    listEl.querySelectorAll("[data-open]").forEach(b=>b.addEventListener("click",()=>{
+      $("dateInput").value = b.dataset.open;
+      loadDate(b.dataset.open);
+      document.querySelector('[data-tab="dash"]').click();
+    }));
+    listEl.querySelectorAll("[data-share]").forEach(b=>b.addEventListener("click",async()=>{
+      const snap = await getDoc(doc(db, COL, b.dataset.share));
+      if(snap.exists()) shareSummary({ ...snap.data(), date: b.dataset.share });
+    }));
+    listEl.querySelectorAll("[data-del]").forEach(b=>b.addEventListener("click",async()=>{
+      const ok = await confirmDialog({ title:"মুছবেন?", msg:`${fmtDateBn(b.dataset.del)}-এর হিসাব মুছে ফেলা হবে।`, okText:"মুছুন" });
+      if(!ok) return;
+      try{ await deleteDoc(doc(db, COL, b.dataset.del)); toast("মুছে ফেলা হয়েছে", "ok"); }
+      catch(e){ toast("মুছতে পারিনি", "err"); }
+    }));
+  }, (err)=>{
+    console.error(err);
+    listEl.innerHTML = `<p class="text-center text-sm text-rose-400 py-8">লোড ব্যর্থ: ${err.code||err.message}</p>`;
+  });
+}
+$("btnRefresh").addEventListener("click", loadHistory);
+
+/* ---------- WhatsApp Summary ---------- */
+function buildSummary(data){
+  const d = data.date || $("dateInput").value || todayISO();
+  const lines = [
+    `🍵 *চা দোকান হিসাব*`,
+    `📅 ${fmtDateBn(d)}`,
+    `────────────────`,
+    `💰 মোট বিক্রি: ৳ ${bn(data.sales)}`,
+    `🥛 সাপ্লাই বিল: ৳ ${bn(data.supplier)}`,
+    `🍽️ খরচ/নাস্তা: ৳ ${bn(data.expense)}`,
+    `➖ নতুন বাকি: ৳ ${bn(data.newDue)}`,
+    `➕ বাকি আদায়: ৳ ${bn(data.recDue)}`,
+    `────────────────`,
+    `✅ *মোট লাভ:* ৳ ${bn(data.profit)}`,
+    `💵 *হাতে জমা:* ৳ ${bn(data.drawer)}`,
+  ];
+  if(data.billTotal){
+    lines.push(`🔢 গোনা হয়েছে: ৳ ${bn(data.billTotal)}`);
+  }
+  if(data.notes){
+    lines.push(`────────────────`, `📝 ${data.notes}`);
+  }
+  return lines.join("\n");
+}
+function shareSummary(data){
+  const text = buildSummary(data);
+  const url = `https://wa.me/?text=${encodeURIComponent(text)}`;
+  try{
+    if(navigator.share){
+      navigator.share({ title:"চা দোকান হিসাব", text }).catch(()=>window.open(url,"_blank"));
+    } else {
+      window.open(url, "_blank");
+    }
+  }catch{ window.open(url, "_blank"); }
+}
+
+/* ---------- Buttons ---------- */
+$("btnSave").addEventListener("click", saveToCloud);
+$("btnShare").addEventListener("click", ()=>shareSummary({ ...readForm(), date: $("dateInput").value }));
+$("btnReset").addEventListener("click", async()=>{
+  const ok = await confirmDialog({ title:"ফর্ম মুছবেন?", msg:"সব ফিল্ড ফাঁকা হয়ে যাবে (ক্লাউডে সেভ করা ডেটা থাকবে)।", okText:"ঠিক আছে" });
+  if(ok) resetForm();
+});
+
+/* ---------- Cloud status probe ---------- */
+(async()=>{
+  const el = $("cloudStatus");
+  try{
+    await getDoc(doc(db, COL, "__probe__"));
+    el.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span><span>ক্লাউড কানেক্টেড</span>`;
+    el.className = "text-[10px] px-2 py-1 rounded-full bg-emerald-900/30 text-emerald-300 flex items-center gap-1.5";
+  }catch(e){
+    el.innerHTML = `<span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span><span>অফলাইন</span>`;
+    el.className = "text-[10px] px-2 py-1 rounded-full bg-rose-900/30 text-rose-300 flex items-center gap-1.5";
+  }
+})();
+
+/* ---------- Initial load ---------- */
+loadDate(todayISO());
+</script>
+</body>
+</html>
